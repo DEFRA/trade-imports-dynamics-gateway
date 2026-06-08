@@ -53,6 +53,13 @@ aws:
     token:
       audience: ${STS_TOKEN_AUDIENCE:urn:ipaffs:api:dev}
       expiration: ${STS_TOKEN_DURATION_SECONDS:3600}
+  emf:
+    enabled: ${AWS_EMF_ENABLED:true}
+    environment: ${AWS_EMF_ENVIRONMENT:Local}
+    namespace: ${AWS_EMF_NAMESPACE:trade-imports-dynamics-gateway}
+    service:
+      name: ${AWS_EMF_SERVICE_NAME:trade-imports-dynamics-gateway}
+      type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
 
 logging:
   level:

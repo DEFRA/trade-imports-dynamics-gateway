@@ -73,6 +73,11 @@
       <artifactId>spring-boot-starter-aop</artifactId>
     </dependency>
     <dependency>
+      <groupId>software.amazon.cloudwatchlogs</groupId>
+      <artifactId>aws-embedded-metrics</artifactId>
+      <version>4.2.0</version>
+    </dependency>
+    <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>sts</artifactId>
     </dependency>
