@@ -6,6 +6,7 @@ logging:
     uk.gov.defra.cdp.dynamicsgateway: DEBUG
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
     org.springframework.web: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB:INFO}
+    software.amazon.cloudwatchlogs.emf: ERROR
 
 management:
   endpoints:

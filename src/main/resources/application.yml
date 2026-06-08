@@ -16,13 +16,30 @@ management:
     web:
       base-path: /
       exposure:
-        include: health,info
+        include: health,metrics,info
   endpoint:
     health:
       show-details: never
   info:
     env:
       enabled: true
+  metrics:
+    enabled: ${METRICS_ENABLED:true}
+    enable:
+      all: false
+      controller: true
+      jvm:
+        memory:
+          committed: true
+          used: true
+          max: true
+        threads:
+          live: true
+          peak: true
+      http:
+        server:
+          requests:
+            active: true
 
 # CDP platform configuration
 cdp:
@@ -65,7 +82,8 @@ logging:
   level:
     root: ${LOG_LEVEL:INFO}
     uk.gov.defra.cdp.dynamicsgateway: ${LOG_LEVEL:DEBUG}
-    org.springframework: INFO
+    org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
+    org.springframework.web: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB:INFO}
 
 info:
   app:
