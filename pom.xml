@@ -73,6 +73,10 @@
       <artifactId>spring-boot-starter-aop</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>software.amazon.cloudwatchlogs</groupId>
       <artifactId>aws-embedded-metrics</artifactId>
       <version>4.2.0</version>
