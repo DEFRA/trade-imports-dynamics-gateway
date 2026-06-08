@@ -1,11 +1,11 @@
 # trade-imports-dynamics-gateway
 
-Core delivery C# ASP.NET backend template.
+Centralised gateway forwarding events to Azure Service Bus (ADR-EUDP-001 Option B).
 
-* [Install MongoDB](#install-mongodb)
-* [Inspect MongoDB](#inspect-mongodb)
+* [Docker Compose](#docker-compose)
 * [Testing](#testing)
 * [Running](#running)
+* [SonarCloud](#sonarcloud)
 * [Dependabot](#dependabot)
 
 
@@ -15,79 +15,58 @@ A Docker Compose template is in [compose.yml](compose.yml).
 
 A local environment with:
 
-- Localstack for AWS services (S3, SQS)
-- Redis
-- MongoDB
+- Localstack for AWS services (S3, STS, CloudWatch)
 - This service.
-- A commented out frontend example.
 
 ```bash
-docker compose up --build -d
+docker compose --profile services up --build -d
+```
+
+Start just infrastructure:
+
+```bash
+docker compose --profile infra up -d
 ```
 
 A more extensive setup is available in [github.com/DEFRA/cdp-local-environment](https://github.com/DEFRA/cdp-local-environment)
 
-### MongoDB
-
-#### MongoDB via Docker
-
-See above.
-
-```
-docker compose up -d mongodb
-```
-
-#### MongoDB locally
-
-Alternatively install MongoDB locally:
-
-- Install [MongoDB](https://www.mongodb.com/docs/manual/tutorial/#installation) on your local machine
-- Start MongoDB:
-```bash
-sudo mongod --dbpath ~/mongodb-cdp
-```
-
-#### MongoDB in CDP environments
-
-In CDP environments a MongoDB instance is already set up
-and the credentials exposed as enviromment variables.
-
-
-### Inspect MongoDB
-
-To inspect the Database and Collections locally:
-```bash
-mongosh
-```
-
-You can use the CDP Terminal to access the environments' MongoDB.
-
 ### Testing
 
-Run the tests with:
-
-Tests run by running a full `WebApplication` backed by [Ephemeral MongoDB](https://github.com/asimmon/ephemeral-mongo).
-Tests do not use mocking of any sort and read and write from the in-memory database.
+Run unit and integration tests with:
 
 ```bash
-dotnet test
-````
+mvn test
+```
+
+Or run the full build including integration tests:
+
+```bash
+mvn verify
+```
+
+Integration tests start a full Spring Boot application context on a random port. No external services or containers are required.
 
 ### Running
 
-Run CDP-Deployments application:
+Run the application with the `local` Spring profile, which enables LocalStack endpoint override and additional actuator endpoints for debugging:
+
 ```bash
-dotnet run --project TradeImportsDynamicsGateway --launch-profile Development
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+Or equivalently:
+
+```bash
+SPRING_PROFILES_ACTIVE=local mvn spring-boot:run
 ```
 
 ### SonarCloud
 
-Example SonarCloud configuration are available in the GitHub Action workflows.
+SonarCloud configuration is available in the GitHub Action workflows.
 
 ### Dependabot
 
-We have added an example dependabot configuration file to the repository. You can enable it by renaming
-the [.github/example.dependabot.yml](.github/example.dependabot.yml) to `.github/dependabot.yml`
+A Dependabot configuration file is at [.github/dependabot.yml](.github/dependabot.yml).
 
 
 ### About the licence
