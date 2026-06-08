@@ -18,10 +18,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Depth 0 required for branch-based versioning
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version-file: '.java-version'
+          cache: 'maven'
+
+      - run: mvn clean verify
+
       - name: Publish Hot Fix
         uses: DEFRA/cdp-build-action/build-hotfix@main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  sonarcloud:
+    name: SonarCloud Scan
+    needs: build
+    if: github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/sonarcloud.yml
+    secrets: inherit

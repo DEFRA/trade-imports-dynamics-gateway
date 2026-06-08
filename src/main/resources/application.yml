@@ -1,0 +1,36 @@
+server:
+  port: ${PORT:8085}
+  shutdown: graceful
+
+spring:
+  application:
+    name: trade-imports-dynamics-gateway
+  threads:
+    virtual:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  info:
+    env:
+      enabled: true
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+    uk.gov.defra.cdp.dynamicsgateway: ${LOG_LEVEL:DEBUG}
+    org.springframework: INFO
+
+info:
+  app:
+    name: ${spring.application.name}
+    environment: ${ENVIRONMENT:local}
