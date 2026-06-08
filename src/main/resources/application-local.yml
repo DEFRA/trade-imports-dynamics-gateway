@@ -1,0 +1,26 @@
+# Development profile - exposes additional actuator endpoints for debugging
+
+logging:
+  level:
+    root: INFO
+    uk.gov.defra.cdp.dynamicsgateway: DEBUG
+    org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
+    org.springframework.web: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB:INFO}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# App-level overrides for local development
+# AWS credentials are dummy values accepted by LocalStack — never use real keys here
+app:
+  aws:
+    endpoint-override: ${APP_AWS_ENDPOINT_OVERRIDE:http://localhost:4566}
+    access-key-id: test
+    secret-access-key: test
+  base-url: ${TRADE_IMPORTS_DYNAMICS_GATEWAY_BASE_URL:http://host.docker.internal:8085}
