@@ -1,6 +1,6 @@
 # trade-imports-dynamics-gateway
 
-Centralised gateway forwarding events to Azure Service Bus (ADR-EUDP-001 Option B).
+Centralised gateway forwarding events to Azure Service Bus.
 
 * [Docker Compose](#docker-compose)
 * [Testing](#testing)
