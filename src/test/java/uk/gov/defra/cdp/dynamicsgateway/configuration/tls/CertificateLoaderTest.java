@@ -5,10 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.Base64;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CertificateLoaderTest {
-
-    private CertificateLoader certificateLoader;
 
     private static final String VALID_CERT_PEM = """
 -----BEGIN CERTIFICATE-----
@@ -34,28 +35,16 @@ fA==
 -----END CERTIFICATE-----
 """.trim();
 
-    @Test
-    void testHandlesNullCertificate() {
-        certificateLoader = new CertificateLoader(null);
-        assertNull(certificateLoader.loadCustomCertificate(), "Expected a null certificate");
-    }
-
-    @Test
-    void testHandlesEmptyCertificate() {
-        certificateLoader = new CertificateLoader("");
-        assertNull(certificateLoader.loadCustomCertificate(), "Expected a null certificate");
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"invalid"})
+    void testHandlesInvalidCertificate(String cert) {
+        assertNull(new CertificateLoader(cert).loadCustomCertificate());
     }
 
     @Test
     void testHandlesValidCertificate() {
         byte[] encoded = Base64.getEncoder().encode(VALID_CERT_PEM.getBytes());
-        certificateLoader = new CertificateLoader(new String(encoded));
-        assertNotNull(certificateLoader.loadCustomCertificate());
-    }
-
-    @Test
-    void testHandlesInvalidCertificate() {
-        certificateLoader = new CertificateLoader("invalid");
-        assertNull(certificateLoader.loadCustomCertificate(), "Expected a null certificate");
+        assertNotNull(new CertificateLoader(new String(encoded)).loadCustomCertificate());
     }
 }

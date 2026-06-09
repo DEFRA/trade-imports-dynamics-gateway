@@ -3,6 +3,8 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
@@ -54,27 +56,10 @@ class HealthCheckConfigIT extends IntegrationBase {
         assertThat(oldPath.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    @Test
-    void infoEndpoint_notAccessible() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/info", String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    }
-
-    @Test
-    void metricsEndpoint_notAccessible() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/metrics", String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    }
-
-    @Test
-    void envEndpoint_notAccessible() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/env", String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    }
-
-    @Test
-    void actuatorBasePath_isDisabled() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/actuator", String.class);
+    @ParameterizedTest
+    @ValueSource(strings = {"/info", "/metrics", "/env", "/actuator"})
+    void endpoint_notAccessible(String path) {
+        ResponseEntity<String> response = restTemplate.getForEntity(path, String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 }
