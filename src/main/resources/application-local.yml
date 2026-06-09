@@ -24,4 +24,4 @@ app:
     endpoint-override: ${APP_AWS_ENDPOINT_OVERRIDE:http://localhost:4566}
     access-key-id: test
     secret-access-key: test
-  base-url: ${TRADE_IMPORTS_DYNAMICS_GATEWAY_BASE_URL:http://host.docker.internal:8085}
+  base-url: ${TRADE_IMPORTS_DYNAMICS_GATEWAY_BASE_URL:http://host.docker.internal:8088}
