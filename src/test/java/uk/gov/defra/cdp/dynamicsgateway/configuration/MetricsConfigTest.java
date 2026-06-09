@@ -24,15 +24,13 @@ class MetricsConfigTest {
     void timedAspect_shouldCreateTimedAspectWithRegistry() {
         TimedAspect result = metricsConfig.timedAspect(meterRegistry);
 
-        assertThat(result).isNotNull();
-        assertThat(result).isInstanceOf(TimedAspect.class);
+        assertThat(result).isNotNull().isInstanceOf(TimedAspect.class);
     }
 
     @Test
     void countedAspect_shouldCreateCountedAspectWithRegistry() {
         CountedAspect result = metricsConfig.countedAspect(meterRegistry);
 
-        assertThat(result).isNotNull();
-        assertThat(result).isInstanceOf(CountedAspect.class);
+        assertThat(result).isNotNull().isInstanceOf(CountedAspect.class);
     }
 }

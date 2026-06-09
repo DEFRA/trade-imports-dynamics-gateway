@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.net.ProxySelector;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ProxyConfigTest {
@@ -19,18 +22,11 @@ class ProxyConfigTest {
         System.clearProperty("https.proxyPort");
     }
 
-    @Test
-    void configureProxy_shouldNotSetProperties_whenProxyUrlIsNull() {
-        ReflectionTestUtils.setField(proxyConfig, "httpProxy", null);
-
-        proxyConfig.configureProxy();
-
-        assertThat(System.getProperty("http.proxyHost")).isNull();
-    }
-
-    @Test
-    void configureProxy_shouldNotSetProperties_whenProxyUrlIsEmpty() {
-        ReflectionTestUtils.setField(proxyConfig, "httpProxy", "");
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"file:path", "http://proxy.example.com", "not a valid uri"})
+    void configureProxy_shouldNotSetProperties_forInvalidOrAbsentProxyUrl(String proxyUrl) {
+        ReflectionTestUtils.setField(proxyConfig, "httpProxy", proxyUrl);
 
         proxyConfig.configureProxy();
 
@@ -58,33 +54,4 @@ class ProxyConfigTest {
         assertThat(ProxySelector.getDefault()).isNotNull();
     }
 
-    @Test
-    void configureProxy_shouldNotSetProperties_whenUriHasNoHost() {
-        // Opaque URI (no authority) → getHost() returns null
-        ReflectionTestUtils.setField(proxyConfig, "httpProxy", "file:path");
-
-        proxyConfig.configureProxy();
-
-        assertThat(System.getProperty("http.proxyHost")).isNull();
-    }
-
-    @Test
-    void configureProxy_shouldNotSetProperties_whenUriHasNoPort() {
-        // No port component → getPort() returns -1
-        ReflectionTestUtils.setField(proxyConfig, "httpProxy", "http://proxy.example.com");
-
-        proxyConfig.configureProxy();
-
-        assertThat(System.getProperty("http.proxyHost")).isNull();
-    }
-
-    @Test
-    void configureProxy_shouldNotThrow_whenProxyUrlIsMalformed() {
-        // Spaces in URI → URI.create throws IllegalArgumentException, caught silently
-        ReflectionTestUtils.setField(proxyConfig, "httpProxy", "not a valid uri");
-
-        proxyConfig.configureProxy();
-
-        assertThat(System.getProperty("http.proxyHost")).isNull();
-    }
 }

@@ -53,7 +53,7 @@ public class TrustStoreConfiguration {
         defaultTmf.init((KeyStore) null);
 
         X509TrustManager defaultTrustManager = Arrays.stream(defaultTmf.getTrustManagers())
-            .filter(tm -> tm instanceof X509TrustManager)
+            .filter(X509TrustManager.class::isInstance)
             .map(tm -> (X509TrustManager) tm)
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No default X509TrustManager found"));
@@ -74,7 +74,7 @@ public class TrustStoreConfiguration {
         customTmf.init(customKeyStore);
 
         X509TrustManager customTrustManager = Arrays.stream(customTmf.getTrustManagers())
-            .filter(tm -> tm instanceof X509TrustManager)
+            .filter(X509TrustManager.class::isInstance)
             .map(tm -> (X509TrustManager) tm)
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No custom X509TrustManager found"));
@@ -98,7 +98,7 @@ public class TrustStoreConfiguration {
             throws CertificateException {
             try {
                 defaultTrustManager.checkClientTrusted(chain, authType);
-            } catch (CertificateException e) {
+            } catch (CertificateException _) {
                 customTrustManager.checkClientTrusted(chain, authType);
             }
         }
@@ -108,7 +108,7 @@ public class TrustStoreConfiguration {
             throws CertificateException {
             try {
                 defaultTrustManager.checkServerTrusted(chain, authType);
-            } catch (CertificateException e) {
+            } catch (CertificateException _) {
                 customTrustManager.checkServerTrusted(chain, authType);
             }
         }
