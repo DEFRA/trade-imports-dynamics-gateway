@@ -1,0 +1,26 @@
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    enabled: false
+
+cdp:
+  service-version: 0.0.0-test
+
+logging:
+  level:
+    root: INFO
+    uk.gov.defra.cdp.dynamicsgateway: INFO
+    org.springframework: INFO
+
+info:
+  app:
+    name: ${spring.application.name}
+    version: ${cdp.service-version}
+    environment: local
