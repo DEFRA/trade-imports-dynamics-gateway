@@ -24,3 +24,8 @@ info:
     name: ${spring.application.name}
     version: ${cdp.service-version}
     environment: local
+
+azure:
+  servicebus:
+    connection-string: Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=test;SharedAccessKey=dGVzdA==
+    queue-or-topic: test-queue

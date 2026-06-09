@@ -90,3 +90,8 @@ info:
     name: ${spring.application.name}
     version: ${cdp.service-version}
     environment: ${ENVIRONMENT:local}
+
+azure:
+  servicebus:
+    connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:}
+    queue-or-topic: ${AZURE_SERVICE_BUS_QUEUE_OR_TOPIC:}
