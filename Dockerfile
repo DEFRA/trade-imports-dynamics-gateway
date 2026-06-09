@@ -31,10 +31,10 @@ COPY --from=build /build/target/*.jar app.jar
 
 USER nobody
 
-EXPOSE 8085
+EXPOSE 8088
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8085/health || exit 1
+  CMD curl -f http://localhost:8088/health || exit 1
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
@@ -54,10 +54,10 @@ RUN mvn dependency:go-offline -B
 
 COPY src ./src
 
-EXPOSE 8085
+EXPOSE 8088
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD curl -f http://localhost:8085/health || exit 1
+  CMD curl -f http://localhost:8088/health || exit 1
 
 CMD ["mvn", "spring-boot:run", "-Dspring-boot.run.profiles=local"]
 
@@ -79,9 +79,9 @@ COPY --from=build /build/target/*.jar app.jar
 
 USER nobody
 
-EXPOSE 8085
+EXPOSE 8088
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8085/health || exit 1
+  CMD curl -f http://localhost:8088/health || exit 1
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
