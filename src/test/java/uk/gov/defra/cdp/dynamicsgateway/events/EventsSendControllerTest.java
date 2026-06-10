@@ -15,18 +15,18 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import uk.gov.defra.cdp.dynamicsgateway.common.GlobalExceptionHandler;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.GlobalExceptionHandler;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
 
-@WebMvcTest(EventsController.class)
+@WebMvcTest(EventsSendController.class)
 @Import(GlobalExceptionHandler.class)
-class EventsControllerTest {
+class EventsSendControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private EventsService eventsService;
+    private QueueMessageSender queueMessageSender;
 
     @Test
     void post_returnsAccepted_forValidJson() throws Exception {
@@ -35,7 +35,7 @@ class EventsControllerTest {
                 .content("{\"key\":\"value\"}"))
             .andExpect(status().isAccepted());
 
-        verify(eventsService).publish(any(JsonNode.class));
+        verify(queueMessageSender).publish(any(JsonNode.class));
     }
 
     @Test
@@ -73,7 +73,7 @@ class EventsControllerTest {
 
     @Test
     void post_returnsBadGateway_whenServiceBusSendFails() throws Exception {
-        doThrow(new DynamicsGatewayException("ASB error")).when(eventsService).publish(any());
+        doThrow(new DynamicsGatewayException("ASB error")).when(queueMessageSender).publish(any());
 
         mockMvc.perform(post("/events")
                 .contentType(MediaType.APPLICATION_JSON)

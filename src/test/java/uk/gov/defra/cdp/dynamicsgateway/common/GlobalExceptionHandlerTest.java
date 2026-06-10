@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.GlobalExceptionHandler;
 
 import java.util.Map;
 

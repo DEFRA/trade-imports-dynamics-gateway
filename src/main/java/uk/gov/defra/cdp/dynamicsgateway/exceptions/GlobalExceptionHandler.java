@@ -1,4 +1,4 @@
-package uk.gov.defra.cdp.dynamicsgateway.common;
+package uk.gov.defra.cdp.dynamicsgateway.exceptions;
 
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;

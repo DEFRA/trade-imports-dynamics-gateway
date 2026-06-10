@@ -15,14 +15,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/events")
-public class EventsController {
+public class EventsSendController {
 
-    private final EventsService eventsService;
+    private final QueueMessageSender queueMessageSender;
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void publishEvent(@RequestBody JsonNode body) {
         log.info("Received event for forwarding to Azure Service Bus");
-        eventsService.publish(body);
+        queueMessageSender.publish(body);
     }
 }

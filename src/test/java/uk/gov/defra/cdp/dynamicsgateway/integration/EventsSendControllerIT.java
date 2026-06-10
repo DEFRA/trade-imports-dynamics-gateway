@@ -18,7 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
 
-class EventsControllerIT extends IntegrationBase {
+class EventsSendControllerIT extends IntegrationBase {
 
     @Autowired
     private TestRestTemplate restTemplate;
