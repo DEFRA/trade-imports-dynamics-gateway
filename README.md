@@ -30,25 +30,50 @@ docker compose --profile infra up -d
 
 A more extensive setup is available in [github.com/DEFRA/cdp-local-environment](https://github.com/DEFRA/cdp-local-environment)
 
+### Configuration
+
+The service connects to Azure Service Bus using a SAS send-only connection string. The following environment variables must be set in non-local environments:
+
+| Variable | Description |
+|---|---|
+| `AZURE_SERVICE_BUS_CONNECTION_STRING` | SAS connection string for the Azure Service Bus namespace |
+| `AZURE_SERVICE_BUS_QUEUE` | Queue name to send events to |
+
+The service validates both values at startup and will refuse to start if either is missing or blank.
+
+The `local` Spring profile (`application-local.yml`) provides placeholder defaults so the service can start without real Azure credentials during local development.
+
+### Endpoint
+
+`POST /events` — accepts a JSON body and forwards it to Azure Service Bus.
+
+| Response | Condition |
+|---|---|
+| `202 Accepted` | Message sent successfully |
+| `400 Bad Request` | Body is missing, not JSON, or malformed |
+| `502 Bad Gateway` | Azure Service Bus send failed |
+
+Each message is assigned a UUID `messageId` which is logged on success for correlation.
+
 ### Testing
 
-Run unit and integration tests with:
+Run unit tests only:
 
 ```bash
 mvn test
 ```
 
-Or run the full build including integration tests:
+Run the full build including integration tests:
 
 ```bash
 mvn verify
 ```
 
-Integration tests start a full Spring Boot application context on a random port. No external services or containers are required.
+Integration tests use [Testcontainers](https://testcontainers.com/) to spin up a real Azure Service Bus emulator (backed by SQL Server) and verify end-to-end message delivery. Docker must be running.
 
 ### Running
 
-Run the application with the `local` Spring profile, which enables LocalStack endpoint override and additional actuator endpoints for debugging:
+Run the application with the `local` Spring profile:
 
 ```bash
 mvn spring-boot:run -Dspring-boot.run.profiles=local

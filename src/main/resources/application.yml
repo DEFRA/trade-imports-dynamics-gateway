@@ -94,4 +94,4 @@ info:
 azure:
   servicebus:
     connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:}
-    queue-or-topic: ${AZURE_SERVICE_BUS_QUEUE_OR_TOPIC:}
+    queue: ${AZURE_SERVICE_BUS_QUEUE:}

@@ -31,4 +31,4 @@ info:
 azure:
   servicebus:
     connection-string: Endpoint=sb://placeholder.servicebus.windows.net/;SharedAccessKeyName=placeholder;SharedAccessKey=cGxhY2Vob2xkZXI=
-    queue-or-topic: test-queue
+    queue: test-queue

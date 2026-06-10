@@ -42,6 +42,6 @@ public abstract class IntegrationBase {
     @DynamicPropertySource
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("azure.servicebus.connection-string", SERVICE_BUS_CONTAINER::getConnectionString);
-        registry.add("azure.servicebus.queue-or-topic", () -> QUEUE_NAME);
+        registry.add("azure.servicebus.queue", () -> QUEUE_NAME);
     }
 }
