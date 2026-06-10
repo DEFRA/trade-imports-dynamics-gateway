@@ -25,7 +25,10 @@ info:
     version: ${cdp.service-version}
     environment: local
 
+# Placeholder values so @NotBlank validation passes on context load in ApplicationTest,
+# which does not extend IntegrationBase. Integration tests that extend IntegrationBase
+# override these at runtime via @DynamicPropertySource from ServiceBusEmulatorContainer.
 azure:
   servicebus:
-    connection-string: Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=test;SharedAccessKey=dGVzdA==
+    connection-string: Endpoint=sb://placeholder.servicebus.windows.net/;SharedAccessKeyName=placeholder;SharedAccessKey=cGxhY2Vob2xkZXI=
     queue-or-topic: test-queue

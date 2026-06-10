@@ -1,4 +1,4 @@
-package uk.gov.defra.cdp.dynamicsgateway.common;
+package uk.gov.defra.cdp.dynamicsgateway.exceptions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
