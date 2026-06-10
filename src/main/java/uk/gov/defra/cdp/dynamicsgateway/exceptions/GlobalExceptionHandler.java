@@ -7,8 +7,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
-
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
