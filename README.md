@@ -16,16 +16,25 @@ A Docker Compose template is in [compose.yml](compose.yml).
 A local environment with:
 
 - Localstack for AWS services (S3, STS, CloudWatch)
+- Azure Service Bus emulator (backed by SQL Server)
 - This service.
 
 ```bash
 docker compose --profile services up --build -d
 ```
 
-Start just infrastructure:
+Start just infrastructure (emulator + Localstack, no service):
 
 ```bash
 docker compose --profile infra up -d
+```
+
+The gateway connects to the local Service Bus emulator by default using `local-queue`. To use real TST credentials instead, export them in your shell before running compose — they will override the emulator defaults:
+
+```bash
+export AZURE_SERVICE_BUS_CONNECTION_STRING="Endpoint=sb://..."
+export AZURE_SERVICE_BUS_QUEUE="my-queue"
+docker compose --profile services up --build -d
 ```
 
 A more extensive setup is available in [github.com/DEFRA/cdp-local-environment](https://github.com/DEFRA/cdp-local-environment)
