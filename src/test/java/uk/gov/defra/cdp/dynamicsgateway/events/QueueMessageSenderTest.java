@@ -34,21 +34,30 @@ class QueueMessageSenderTest {
     }
 
     @Test
-    void publish_sendsMessageToServiceBus() throws Exception {
+    void publish_shouldSendMessageToServiceBus() throws Exception {
+        // Given
         JsonNode body = objectMapper.readTree("{\"key\":\"value\"}");
+        ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
+        // When
         queueMessageSender.publish(body);
 
-        verify(senderClient).sendMessage(any(ServiceBusMessage.class));
+        // Then
+        verify(senderClient).sendMessage(captor.capture());
+        ServiceBusMessage sent = captor.getValue();
+        assertThat(sent.getBody().toString()).isEqualTo("{\"key\":\"value\"}");
     }
 
     @Test
-    void publish_setsContentTypeAndMessageId() throws Exception {
+    void publish_shouldSetContentTypeAndMessageId() throws Exception {
+        // Given
         JsonNode body = objectMapper.readTree("{}");
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
+        // When
         queueMessageSender.publish(body);
 
+        // Then
         verify(senderClient).sendMessage(captor.capture());
         ServiceBusMessage sent = captor.getValue();
         assertThat(sent.getContentType()).isEqualTo("application/json");
@@ -56,10 +65,12 @@ class QueueMessageSenderTest {
     }
 
     @Test
-    void publish_throwsGatewayException_whenSendFails() throws Exception {
+    void publish_shouldThrowGatewayException_whenSendFails() throws Exception {
+        // Given
         JsonNode body = objectMapper.readTree("{}");
         doThrow(new RuntimeException("ASB connection refused")).when(senderClient).sendMessage(any());
 
+        // When & Then
         assertThatThrownBy(() -> queueMessageSender.publish(body))
             .isInstanceOf(DynamicsGatewayException.class)
             .hasMessageContaining("Failed to send event to Azure Service Bus");
