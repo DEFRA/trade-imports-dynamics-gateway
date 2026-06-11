@@ -50,7 +50,7 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
         ServiceBusReceivedMessage received = receiveMessage();
-        assertThat(received.getBody().toString()).isEqualTo(postedJson);
+        assertThat(received.getBody()).hasToString(postedJson);
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
     }

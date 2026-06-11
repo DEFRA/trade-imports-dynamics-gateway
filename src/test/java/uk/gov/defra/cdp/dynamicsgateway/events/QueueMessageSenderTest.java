@@ -45,7 +45,7 @@ class QueueMessageSenderTest {
         // Then
         verify(senderClient).sendMessage(captor.capture());
         ServiceBusMessage sent = captor.getValue();
-        assertThat(sent.getBody().toString()).isEqualTo("{\"key\":\"value\"}");
+        assertThat(sent.getBody()).hasToString("{\"key\":\"value\"}");
     }
 
     @Test
