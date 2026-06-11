@@ -42,6 +42,6 @@ public abstract class IntegrationBase {
     @DynamicPropertySource
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("azure.servicebus.connection-string",
-            () -> SERVICE_BUS_CONTAINER.getConnectionString() + ";EntityPath=" + QUEUE_NAME);
+            () -> SERVICE_BUS_CONTAINER.getConnectionString() + "EntityPath=" + QUEUE_NAME);
     }
 }
