@@ -19,7 +19,7 @@ services:
       start_period: 30s
 
   servicebus-emulator:
-    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     container_name: servicebus-emulator
     profiles: ['infra', 'services']
     depends_on:
@@ -33,6 +33,12 @@ services:
       - './compose/servicebus-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json'
     ports:
       - '5672:5672'
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z localhost 5672 || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
     networks:
       - trade-imports-tenant
 
@@ -69,7 +75,7 @@ services:
       localstack:
         condition: service_healthy
       servicebus-emulator:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - './compose/aws.env'
     ports:
