@@ -2,33 +2,27 @@
 
 Centralised gateway forwarding events to Azure Service Bus.
 
-* [Docker Compose](#docker-compose)
+* [Local stack](#local-stack)
 * [Testing](#testing)
 * [Running](#running)
 * [SonarCloud](#sonarcloud)
 * [Dependabot](#dependabot)
 
 
-### Docker Compose
+### Local stack
 
-A Docker Compose template is in [compose.yml](compose.yml).
-
-A local environment with:
-
-- Localstack for AWS services (S3, STS, CloudWatch)
-- This service.
+The local environment for the trade-imports-animals services is the workspace
+stack in
+[DEFRA/trade-imports-animals-workspace](https://github.com/DEFRA/trade-imports-animals-workspace):
 
 ```bash
-docker compose --profile services up --build -d
+# from the workspace root
+./scripts/stack/run-stack.sh        # full stack from published images
+./scripts/stack/stop-stack.sh       # tear down and wipe volumes
 ```
 
-Start just infrastructure:
-
-```bash
-docker compose --profile infra up -d
-```
-
-A more extensive setup is available in [github.com/DEFRA/cdp-local-environment](https://github.com/DEFRA/cdp-local-environment)
+This gateway is not part of that stack — it talks to Azure Service Bus, and
+its integration tests are self-contained (`mvn verify`).
 
 ### Testing
 
