@@ -29,11 +29,10 @@ Start just infrastructure (emulator + Localstack, no service):
 docker compose --profile infra up -d
 ```
 
-The gateway connects to the local Service Bus emulator by default using `local-queue`. To use real TST credentials instead, export them in your shell before running compose — they will override the emulator defaults:
+The gateway connects to the local Service Bus emulator by default using `local-queue`. To target TST instead, export the SAS connection string (with `EntityPath`) in your shell before running compose — it will override the emulator default:
 
 ```bash
-export AZURE_SERVICE_BUS_CONNECTION_STRING="Endpoint=sb://..."
-export AZURE_SERVICE_BUS_QUEUE="my-queue"
+export AZURE_SERVICE_BUS_CONNECTION_STRING="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=..."
 docker compose --profile services up --build -d
 ```
 
@@ -45,10 +44,9 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 
 | Variable | Description |
 |---|---|
-| `AZURE_SERVICE_BUS_CONNECTION_STRING` | SAS connection string for the Azure Service Bus namespace |
-| `AZURE_SERVICE_BUS_QUEUE` | Queue name to send events to |
+| `AZURE_SERVICE_BUS_CONNECTION_STRING` | SAS connection string including `EntityPath` — e.g. `Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=<queue>` |
 
-The service validates both values at startup and will refuse to start if either is missing or blank.
+The service validates the connection string at startup and will refuse to start if it is missing or blank. The target queue is taken from the `EntityPath` component of the connection string.
 
 The `local` Spring profile (`application-local.yml`) provides placeholder defaults so the service can start without real Azure credentials during local development.
 

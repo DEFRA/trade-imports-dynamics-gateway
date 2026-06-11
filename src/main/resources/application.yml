@@ -94,4 +94,3 @@ info:
 azure:
   servicebus:
     connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:}
-    queue: ${AZURE_SERVICE_BUS_QUEUE:}

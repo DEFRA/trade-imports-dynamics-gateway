@@ -2,26 +2,22 @@ package uk.gov.defra.cdp.dynamicsgateway.configuration;
 
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// Manual wiring rather than spring-cloud-azure autoconfiguration: SAS auth is provisional and subject to SDA review.
-// Keeping the client construction here makes it a two-line swap to Managed/Workload Identity when the auth mechanism is settled.
-// Once auth is confirmed, migrate to spring-cloud-azure-starter-servicebus and remove this class.
-@Slf4j
+// Manual wiring rather than spring-cloud-azure autoconfiguration: SAS is the agreed auth mechanism
+// per PIMS guidance. Isolating client construction here keeps the auth concern swappable (e.g. to
+// Managed Identity) with minimal change if required.
 @Configuration
 @EnableConfigurationProperties(AzureServiceBusConfig.class)
 public class AzureServiceBusClientConfig {
 
     @Bean
     public ServiceBusSenderClient serviceBusSenderClient(AzureServiceBusConfig config) {
-        log.info("Configuring Azure Service Bus sender for queue: {}", config.queue());
         return new ServiceBusClientBuilder()
             .connectionString(config.connectionString())
             .sender()
-            .queueName(config.queue())
             .buildClient();
     }
 }

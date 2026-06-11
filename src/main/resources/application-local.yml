@@ -28,5 +28,4 @@ app:
 
 azure:
   servicebus:
-    connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:Endpoint=sb://local.servicebus.windows.net/;SharedAccessKeyName=local;SharedAccessKey=bG9jYWw=}
-    queue: ${AZURE_SERVICE_BUS_QUEUE:local-queue}
+    connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:Endpoint=sb://local.servicebus.windows.net/;SharedAccessKeyName=local;SharedAccessKey=bG9jYWw=;EntityPath=local-queue}

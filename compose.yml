@@ -97,9 +97,8 @@ services:
       SPRING_PROFILES_ACTIVE: local
 
       # Azure Service Bus — uses the local emulator by default.
-      # Override with TST credentials by setting these vars in your shell before running compose.
-      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:-Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;}
-      AZURE_SERVICE_BUS_QUEUE: ${AZURE_SERVICE_BUS_QUEUE:-local-queue}
+      # Override with a real SAS connection string (including EntityPath) to target TST.
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:-Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;EntityPath=local-queue}
 
       # Java remote debug (uncomment to enable)
       # JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
