@@ -24,7 +24,9 @@ public class EventsSendController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void publishEvent(@RequestBody JsonNode body) {
-        log.info("Received event for forwarding to Azure Service Bus");
+        log.atInfo()
+            .addKeyValue("body", body)
+            .log("Received event for forwarding to Azure Service Bus");
         queueMessageSender.publish(body);
     }
 }

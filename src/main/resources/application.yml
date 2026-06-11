@@ -94,3 +94,6 @@ info:
 azure:
   servicebus:
     connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:}
+    # AMQP_WEB_SOCKETS required in CDP so egress traffic goes via the platform proxy (port 443).
+    # Override to AMQP in local/integration-test profiles where no proxy is involved.
+    transport-type: amqp_web_sockets

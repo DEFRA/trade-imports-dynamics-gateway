@@ -1,6 +1,5 @@
 package uk.gov.defra.cdp.dynamicsgateway.configuration;
 
-import com.azure.core.amqp.AmqpTransportType;
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -17,7 +16,7 @@ public class AzureServiceBusClientConfig {
     @Bean
     public ServiceBusSenderClient serviceBusSenderClient(AzureServiceBusConfig config) {
         return new ServiceBusClientBuilder()
-            .transportType(AmqpTransportType.AMQP_WEB_SOCKETS)
+            .transportType(config.transportType())
             .connectionString(config.connectionString())
             .sender()
             .buildClient();
