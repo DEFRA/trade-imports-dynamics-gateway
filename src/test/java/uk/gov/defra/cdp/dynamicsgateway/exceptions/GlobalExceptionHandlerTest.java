@@ -20,22 +20,28 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleUnreadableBody_returns400WithErrorMessage() {
+    void handleUnreadableBody_shouldReturn400WithErrorMessage() {
+        // Given
         HttpMessageNotReadableException ex = mock(HttpMessageNotReadableException.class);
 
+        // When
         ResponseEntity<Map<String, String>> response = handler.handleUnreadableBody(ex);
 
+        // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).containsKey("error");
         assertThat(response.getBody().get("error")).contains("not valid JSON");
     }
 
     @Test
-    void handleGatewayException_returns502WithErrorMessage() {
+    void handleGatewayException_shouldReturn502WithErrorMessage() {
+        // Given
         DynamicsGatewayException ex = new DynamicsGatewayException("ASB send failed");
 
+        // When
         ResponseEntity<Map<String, String>> response = handler.handleGatewayException(ex);
 
+        // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
         assertThat(response.getBody()).containsKey("error");
         assertThat(response.getBody().get("error")).contains("Azure Service Bus");
