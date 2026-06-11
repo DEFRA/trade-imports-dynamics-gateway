@@ -93,6 +93,17 @@ Or equivalently:
 SPRING_PROFILES_ACTIVE=local mvn spring-boot:run
 ```
 
+> **Note:** The `local` profile's default connection string (`application-local.yml`) points at
+> `local.servicebus.windows.net` and does **not** include `UseDevelopmentEmulator=true`, so it
+> will not reach the Azure Service Bus emulator. To run the service natively against the emulator
+> (started via `docker compose --profile infra up -d`), export the emulator connection string
+> before running:
+>
+> ```bash
+> export AZURE_SERVICE_BUS_CONNECTION_STRING="Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+> mvn spring-boot:run -Dspring-boot.run.profiles=local
+> ```
+
 ### SonarCloud
 
 SonarCloud configuration is available in the GitHub Action workflows.
