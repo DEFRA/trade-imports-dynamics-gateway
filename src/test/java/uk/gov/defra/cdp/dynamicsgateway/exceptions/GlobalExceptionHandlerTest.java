@@ -5,9 +5,11 @@ import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import java.util.Map;
 
 class GlobalExceptionHandlerTest {
@@ -31,6 +33,18 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).containsKey("error");
         assertThat(response.getBody().get("error")).contains("not valid JSON");
+    }
+
+    @Test
+    void handleNoResource_shouldReturn404() {
+        // Given
+        NoResourceFoundException ex = new NoResourceFoundException(HttpMethod.GET, "/actuator");
+
+        // When
+        ResponseEntity<Void> response = handler.handleNoResource(ex);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
