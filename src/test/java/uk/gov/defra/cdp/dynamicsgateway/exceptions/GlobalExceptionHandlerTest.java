@@ -9,6 +9,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import java.util.Map;
 
@@ -45,6 +46,34 @@ class GlobalExceptionHandlerTest {
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void handleUnsupportedMediaType_shouldReturn415WithErrorMessage() {
+        // Given
+        HttpMediaTypeNotSupportedException ex = mock(HttpMediaTypeNotSupportedException.class);
+
+        // When
+        ResponseEntity<Map<String, String>> response = handler.handleUnsupportedMediaType(ex);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+        assertThat(response.getBody()).containsKey("error");
+        assertThat(response.getBody().get("error")).contains("not supported");
+    }
+
+    @Test
+    void handleException_shouldReturn500WithErrorMessage() {
+        // Given
+        Exception ex = new RuntimeException("something went wrong");
+
+        // When
+        ResponseEntity<Map<String, String>> response = handler.handleException(ex);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).containsKey("error");
+        assertThat(response.getBody().get("error")).contains("unexpected error");
     }
 
     @Test

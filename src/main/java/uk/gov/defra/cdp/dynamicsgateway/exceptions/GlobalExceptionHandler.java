@@ -13,25 +13,27 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String ERROR_KEY = "error";
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, String>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         log.warn("Rejected request — unreadable body: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(Map.of("error", "Request body is missing or not valid JSON"));
+            .body(Map.of(ERROR_KEY, "Request body is missing or not valid JSON"));
     }
 
     @ExceptionHandler(DynamicsGatewayException.class)
     public ResponseEntity<Map<String, String>> handleGatewayException(DynamicsGatewayException ex) {
         log.error("Gateway error: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-            .body(Map.of("error", "Failed to forward event to Azure Service Bus"));
+            .body(Map.of(ERROR_KEY, "Failed to forward event to Azure Service Bus"));
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<Map<String, String>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
         log.warn("Unsupported media type: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
-            .body(Map.of("error", "Content type is not supported"));
+            .body(Map.of(ERROR_KEY, "Content type is not supported"));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
@@ -43,6 +45,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleException(Exception ex) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(Map.of("error", "An unexpected error occurred"));
+            .body(Map.of(ERROR_KEY, "An unexpected error occurred"));
     }
 }
