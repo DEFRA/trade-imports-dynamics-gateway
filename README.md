@@ -57,7 +57,8 @@ The `local` Spring profile (`application-local.yml`) provides placeholder defaul
 | Response | Condition |
 |---|---|
 | `202 Accepted` | Message sent successfully |
-| `400 Bad Request` | Body is missing, not JSON, or malformed |
+| `400 Bad Request` | Body is missing or malformed JSON |
+| `415 Unsupported Media Type` | Content-Type is not `application/json` |
 | `502 Bad Gateway` | Azure Service Bus send failed |
 
 Each message is assigned a UUID `messageId` which is logged on success for correlation.
