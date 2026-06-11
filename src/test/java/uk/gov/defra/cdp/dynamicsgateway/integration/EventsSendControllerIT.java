@@ -9,7 +9,9 @@ import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
 import com.azure.messaging.servicebus.ServiceBusReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
+import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import java.time.Duration;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -36,41 +38,60 @@ class EventsSendControllerIT extends IntegrationBase {
     }
 
     @Test
-    void post_returnsAccepted_andMessageLandsInQueue() {
-        ResponseEntity<Void> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{\"eventType\":\"NotificationSubmitted\"}"), Void.class);
+    void post_shouldReturnAccepted_andMessageLandsInQueue() {
+        // Given
+        String postedJson = "{\"eventType\":\"NotificationSubmitted\"}";
 
+        // When
+        ResponseEntity<Void> response = restTemplate.postForEntity(
+            "/events", jsonEntity(postedJson), Void.class);
+
+        // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
         ServiceBusReceivedMessage received = receiveMessage();
-        assertThat(received.getBody().toString()).contains("NotificationSubmitted");
+        assertThat(received.getBody().toString()).isEqualTo(postedJson);
+        assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
     }
 
     @Test
-    void post_returnsBadRequest_forMissingBody() {
+    void post_shouldReturnBadRequest_forMissingBody() {
+        // Given — no body
+
+        // When
         ResponseEntity<String> response = restTemplate.postForEntity(
             "/events", jsonEntity(null), String.class);
 
+        // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).contains("error");
+        assertThat(receiveNoMessage()).isEmpty();
     }
 
     @Test
-    void post_returnsBadRequest_forMalformedJson() {
+    void post_shouldReturnBadRequest_forMalformedJson() {
+        // Given — malformed JSON body
+
+        // When
         ResponseEntity<String> response = restTemplate.postForEntity(
             "/events", jsonEntity("{bad json"), String.class);
 
+        // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(receiveNoMessage()).isEmpty();
     }
 
     @Test
-    void post_returnsBadGateway_whenSendFails() {
+    void post_shouldReturnBadGateway_whenSendFails() {
+        // Given
         doThrow(new RuntimeException("ASB send failed")).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
+        // When
         ResponseEntity<String> response = restTemplate.postForEntity(
             "/events", jsonEntity("{}"), String.class);
 
+        // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
         assertThat(response.getBody()).contains("error");
     }
@@ -80,11 +101,25 @@ class EventsSendControllerIT extends IntegrationBase {
                 .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
                 .receiver()
                 .queueName(QUEUE_NAME)
+                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
                 .buildClient()) {
             return receiver.receiveMessages(1, Duration.ofSeconds(10))
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("No message received from queue within timeout"));
+        }
+    }
+
+    private Optional<ServiceBusReceivedMessage> receiveNoMessage() {
+        try (ServiceBusReceiverClient receiver = new ServiceBusClientBuilder()
+                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
+                .receiver()
+                .queueName(QUEUE_NAME)
+                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
+                .buildClient()) {
+            return receiver.receiveMessages(1, Duration.ofSeconds(3))
+                .stream()
+                .findFirst();
         }
     }
 
