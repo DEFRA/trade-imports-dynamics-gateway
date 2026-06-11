@@ -20,7 +20,7 @@ public abstract class IntegrationBase {
     private static final Network NETWORK = Network.newNetwork();
 
     private static final MSSQLServerContainer<?> MSSQL_CONTAINER =
-        new MSSQLServerContainer<>(DockerImageName.parse("mcr.microsoft.com/mssql/server:2022-latest"))
+        new MSSQLServerContainer<>(DockerImageName.parse("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04"))
             .acceptLicense()
             .withNetwork(NETWORK)
             .withNetworkAliases("sqledge")
@@ -28,7 +28,7 @@ public abstract class IntegrationBase {
 
     static final ServiceBusEmulatorContainer SERVICE_BUS_CONTAINER =
         new ServiceBusEmulatorContainer(
-            DockerImageName.parse("mcr.microsoft.com/azure-messaging/servicebus-emulator:latest"))
+            DockerImageName.parse("mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2"))
             .acceptLicense()
             .withNetwork(NETWORK)
             .withMsSqlServerContainer(MSSQL_CONTAINER)

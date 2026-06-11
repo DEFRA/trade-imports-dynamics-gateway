@@ -12,7 +12,7 @@ class TrustStoreConfigurationIT extends IntegrationBase {
     private SSLContext customSslContext;
 
     @Test
-    void customSslContext_isTlsAndWiredBySpring() {
+    void customSslContext_shouldBeTlsAndWiredBySpring() {
         assertThat(customSslContext).isNotNull();
         assertThat(customSslContext.getProtocol()).isEqualTo("TLS");
     }
