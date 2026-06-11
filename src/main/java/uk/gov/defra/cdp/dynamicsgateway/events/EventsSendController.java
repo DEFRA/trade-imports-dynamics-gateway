@@ -1,6 +1,7 @@
 package uk.gov.defra.cdp.dynamicsgateway.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ public class EventsSendController {
 
     private final QueueMessageSender queueMessageSender;
 
+    @Timed("events.publish")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void publishEvent(@RequestBody JsonNode body) {
