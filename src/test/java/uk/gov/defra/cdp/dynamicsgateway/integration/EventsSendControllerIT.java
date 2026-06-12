@@ -65,7 +65,7 @@ class EventsSendControllerIT extends IntegrationBase {
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).contains("error");
+        assertThat(response.getBody()).contains("bad-request");
         assertThat(receiveNoMessage()).isEmpty();
     }
 
