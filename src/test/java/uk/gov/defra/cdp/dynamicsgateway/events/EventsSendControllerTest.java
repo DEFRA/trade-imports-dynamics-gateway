@@ -73,7 +73,8 @@ class EventsSendControllerTest {
         mockMvc.perform(post("/events")
                 .contentType(MediaType.APPLICATION_JSON))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.detail").exists())
+            .andExpect(jsonPath("$.type").value("/problems/bad-request"));
 
         verifyNoInteractions(queueMessageSender);
     }
@@ -85,7 +86,8 @@ class EventsSendControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{invalid json"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.detail").exists())
+            .andExpect(jsonPath("$.type").value("/problems/bad-request"));
 
         verifyNoInteractions(queueMessageSender);
     }
@@ -111,6 +113,7 @@ class EventsSendControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
             .andExpect(status().isBadGateway())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.detail").exists())
+            .andExpect(jsonPath("$.type").value("/problems/upstream-error"));
     }
 }
