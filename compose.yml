@@ -1,5 +1,41 @@
 services:
 
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql
+    profiles: ['infra', 'services']
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_SA_PASSWORD: 'YourStrong@Passw0rd'
+    networks:
+      trade-imports-tenant:
+        aliases:
+          - sqledge
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Passw0rd" -Q "SELECT 1" -b -No']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  servicebus-emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+    container_name: servicebus-emulator
+    profiles: ['infra', 'services']
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: 'Y'
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: 'YourStrong@Passw0rd'
+    volumes:
+      - './compose/servicebus-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json'
+    ports:
+      - '5672:5672'
+    networks:
+      - trade-imports-tenant
+
   localstack:
     image: localstack/localstack:3.0.2
     container_name: localstack
@@ -32,6 +68,8 @@ services:
     depends_on:
       localstack:
         condition: service_healthy
+      servicebus-emulator:
+        condition: service_started
     env_file:
       - './compose/aws.env'
     ports:
@@ -57,6 +95,10 @@ services:
 
       # Spring profile (local = exposes debugging actuator endpoints)
       SPRING_PROFILES_ACTIVE: local
+
+      # Azure Service Bus — uses the local emulator by default.
+      # Override with a real SAS connection string (including EntityPath) to target TST.
+      AZURE_SERVICE_BUS_CONNECTION_STRING: ${AZURE_SERVICE_BUS_CONNECTION_STRING:-Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;EntityPath=local-queue}
 
       # Java remote debug (uncomment to enable)
       # JAVA_TOOL_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005

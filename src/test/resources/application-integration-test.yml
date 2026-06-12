@@ -10,6 +10,10 @@ management:
   metrics:
     enabled: false
 
+azure:
+  servicebus:
+    transport-type: amqp
+
 cdp:
   service-version: 0.0.0-test
 
