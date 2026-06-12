@@ -28,4 +28,6 @@ app:
 
 azure:
   servicebus:
-    connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:Endpoint=sb://local.servicebus.windows.net/;SharedAccessKeyName=local;SharedAccessKey=bG9jYWw=;EntityPath=local-queue}
+    # Plain AMQP — the local emulator (v1.1.2) does not support AMQP_WEB_SOCKETS.
+    transport-type: amqp
+    connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;EntityPath=local-queue}
