@@ -14,11 +14,14 @@ import org.springframework.context.annotation.Configuration;
 public class AzureServiceBusClientConfig {
 
     @Bean
-    public ServiceBusSenderClient serviceBusSenderClient(AzureServiceBusConfig config) {
-        return new ServiceBusClientBuilder()
+    public ServiceBusSenderClient serviceBusSenderClient(
+            AzureServiceBusConfig config, CdpConfig cdpConfig) {
+        var builder = new ServiceBusClientBuilder()
             .transportType(config.transportType())
-            .connectionString(config.connectionString())
-            .sender()
-            .buildClient();
+            .connectionString(config.connectionString());
+
+        ServiceBusProxyOptions.fromHttpProxyUrl(cdpConfig.proxyUrl()).ifPresent(builder::proxyOptions);
+
+        return builder.sender().buildClient();
     }
 }
