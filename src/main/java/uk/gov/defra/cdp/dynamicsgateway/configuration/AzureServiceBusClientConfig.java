@@ -22,13 +22,7 @@ public class AzureServiceBusClientConfig {
             .transportType(config.transportType())
             .connectionString(config.connectionString());
 
-        log.info("Service Bus proxy config: HTTP_PROXY='{}', http.proxyHost='{}', http.proxyPort='{}'",
-            cdpConfig.proxyUrl(),
-            System.getProperty("http.proxyHost"),
-            System.getProperty("http.proxyPort"));
-
         ServiceBusProxyOptions.fromHttpProxyUrl(cdpConfig.proxyUrl())
-            .or(ServiceBusProxyOptions::fromJvmSystemProperties)
             .ifPresent(proxy -> {
                 log.info("Applying explicit Service Bus proxy options");
                 builder.proxyOptions(proxy);
