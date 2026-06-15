@@ -25,3 +25,9 @@ app:
     access-key-id: test
     secret-access-key: test
   base-url: ${TRADE_IMPORTS_DYNAMICS_GATEWAY_BASE_URL:http://host.docker.internal:8088}
+
+azure:
+  servicebus:
+    # Plain AMQP — the local emulator (v1.1.2) does not support AMQP_WEB_SOCKETS.
+    transport-type: amqp
+    connection-string: ${AZURE_SERVICE_BUS_CONNECTION_STRING:Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;EntityPath=local-queue}
