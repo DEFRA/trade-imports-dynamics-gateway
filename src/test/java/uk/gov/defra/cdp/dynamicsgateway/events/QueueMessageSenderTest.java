@@ -36,7 +36,7 @@ class QueueMessageSenderTest {
     @Test
     void publish_shouldSendMessageToServiceBus() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{\"key\":\"value\"}");
+        JsonNode body = objectMapper.readTree("{\"reference\":\"REF-001\",\"key\":\"value\"}");
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
         // When
@@ -45,13 +45,13 @@ class QueueMessageSenderTest {
         // Then
         verify(senderClient).sendMessage(captor.capture());
         ServiceBusMessage sent = captor.getValue();
-        assertThat(sent.getBody()).hasToString("{\"key\":\"value\"}");
+        assertThat(sent.getBody()).hasToString("{\"reference\":\"REF-001\",\"key\":\"value\"}");
     }
 
     @Test
     void publish_shouldSetContentTypeAndMessageId() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{}");
+        JsonNode body = objectMapper.readTree("{\"reference\":\"REF-001\"}");
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
         // When
@@ -65,9 +65,34 @@ class QueueMessageSenderTest {
     }
 
     @Test
+    void publish_shouldSetSessionIdFromReferenceField() throws Exception {
+        // Given
+        JsonNode body = objectMapper.readTree("{\"reference\":\"NOTIF-0042\",\"eventType\":\"NotificationSubmitted\"}");
+        ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
+
+        // When
+        queueMessageSender.publish(body);
+
+        // Then
+        verify(senderClient).sendMessage(captor.capture());
+        assertThat(captor.getValue().getSessionId()).isEqualTo("NOTIF-0042");
+    }
+
+    @Test
+    void publish_shouldThrowGatewayException_whenReferenceIsMissing() throws Exception {
+        // Given
+        JsonNode body = objectMapper.readTree("{\"eventType\":\"NotificationSubmitted\"}");
+
+        // When & Then
+        assertThatThrownBy(() -> queueMessageSender.publish(body))
+            .isInstanceOf(DynamicsGatewayException.class)
+            .hasMessageContaining("reference");
+    }
+
+    @Test
     void publish_shouldThrowGatewayException_whenSendFails() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{}");
+        JsonNode body = objectMapper.readTree("{\"reference\":\"REF-001\"}");
         doThrow(new RuntimeException("ASB connection refused")).when(senderClient).sendMessage(any());
 
         // When & Then
