@@ -18,11 +18,15 @@ stack in
 ```bash
 # from the workspace root
 ./scripts/stack/run-stack.sh        # full stack from published images
+./scripts/stack/run-stack.sh -e gateway   # everything except this service (run it natively)
 ./scripts/stack/stop-stack.sh       # tear down and wipe volumes
 ```
 
-This gateway is not part of that stack — it talks to Azure Service Bus, and
-its integration tests are self-contained (`mvn verify`).
+This gateway runs as part of that stack (the `servicebus` profile provides a
+local Azure Service Bus emulator for it to talk to). The stack stages this
+repo's `servicebus/servicebus-config.json` as the emulator's entity config.
+The integration tests, by contrast, are self-contained — they spin up their
+own emulator via Testcontainers (`mvn verify`), no running stack required.
 
 ### Configuration
 
