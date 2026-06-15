@@ -27,13 +27,19 @@ public class QueueMessageSender {
             throw new DynamicsGatewayException("Failed to serialise event body", e);
         }
 
+        String sessionId = body.path("reference").asText(null);
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new DynamicsGatewayException("Event body is missing 'reference' — required as session ID for the session-enabled queue");
+        }
+
         try {
             String messageId = UUID.randomUUID().toString();
             ServiceBusMessage message = new ServiceBusMessage(messageBody)
                 .setMessageId(messageId)
-                .setContentType("application/json");
+                .setContentType("application/json")
+                .setSessionId(sessionId);
             senderClient.sendMessage(message);
-            log.info("Event forwarded to Azure Service Bus, messageId={}", messageId);
+            log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", messageId, sessionId);
         } catch (Exception e) {
             log.error("Failed to forward event to Azure Service Bus: {}", e.getMessage(), e);
             throw new DynamicsGatewayException("Failed to send event to Azure Service Bus", e);
