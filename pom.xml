@@ -43,6 +43,13 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+      <!-- Override azure-core-amqp to get the proxy Connection: close fix.
+           BOM 1.2.35 pins 2.9.16 which lacks proxy handshake resumption. -->
+      <dependency>
+        <groupId>com.azure</groupId>
+        <artifactId>azure-core-amqp</artifactId>
+        <version>2.11.4</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -101,6 +108,9 @@
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-messaging-servicebus</artifactId>
+      <!-- Override BOM: 7.17.18 brings azure-core-amqp 2.11.4 which fixes proxy
+           handshake resumption when the proxy closes the connection (Connection: close). -->
+      <version>7.17.18</version>
     </dependency>
 
     <!-- Testing -->
