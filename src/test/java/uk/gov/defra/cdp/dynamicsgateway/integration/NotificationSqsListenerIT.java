@@ -47,10 +47,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
     static void setLocalStackProperties(DynamicPropertyRegistry registry) {
         registry.add("aws.sqs.notification.queue-url", () -> queueUrl);
         registry.add("aws.sqs.notification.wait-time-seconds", () -> "1");
-        // Use the container's mapped 127.0.0.1 address as the HTTP endpoint — not the
-        // LocalStack-returned URL hostname (sqs.*.localhost:4566) which is unresolvable.
-        // The queueUrl stays as LocalStack returned it; it goes in the request body and
-        // LocalStack matches it against its stored URL (same value) for queue lookup.
+        // 127.0.0.1:PORT is the resolvable endpoint; LocalStack returns sqs.*.localhost:4566
+        // as the queue hostname which cannot be resolved outside the container.
         registry.add("app.aws.endpoint-override",
             () -> LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString());
         registry.add("app.aws.access-key-id", LOCAL_STACK::getAccessKey);

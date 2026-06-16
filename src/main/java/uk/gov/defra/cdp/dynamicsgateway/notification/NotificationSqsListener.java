@@ -49,7 +49,7 @@ public class NotificationSqsListener implements ApplicationRunner {
             .maxNumberOfMessages(sqsConfig.maxMessages())
             .waitTimeSeconds(sqsConfig.waitTimeSeconds())
             .visibilityTimeout(sqsConfig.visibilityTimeoutSeconds())
-            .attributeNamesWithStrings("MessageGroupId"));
+            .attributeNamesWithStrings(MessageSystemAttributeName.MESSAGE_GROUP_ID.toString()));
 
         for (Message message : response.messages()) {
             processMessage(message);
