@@ -20,16 +20,16 @@ public class QueueMessageSender {
     private final ObjectMapper objectMapper;
 
     public void publish(JsonNode body) {
+        String sessionId = body.path("reference").asText(null);
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new DynamicsGatewayException("Event body is missing 'reference' — required as session ID for the session-enabled queue");
+        }
+
         String messageBody;
         try {
             messageBody = objectMapper.writeValueAsString(body);
         } catch (JsonProcessingException e) {
             throw new DynamicsGatewayException("Failed to serialise event body", e);
-        }
-
-        String sessionId = body.path("reference").asText(null);
-        if (sessionId == null || sessionId.isBlank()) {
-            throw new DynamicsGatewayException("Event body is missing 'reference' — required as session ID for the session-enabled queue");
         }
 
         try {
