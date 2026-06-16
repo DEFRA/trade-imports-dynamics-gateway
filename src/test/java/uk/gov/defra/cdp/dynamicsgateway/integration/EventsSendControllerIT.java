@@ -42,7 +42,7 @@ class EventsSendControllerIT extends IntegrationBase {
     @Test
     void post_shouldReturnAccepted_andMessageLandsInQueue() {
         // Given
-        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"reference\":\"TEST-REF-001\"}";
+        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}";
 
         // When
         ResponseEntity<Void> response = restTemplate.postForEntity(
@@ -55,7 +55,7 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(received.getBody()).hasToString(postedJson);
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
-        assertThat(received.getSessionId()).isEqualTo("TEST-REF-001");
+        assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
     }
 
     @Test
@@ -92,7 +92,7 @@ class EventsSendControllerIT extends IntegrationBase {
 
         // When
         ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{\"reference\":\"REF-001\"}"), String.class);
+            "/events", jsonEntity("{\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}"), String.class);
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);

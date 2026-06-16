@@ -26,6 +26,11 @@ app:
     secret-access-key: test
   base-url: ${TRADE_IMPORTS_DYNAMICS_GATEWAY_BASE_URL:http://host.docker.internal:8088}
 
+aws:
+  sqs:
+    notification:
+      queue-url: http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway.fifo
+
 azure:
   servicebus:
     # Plain AMQP — the local emulator (v1.1.2) does not support AMQP_WEB_SOCKETS.

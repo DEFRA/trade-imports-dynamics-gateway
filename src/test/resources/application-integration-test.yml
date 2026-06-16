@@ -10,6 +10,13 @@ management:
   metrics:
     enabled: false
 
+aws:
+  sqs:
+    notification:
+      # Placeholder so @NotBlank validation passes for ITs that don't use the SQS listener.
+      # NotificationSqsListenerIT overrides this via @DynamicPropertySource with the real LocalStack URL.
+      queue-url: http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway.fifo
+
 azure:
   servicebus:
     transport-type: amqp

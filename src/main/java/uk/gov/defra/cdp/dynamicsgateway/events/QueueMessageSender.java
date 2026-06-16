@@ -19,10 +19,9 @@ public class QueueMessageSender {
     private final ServiceBusSenderClient senderClient;
     private final ObjectMapper objectMapper;
 
-    public void publish(JsonNode body) {
-        String sessionId = body.path("reference").asText(null);
+    public void publish(JsonNode body, String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
-            throw new DynamicsGatewayException("Event body is missing 'reference' — required as session ID for the session-enabled queue");
+            throw new DynamicsGatewayException("sessionId is required for the session-enabled ASB queue");
         }
 
         String messageBody;

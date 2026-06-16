@@ -16,14 +16,18 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.SqsClientBuilder;
 import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.services.sts.model.GetWebIdentityTokenRequest;
 import software.amazon.awssdk.services.sts.model.GetWebIdentityTokenResponse;
 import software.amazon.awssdk.services.sts.model.StsException;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
 
 @Slf4j
 @Configuration
+@EnableConfigurationProperties(NotificationSqsConfig.class)
 public class AwsConfig {
 
     private final String region;
@@ -57,6 +61,22 @@ public class AwsConfig {
         } catch (StsException ex) {
             throw new DynamicsGatewayException("Sts connection error: " + ex.getMessage());
         }
+    }
+
+    @Bean
+    public SqsClient sqsClient() {
+        SqsClientBuilder builder = SqsClient.builder()
+            .region(Region.of(region))
+            .credentialsProvider(resolveCredentialsProvider())
+            .overrideConfiguration(c -> c
+                .retryStrategy(RetryMode.ADAPTIVE_V2)
+                .apiCallTimeout(Duration.ofSeconds(30))
+                .apiCallAttemptTimeout(Duration.ofSeconds(10)));
+        if (hasEndpointOverride()) {
+            log.info("Using SQS endpoint override: {}", appAwsConfig.endpointOverride());
+            builder.endpointOverride(URI.create(appAwsConfig.endpointOverride()));
+        }
+        return builder.build();
     }
 
     @Bean

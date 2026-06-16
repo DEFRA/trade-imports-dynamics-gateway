@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.sqs.SqsClient;
 
 class AwsConfigTest {
 
@@ -13,6 +14,28 @@ class AwsConfigTest {
     private static final String ENDPOINT = "http://localhost:4566";
     private static final String ACCESS_KEY = "test-access-key";
     private static final String SECRET_KEY = "test-secret-key";
+
+    @Test
+    void sqsClient_shouldBuild_whenNoEndpointOrStaticCredentials() {
+        AppAwsConfig appAwsConfig = new AppAwsConfig(null, null, null);
+        AwsConfig awsConfig = new AwsConfig(REGION, AUDIENCE, EXPIRATION, appAwsConfig);
+
+        SqsClient client = awsConfig.sqsClient();
+
+        assertThat(client).isNotNull();
+        client.close();
+    }
+
+    @Test
+    void sqsClient_shouldBuildWithStaticCredentialsAndEndpoint_whenConfigured() {
+        AppAwsConfig appAwsConfig = new AppAwsConfig(ENDPOINT, ACCESS_KEY, SECRET_KEY);
+        AwsConfig awsConfig = new AwsConfig(REGION, AUDIENCE, EXPIRATION, appAwsConfig);
+
+        SqsClient client = awsConfig.sqsClient();
+
+        assertThat(client).isNotNull();
+        client.close();
+    }
 
     @Test
     void s3Client_shouldBuild_whenNoEndpointOrStaticCredentials() {

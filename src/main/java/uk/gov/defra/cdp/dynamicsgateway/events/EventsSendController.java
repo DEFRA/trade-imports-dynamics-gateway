@@ -26,6 +26,6 @@ public class EventsSendController {
     public void publishEvent(@RequestBody JsonNode body) {
         log.info("Received event for forwarding to Azure Service Bus");
         log.info("body: {}", body);
-        queueMessageSender.publish(body);
+        queueMessageSender.publish(body, body.path("aggregateId").asText(null));
     }
 }

@@ -77,6 +77,12 @@ aws:
     service:
       name: ${AWS_EMF_SERVICE_NAME:trade-imports-dynamics-gateway}
       type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
+  sqs:
+    notification:
+      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}
+      visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
+      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
+      max-messages: ${SQS_MAX_MESSAGES:10}
 
 logging:
   level:

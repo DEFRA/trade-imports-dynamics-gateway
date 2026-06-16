@@ -36,26 +36,26 @@ class QueueMessageSenderTest {
     @Test
     void publish_shouldSendMessageToServiceBus() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{\"reference\":\"REF-001\",\"key\":\"value\"}");
+        JsonNode body = objectMapper.readTree("{\"aggregateId\":\"GBN-AG-26-001\",\"key\":\"value\"}");
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
         // When
-        queueMessageSender.publish(body);
+        queueMessageSender.publish(body, "GBN-AG-26-001");
 
         // Then
         verify(senderClient).sendMessage(captor.capture());
         ServiceBusMessage sent = captor.getValue();
-        assertThat(sent.getBody()).hasToString("{\"reference\":\"REF-001\",\"key\":\"value\"}");
+        assertThat(sent.getBody()).hasToString("{\"aggregateId\":\"GBN-AG-26-001\",\"key\":\"value\"}");
     }
 
     @Test
     void publish_shouldSetContentTypeAndMessageId() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{\"reference\":\"REF-001\"}");
+        JsonNode body = objectMapper.readTree("{\"aggregateId\":\"GBN-AG-26-001\"}");
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
         // When
-        queueMessageSender.publish(body);
+        queueMessageSender.publish(body, "GBN-AG-26-001");
 
         // Then
         verify(senderClient).sendMessage(captor.capture());
@@ -65,38 +65,49 @@ class QueueMessageSenderTest {
     }
 
     @Test
-    void publish_shouldSetSessionIdFromReferenceField() throws Exception {
+    void publish_shouldSetSessionIdFromParameter() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{\"reference\":\"NOTIF-0042\",\"eventType\":\"NotificationSubmitted\"}");
+        JsonNode body = objectMapper.readTree("{\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\",\"eventType\":\"NotificationSubmitted\"}");
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
 
         // When
-        queueMessageSender.publish(body);
+        queueMessageSender.publish(body, "Imports.Notification.GBN-AG.GBN-AG-26-001");
 
         // Then
         verify(senderClient).sendMessage(captor.capture());
-        assertThat(captor.getValue().getSessionId()).isEqualTo("NOTIF-0042");
+        assertThat(captor.getValue().getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
     }
 
     @Test
-    void publish_shouldThrowGatewayException_whenReferenceIsMissing() throws Exception {
+    void publish_shouldThrowGatewayException_whenSessionIdIsNull() throws Exception {
         // Given
         JsonNode body = objectMapper.readTree("{\"eventType\":\"NotificationSubmitted\"}");
 
         // When & Then
-        assertThatThrownBy(() -> queueMessageSender.publish(body))
+        assertThatThrownBy(() -> queueMessageSender.publish(body, null))
             .isInstanceOf(DynamicsGatewayException.class)
-            .hasMessageContaining("reference");
+            .hasMessageContaining("sessionId is required");
+    }
+
+    @Test
+    void publish_shouldThrowGatewayException_whenSessionIdIsBlank() throws Exception {
+        // Given
+        JsonNode body = objectMapper.readTree("{\"eventType\":\"NotificationSubmitted\"}");
+
+        // When & Then
+        assertThatThrownBy(() -> queueMessageSender.publish(body, "  "))
+            .isInstanceOf(DynamicsGatewayException.class)
+            .hasMessageContaining("sessionId is required");
     }
 
     @Test
     void publish_shouldThrowGatewayException_whenSendFails() throws Exception {
         // Given
-        JsonNode body = objectMapper.readTree("{\"reference\":\"REF-001\"}");
+        JsonNode body = objectMapper.readTree("{\"aggregateId\":\"GBN-AG-26-001\"}");
         doThrow(new RuntimeException("ASB connection refused")).when(senderClient).sendMessage(any());
 
         // When & Then
-        assertThatThrownBy(() -> queueMessageSender.publish(body))
+        assertThatThrownBy(() -> queueMessageSender.publish(body, "GBN-AG-26-001"))
             .isInstanceOf(DynamicsGatewayException.class)
             .hasMessageContaining("Failed to send event to Azure Service Bus");
     }
