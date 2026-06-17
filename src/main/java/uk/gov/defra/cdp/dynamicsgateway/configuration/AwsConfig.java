@@ -16,9 +16,11 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import io.awspring.cloud.sqs.config.SqsMessageListenerContainerFactory;
+import io.micrometer.core.instrument.MeterRegistry;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsAsyncClientBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler;
 
 @Slf4j
 @Configuration
@@ -53,13 +55,15 @@ public class AwsConfig {
     @Bean
     public SqsMessageListenerContainerFactory<Object> defaultSqsListenerContainerFactory(
             SqsAsyncClient sqsAsyncClient,
-            NotificationSqsConfig sqsConfig) {
+            NotificationSqsConfig sqsConfig,
+            MeterRegistry meterRegistry) {
         return SqsMessageListenerContainerFactory.builder()
             .configure(options -> options
                 .maxConcurrentMessages(sqsConfig.maxMessages())
                 .pollTimeout(Duration.ofSeconds(sqsConfig.waitTimeSeconds()))
                 .messageVisibility(Duration.ofSeconds(sqsConfig.visibilityTimeoutSeconds())))
             .sqsAsyncClient(sqsAsyncClient)
+            .errorHandler(new NotificationErrorHandler(meterRegistry))
             .build();
     }
 

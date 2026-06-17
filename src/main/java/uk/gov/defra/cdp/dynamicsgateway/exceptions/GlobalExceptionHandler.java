@@ -30,6 +30,17 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ProblemDetail> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Rejected request — invalid argument: {}", ex.getMessage());
+        return problemResponse(
+            HttpStatus.BAD_REQUEST,
+            "Bad Request",
+            "/problems/bad-request",
+            ex.getMessage()
+        );
+    }
+
     @ExceptionHandler(DynamicsGatewayException.class)
     public ResponseEntity<ProblemDetail> handleGatewayException(DynamicsGatewayException ex) {
         log.error("Gateway error: {}", ex.getMessage(), ex);

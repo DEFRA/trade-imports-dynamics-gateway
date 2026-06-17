@@ -9,8 +9,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +27,6 @@ class EventsSendControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
     @MockitoBean
     private QueueMessageSender queueMessageSender;
 
@@ -39,7 +34,7 @@ class EventsSendControllerTest {
     void post_returnsAccepted_forValidJson() throws Exception {
         // Given
         String body = "{\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\",\"key\":\"value\"}";
-        ArgumentCaptor<JsonNode> bodyCaptor = ArgumentCaptor.forClass(JsonNode.class);
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> sessionIdCaptor = ArgumentCaptor.forClass(String.class);
 
         // When & Then
@@ -49,7 +44,7 @@ class EventsSendControllerTest {
             .andExpect(status().isAccepted());
 
         verify(queueMessageSender).publish(bodyCaptor.capture(), sessionIdCaptor.capture());
-        assertThat(bodyCaptor.getValue()).isEqualTo(objectMapper.readTree(body));
+        assertThat(bodyCaptor.getValue()).isEqualTo(body);
         assertThat(sessionIdCaptor.getValue()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
     }
 
@@ -57,7 +52,7 @@ class EventsSendControllerTest {
     void post_returnsAccepted_forNestedJson() throws Exception {
         // Given
         String body = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\",\"data\":{\"id\":\"123\"}}";
-        ArgumentCaptor<JsonNode> bodyCaptor = ArgumentCaptor.forClass(JsonNode.class);
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> sessionIdCaptor = ArgumentCaptor.forClass(String.class);
 
         // When & Then
@@ -67,7 +62,7 @@ class EventsSendControllerTest {
             .andExpect(status().isAccepted());
 
         verify(queueMessageSender).publish(bodyCaptor.capture(), sessionIdCaptor.capture());
-        assertThat(bodyCaptor.getValue()).isEqualTo(objectMapper.readTree(body));
+        assertThat(bodyCaptor.getValue()).isEqualTo(body);
         assertThat(sessionIdCaptor.getValue()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
     }
 
@@ -92,6 +87,18 @@ class EventsSendControllerTest {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.detail").exists())
             .andExpect(jsonPath("$.type").value("/problems/bad-request"));
+
+        verifyNoInteractions(queueMessageSender);
+    }
+
+    @Test
+    void post_returnsBadRequest_whenAggregateIdIsMissing() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/events")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"eventType\":\"NotificationSubmitted\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("aggregateId is required"));
 
         verifyNoInteractions(queueMessageSender);
     }
