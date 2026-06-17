@@ -24,7 +24,7 @@ public final class ServiceBusProxyOptions {
                 return Optional.empty();
             }
             return buildProxyOptions(host, port);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             return Optional.empty();
         }
     }

@@ -65,7 +65,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isPresent();
-            assertThat(received.get().getBody().toString()).isEqualTo(eventBody);
+            assertThat(received.get().getBody()).hasToString(eventBody);
             assertThat(received.get().getSessionId()).isEqualTo(AGGREGATE_ID);
         });
     }
@@ -108,7 +108,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             return receiver.receiveMessages(1, Duration.ofSeconds(3))
                 .stream()
                 .findFirst();
-        } catch (Exception e) {
+        } catch (Exception _) {
             return Optional.empty();
         }
     }

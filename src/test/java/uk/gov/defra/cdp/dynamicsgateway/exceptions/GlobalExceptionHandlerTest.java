@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -39,7 +40,8 @@ class GlobalExceptionHandlerTest {
         MDC.put("trace.id", "trace-abc");
         HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
             "Invalid JSON",
-            new JsonParseException(null, "Unexpected character")
+            new JsonParseException(null, "Unexpected character"),
+            (HttpInputMessage) null
         );
 
         // When
@@ -62,7 +64,8 @@ class GlobalExceptionHandlerTest {
         // Given
         HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
             "Invalid JSON",
-            new JsonParseException(null, "Unexpected character")
+            new JsonParseException(null, "Unexpected character"),
+            (HttpInputMessage) null
         );
 
         // When

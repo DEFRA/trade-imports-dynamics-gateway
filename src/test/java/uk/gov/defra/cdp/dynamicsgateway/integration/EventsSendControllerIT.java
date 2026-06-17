@@ -126,7 +126,7 @@ class EventsSendControllerIT extends IntegrationBase {
             return receiver.receiveMessages(1, Duration.ofSeconds(1))
                 .stream()
                 .findFirst();
-        } catch (Exception e) {
+        } catch (Exception _) {
             return Optional.empty();
         }
     }
