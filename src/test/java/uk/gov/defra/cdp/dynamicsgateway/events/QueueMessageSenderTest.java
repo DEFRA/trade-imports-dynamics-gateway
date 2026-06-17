@@ -6,6 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import com.azure.core.amqp.exception.AmqpException;
+import com.azure.messaging.servicebus.ServiceBusErrorSource;
+import com.azure.messaging.servicebus.ServiceBusException;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import org.mockito.ArgumentCaptor;
@@ -14,7 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 @ExtendWith(MockitoExtension.class)
 class QueueMessageSenderTest {
@@ -72,13 +76,42 @@ class QueueMessageSenderTest {
     }
 
     @Test
-    void publish_shouldThrowGatewayException_whenSendFails() {
-        // Given
-        doThrow(new RuntimeException("ASB connection refused")).when(senderClient).sendMessage(any());
+    void publish_shouldThrowSqsRetryableException_whenServiceBusExceptionIsTransient() {
+        AmqpException transientCause = new AmqpException(true, "timeout", null, null);
+        ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
+        doThrow(transientEx).when(senderClient).sendMessage(any());
 
-        // When & Then
-        assertThatThrownBy(() -> queueMessageSender.publish("{\"aggregateId\":\"GBN-AG-26-001\"}", "GBN-AG-26-001"))
-            .isInstanceOf(DynamicsGatewayException.class)
-            .hasMessageContaining("Failed to send event to Azure Service Bus");
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isInstanceOf(SqsRetryableException.class)
+            .hasCauseInstanceOf(ServiceBusException.class);
+    }
+
+    @Test
+    void publish_shouldThrowSqsNonRetryableException_whenServiceBusExceptionIsNotTransient() {
+        AmqpException nonTransientCause = new AmqpException(false, "too large", null, null);
+        ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
+        doThrow(nonTransientEx).when(senderClient).sendMessage(any());
+
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasCauseInstanceOf(ServiceBusException.class);
+    }
+
+    @Test
+    void publish_shouldThrowSqsRetryableException_whenSenderIsDisposed() {
+        doThrow(new IllegalStateException("sender disposed")).when(senderClient).sendMessage(any());
+
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isInstanceOf(SqsRetryableException.class)
+            .hasCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void publish_shouldThrowSqsNonRetryableException_whenUnexpectedErrorOccurs() {
+        doThrow(new NullPointerException("null message")).when(senderClient).sendMessage(any());
+
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasCauseInstanceOf(NullPointerException.class);
     }
 }

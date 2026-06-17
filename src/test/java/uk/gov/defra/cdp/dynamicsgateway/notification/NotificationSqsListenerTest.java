@@ -17,7 +17,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationSqsListenerTest {
@@ -47,36 +48,39 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldReturn_whenAggregateIdIsNull() {
-        listener.receive(VALID_BODY, null);
+    void receive_shouldThrowNonRetryable_whenAggregateIdIsNull() {
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, null))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasMessageContaining("MESSAGE_GROUP_ID");
 
         verify(queueMessageSender, never()).publish(any(), any());
-        assertThat(counterValue("discarded_missing_id")).isEqualTo(1.0);
     }
 
     @Test
-    void receive_shouldReturn_whenAggregateIdIsBlank() {
-        listener.receive(VALID_BODY, "  ");
+    void receive_shouldThrowNonRetryable_whenAggregateIdIsBlank() {
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, "  "))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasMessageContaining("MESSAGE_GROUP_ID");
 
         verify(queueMessageSender, never()).publish(any(), any());
-        assertThat(counterValue("discarded_missing_id")).isEqualTo(1.0);
     }
 
     @Test
-    void receive_shouldReturn_whenBodyIsInvalidJson() {
-        listener.receive("not-json", AGGREGATE_ID);
+    void receive_shouldThrowNonRetryable_whenBodyIsInvalidJson() {
+        assertThatThrownBy(() -> listener.receive("not-json", AGGREGATE_ID))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasMessageContaining("not valid JSON");
 
         verify(queueMessageSender, never()).publish(any(), any());
-        assertThat(counterValue("discarded_invalid_json")).isEqualTo(1.0);
     }
 
     @Test
     void receive_shouldThrow_whenAsbFails() {
-        doThrow(new DynamicsGatewayException("ASB down"))
+        doThrow(new SqsRetryableException("ASB down", new RuntimeException()))
             .when(queueMessageSender).publish(any(), any());
 
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID))
-            .isInstanceOf(DynamicsGatewayException.class);
+            .isInstanceOf(SqsRetryableException.class);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 

@@ -4,15 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.azure.core.amqp.exception.AmqpException;
-import com.azure.messaging.servicebus.ServiceBusErrorSource;
-import com.azure.messaging.servicebus.ServiceBusException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.support.GenericMessage;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 class NotificationErrorHandlerTest {
 
@@ -26,58 +24,34 @@ class NotificationErrorHandlerTest {
     }
 
     @Test
-    void handle_shouldRethrow_whenServiceBusExceptionIsTransient() {
-        AmqpException transientCause = new AmqpException(true, "timeout", null, null);
-        ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
+    void handle_shouldRethrow_whenSqsRetryableException() {
+        SqsRetryableException retryable = new SqsRetryableException("transient", new RuntimeException("timeout"));
 
-        assertThatThrownBy(() -> handler.handle(message(), wrap(transientEx)))
-            .isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> handler.handle(message(), retryable))
+            .isInstanceOf(SqsRetryableException.class);
         assertThat(errorCount("retry")).isEqualTo(1.0);
     }
 
     @Test
-    void handle_shouldReturn_whenServiceBusExceptionIsNotTransient() {
-        AmqpException nonTransientCause = new AmqpException(false, "too large", null, null);
-        ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
+    void handle_shouldReturn_whenSqsNonRetryableException() {
+        SqsNonRetryableException nonRetryable = new SqsNonRetryableException("permanent", new RuntimeException("too large"));
 
-        assertThatCode(() -> handler.handle(message(), wrap(nonTransientEx)))
+        assertThatCode(() -> handler.handle(message(), nonRetryable))
             .doesNotThrowAnyException();
         assertThat(errorCount("discarded")).isEqualTo(1.0);
     }
 
     @Test
-    void handle_shouldRethrow_whenCauseIsIllegalStateException() {
-        IllegalStateException illegalState = new IllegalStateException("sender disposed");
-
-        assertThatThrownBy(() -> handler.handle(message(), wrap(illegalState)))
-            .isInstanceOf(RuntimeException.class);
-        assertThat(errorCount("retry")).isEqualTo(1.0);
-    }
-
-    @Test
-    void handle_shouldReturn_whenCauseIsNullPointerException() {
-        NullPointerException npe = new NullPointerException("null message");
-
-        assertThatCode(() -> handler.handle(message(), wrap(npe)))
-            .doesNotThrowAnyException();
-        assertThat(errorCount("discarded")).isEqualTo(1.0);
-    }
-
-    @Test
-    void handle_shouldReturn_whenCauseIsUnexpectedRuntimeException() {
+    void handle_shouldReturn_whenUnexpectedException() {
         RuntimeException unexpected = new RuntimeException("something unexpected");
 
-        assertThatCode(() -> handler.handle(message(), wrap(unexpected)))
+        assertThatCode(() -> handler.handle(message(), unexpected))
             .doesNotThrowAnyException();
         assertThat(errorCount("discarded")).isEqualTo(1.0);
     }
 
     private GenericMessage<Object> message() {
         return new GenericMessage<>("test-body");
-    }
-
-    private DynamicsGatewayException wrap(Throwable cause) {
-        return new DynamicsGatewayException("ASB error", cause);
     }
 
     private double errorCount(String action) {

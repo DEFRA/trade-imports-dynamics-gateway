@@ -18,7 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.GlobalExceptionHandler;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 @WebMvcTest(EventsSendController.class)
 @Import(GlobalExceptionHandler.class)
@@ -117,7 +117,7 @@ class EventsSendControllerTest {
     @Test
     void post_returnsBadGateway_whenServiceBusSendFails() throws Exception {
         // Given
-        doThrow(new DynamicsGatewayException("ASB error")).when(queueMessageSender).publish(any(), any());
+        doThrow(new SqsRetryableException("ASB error", new RuntimeException())).when(queueMessageSender).publish(any(), any());
 
         // When & Then
         mockMvc.perform(post("/events")

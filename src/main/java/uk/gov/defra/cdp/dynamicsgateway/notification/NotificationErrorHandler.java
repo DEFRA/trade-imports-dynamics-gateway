@@ -1,14 +1,17 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
-import com.azure.messaging.servicebus.ServiceBusException;
 import io.awspring.cloud.sqs.listener.errorhandler.ErrorHandler;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 /**
- * Classifies exceptions from the SQS notification listener as retryable or non-retryable.
+ * Routes SQS listener errors based on exception type — no unwrapping needed because
+ * {@link uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender} already classifies
+ * ASB failures into {@link SqsRetryableException} or
+ * {@link uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException}.
  *
  * <p>Spring Cloud AWS behaviour:
  * <ul>
@@ -38,40 +41,13 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
 
     @Override
     public void handle(Message<Object> message, Throwable t) {
-        Throwable cause = unwrap(t);
-
-        if (cause instanceof ServiceBusException sbEx && sbEx.isTransient()) {
+        if (t instanceof SqsRetryableException retryableException) {
             retryCounter.increment();
-            log.warn("Transient ASB error, message left for retry: {}", sbEx.getMessage());
-            throw new RuntimeException(t);
+            log.warn("Retryable error, message left for retry: {}", t.getMessage());
+            throw retryableException;
         }
 
-        if (cause instanceof ServiceBusException sbEx) {
-            discardedCounter.increment();
-            log.error("Non-transient ASB error, message will be deleted: {}", sbEx.getMessage(), sbEx);
-            return;
-        }
-
-        if (cause instanceof IllegalStateException) {
-            retryCounter.increment();
-            log.warn("Sender in illegal state, message left for retry: {}", cause.getMessage());
-            throw new RuntimeException(t);
-        }
-
-        // NullPointerException, other unexpected errors — non-retryable
         discardedCounter.increment();
-        log.error("Non-retryable error, message will be deleted: {}", cause.getMessage(), cause);
-    }
-
-    private Throwable unwrap(Throwable t) {
-        Throwable current = t;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-            if (current instanceof ServiceBusException) {
-                return current;
-            }
-        }
-        // No ServiceBusException found — return the immediate cause (or the original if no cause)
-        return t.getCause() != null ? t.getCause() : t;
+        log.error("Non-retryable error, message will be deleted: {}", t.getMessage(), t);
     }
 }

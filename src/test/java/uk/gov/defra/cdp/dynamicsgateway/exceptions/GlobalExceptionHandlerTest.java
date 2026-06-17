@@ -126,12 +126,29 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleGatewayException_shouldReturn502WithProblemDetail() {
+    void handleSqsRetryableException_shouldReturn502WithProblemDetail() {
         // Given
-        DynamicsGatewayException ex = new DynamicsGatewayException("ASB send failed");
+        SqsRetryableException ex = new SqsRetryableException("ASB timeout", new RuntimeException());
 
         // When
-        ResponseEntity<ProblemDetail> response = handler.handleGatewayException(ex);
+        ResponseEntity<ProblemDetail> response = handler.handleSqsRetryableException(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY.value());
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/upstream-error"));
+        assertThat(problem.getDetail()).contains("Azure Service Bus");
+    }
+
+    @Test
+    void handleSqsNonRetryableException_shouldReturn502WithProblemDetail() {
+        // Given
+        SqsNonRetryableException ex = new SqsNonRetryableException("message too large", new RuntimeException());
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleSqsNonRetryableException(ex);
         ProblemDetail problem = response.getBody();
 
         // Then

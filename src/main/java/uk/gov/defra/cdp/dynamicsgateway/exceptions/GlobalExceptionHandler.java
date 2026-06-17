@@ -41,9 +41,20 @@ public class GlobalExceptionHandler {
         );
     }
 
-    @ExceptionHandler(DynamicsGatewayException.class)
-    public ResponseEntity<ProblemDetail> handleGatewayException(DynamicsGatewayException ex) {
-        log.error("Gateway error: {}", ex.getMessage(), ex);
+    @ExceptionHandler(SqsRetryableException.class)
+    public ResponseEntity<ProblemDetail> handleSqsRetryableException(SqsRetryableException ex) {
+        log.error("Retryable upstream error: {}", ex.getMessage(), ex);
+        return problemResponse(
+            HttpStatus.BAD_GATEWAY,
+            "Upstream Service Error",
+            "/problems/upstream-error",
+            "Failed to forward event to Azure Service Bus"
+        );
+    }
+
+    @ExceptionHandler(SqsNonRetryableException.class)
+    public ResponseEntity<ProblemDetail> handleSqsNonRetryableException(SqsNonRetryableException ex) {
+        log.error("Non-retryable upstream error: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_GATEWAY,
             "Upstream Service Error",

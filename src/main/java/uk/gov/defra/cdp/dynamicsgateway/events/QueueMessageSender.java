@@ -1,25 +1,33 @@
 package uk.gov.defra.cdp.dynamicsgateway.events;
 
+import com.azure.messaging.servicebus.ServiceBusException;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 /**
  * Forwards events to Azure Service Bus (ASB).
  *
- * <p>Throws {@link DynamicsGatewayException} on ASB send failure (network, throttle, broker
- * unavailable). When called from
- * {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationSqsListener}, this exception
- * propagates out of {@code @SqsListener} — Spring Cloud AWS leaves the message in the queue
- * for retry, eventually routing to the DLQ after {@code maxReceiveCount}.
+ * <p>Classifies ASB send failures into retryable and non-retryable exceptions:
+ * <ul>
+ *   <li>{@link SqsRetryableException} — transient {@link ServiceBusException} (timeout, throttle,
+ *       network) or {@link IllegalStateException} (sender disposed, may recover on reconnect).</li>
+ *   <li>{@link SqsNonRetryableException} — non-transient {@link ServiceBusException} (message too
+ *       large, entity not found, unauthorized) or unexpected errors (NPE, etc.).</li>
+ * </ul>
+ *
+ * <p>When called from {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationSqsListener},
+ * these exceptions are routed to
+ * {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler} which decides
+ * whether to retry (leave in SQS) or discard (delete from SQS).
  *
  * <p>Callers are responsible for validating inputs (sessionId, body) before calling
- * {@link #publish}. The SQS listener validates aggregateId and JSON before forwarding;
- * the REST controller should validate similarly.
+ * {@link #publish}.
  */
 @Slf4j
 @Service
@@ -33,20 +41,32 @@ public class QueueMessageSender {
      *
      * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
      * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
-     * @throws DynamicsGatewayException if the ASB send fails (retryable)
+     * @throws SqsRetryableException if the failure is transient and worth retrying
+     * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */
     public void publish(String messageBody, String sessionId) {
+        String messageId = UUID.randomUUID().toString();
+        ServiceBusMessage message = new ServiceBusMessage(messageBody)
+            .setMessageId(messageId)
+            .setContentType("application/json")
+            .setSessionId(sessionId);
+
         try {
-            String messageId = UUID.randomUUID().toString();
-            ServiceBusMessage message = new ServiceBusMessage(messageBody)
-                .setMessageId(messageId)
-                .setContentType("application/json")
-                .setSessionId(sessionId);
             senderClient.sendMessage(message);
             log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", messageId, sessionId);
+        } catch (ServiceBusException e) {
+            if (e.isTransient()) {
+                log.warn("Transient ASB error ({}), retryable: {}", e.getReason(), e.getMessage());
+                throw new SqsRetryableException("Transient ASB send failure", e);
+            }
+            log.error("Non-transient ASB error ({}), non-retryable: {}", e.getReason(), e.getMessage(), e);
+            throw new SqsNonRetryableException("Non-transient ASB send failure", e);
+        } catch (IllegalStateException e) {
+            log.warn("ASB sender in illegal state, retryable: {}", e.getMessage());
+            throw new SqsRetryableException("ASB sender disposed", e);
         } catch (Exception e) {
-            log.error("Failed to forward event to Azure Service Bus: {}", e.getMessage(), e);
-            throw new DynamicsGatewayException("Failed to send event to Azure Service Bus", e);
+            log.error("Unexpected error sending to ASB, non-retryable: {}", e.getMessage(), e);
+            throw new SqsNonRetryableException("Unexpected ASB send failure", e);
         }
     }
 }
