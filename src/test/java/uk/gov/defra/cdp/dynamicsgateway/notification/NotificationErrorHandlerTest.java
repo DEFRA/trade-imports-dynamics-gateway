@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.awspring.cloud.sqs.listener.ListenerExecutionFailedException;
 import org.springframework.messaging.support.GenericMessage;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
@@ -46,6 +47,28 @@ class NotificationErrorHandlerTest {
         RuntimeException unexpected = new RuntimeException("something unexpected");
 
         assertThatCode(() -> handler.handle(message(), unexpected))
+            .doesNotThrowAnyException();
+        assertThat(errorCount("discarded")).isEqualTo(1.0);
+    }
+
+    @Test
+    void handle_shouldRethrow_whenRetryableWrappedInListenerExecutionFailedException() {
+        SqsRetryableException retryable = new SqsRetryableException("transient", new RuntimeException("timeout"));
+        ListenerExecutionFailedException wrapped =
+            new ListenerExecutionFailedException("Listener failed", retryable, message());
+
+        assertThatThrownBy(() -> handler.handle(message(), wrapped))
+            .isInstanceOf(SqsRetryableException.class);
+        assertThat(errorCount("retry")).isEqualTo(1.0);
+    }
+
+    @Test
+    void handle_shouldReturn_whenNonRetryableWrappedInListenerExecutionFailedException() {
+        SqsNonRetryableException nonRetryable = new SqsNonRetryableException("permanent", new RuntimeException());
+        ListenerExecutionFailedException wrapped =
+            new ListenerExecutionFailedException("Listener failed", nonRetryable, message());
+
+        assertThatCode(() -> handler.handle(message(), wrapped))
             .doesNotThrowAnyException();
         assertThat(errorCount("discarded")).isEqualTo(1.0);
     }

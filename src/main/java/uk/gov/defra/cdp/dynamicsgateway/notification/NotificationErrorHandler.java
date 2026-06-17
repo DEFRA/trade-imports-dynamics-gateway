@@ -41,13 +41,18 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
 
     @Override
     public void handle(Message<Object> message, Throwable t) {
-        if (t instanceof SqsRetryableException retryableException) {
+        Throwable cause = unwrap(t);
+        if (cause instanceof SqsRetryableException retryableException) {
             retryCounter.increment();
-            log.warn("Retryable error, message left for retry: {}", t.getMessage());
+            log.warn("Retryable error, message left for retry: {}", cause.getMessage());
             throw retryableException;
         }
 
         discardedCounter.increment();
-        log.error("Non-retryable error, message will be deleted: {}", t.getMessage(), t);
+        log.error("Non-retryable error, message will be deleted: {}", cause.getMessage(), cause);
+    }
+
+    private Throwable unwrap(Throwable t) {
+        return t.getCause() != null && !(t instanceof SqsRetryableException) ? t.getCause() : t;
     }
 }
