@@ -1,6 +1,5 @@
 package uk.gov.defra.cdp.dynamicsgateway.configuration;
 
-import io.micrometer.core.aop.CountedAspect;
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -15,10 +14,5 @@ public class MetricsConfig {
     public TimedAspect timedAspect(MeterRegistry meterRegistry) {
         log.debug("Creating TimedAspect for {}", meterRegistry.getClass().getSimpleName());
         return new TimedAspect(meterRegistry);
-    }
-
-    @Bean
-    CountedAspect countedAspect(MeterRegistry registry) {
-        return new CountedAspect(registry);
     }
 }

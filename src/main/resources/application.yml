@@ -10,6 +10,10 @@ spring:
       enabled: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  cloud:
+    aws:
+      region:
+        static: ${aws.region}
 
 management:
   endpoints:
@@ -49,13 +53,10 @@ cdp:
   service-version: ${SERVICE_VERSION:0.0.0-local}
   tracing:
     header-name: ${TRACING_HEADER:x-cdp-request-id}
-  cloudwatch:
-    endpoint: ${AWS_EMF_AGENT_ENDPOINT:http://localhost:4566}
   proxyUrl: ${HTTP_PROXY:}
 
 # Application-level AWS overrides
 app:
-  base-url: ${TRADE_IMPORTS_DYNAMICS_GATEWAY_BASE_URL:}
   aws:
     endpoint-override: ${APP_AWS_ENDPOINT_OVERRIDE:}
     # Local development only — set via environment variables or application-local.yml.
@@ -66,10 +67,6 @@ app:
 # AWS configuration
 aws:
   region: ${AWS_REGION:eu-west-2}
-  sts:
-    token:
-      audience: ${STS_TOKEN_AUDIENCE:urn:ipaffs:api:dev}
-      expiration: ${STS_TOKEN_DURATION_SECONDS:3600}
   emf:
     enabled: ${AWS_EMF_ENABLED:true}
     environment: ${AWS_EMF_ENVIRONMENT:Local}
