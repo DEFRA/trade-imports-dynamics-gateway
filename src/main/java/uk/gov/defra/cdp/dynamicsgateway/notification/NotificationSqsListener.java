@@ -47,21 +47,14 @@ public class NotificationSqsListener {
             throw new SqsNonRetryableException("Missing or blank MESSAGE_GROUP_ID", null);
         }
 
-        if (!isValidJson(body)) {
-            throw new SqsNonRetryableException("Message body is not valid JSON", null);
+        try {
+            objectMapper.readTree(body);
+        } catch (JsonProcessingException e) {
+            throw new SqsNonRetryableException("Message body is not valid JSON", e);
         }
 
         queueMessageSender.publish(body, aggregateId);
         forwardedCounter.increment();
         log.info("Event forwarded to ASB: aggregateId={}", aggregateId);
-    }
-
-    private boolean isValidJson(String body) {
-        try {
-            objectMapper.readTree(body);
-            return true;
-        } catch (JsonProcessingException _) {
-            return false;
-        }
     }
 }
