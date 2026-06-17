@@ -43,6 +43,8 @@ public class NotificationSqsListener {
             String body,
             @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId) {
 
+        log.info("Received notification event from SQS: aggregateId={}", aggregateId);
+
         if (aggregateId == null || aggregateId.isBlank()) {
             throw new SqsNonRetryableException("Missing or blank MESSAGE_GROUP_ID", null);
         }
@@ -55,6 +57,5 @@ public class NotificationSqsListener {
 
         queueMessageSender.publish(body, aggregateId);
         forwardedCounter.increment();
-        log.info("Event forwarded to ASB: aggregateId={}", aggregateId);
     }
 }
