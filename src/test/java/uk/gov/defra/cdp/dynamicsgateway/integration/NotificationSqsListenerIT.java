@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
 import com.azure.core.amqp.AmqpRetryOptions;
+import com.azure.core.amqp.exception.AmqpErrorCondition;
 import com.azure.core.amqp.exception.AmqpException;
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusErrorSource;
@@ -86,6 +87,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isPresent();
             assertThat(received.get().getBody()).hasToString(eventBody);
+            assertThat(received.get().getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
+            assertThat(received.get().getMessageId()).isNotBlank();
             assertThat(received.get().getSessionId()).isEqualTo(AGGREGATE_ID);
         });
     }
@@ -110,6 +113,35 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(totalMessagesInQueue())
                 .as("transient ASB failures must leave the SQS message in the queue")
                 .isGreaterThanOrEqualTo(1));
+    }
+
+    @Test
+    void listener_shouldDiscardMessage_whenBodyIsInvalidJson() {
+        // Given — invalid JSON that will fail objectMapper.readTree()
+        sendToSqs("not valid json {{{", AGGREGATE_ID);
+
+        // When / Then — listener should discard (not retry) the poison message
+        await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+            assertThat(totalMessagesInQueue())
+                .as("invalid JSON must be discarded, not left in the queue for retry")
+                .isZero());
+    }
+
+    @Test
+    void listener_shouldDiscardMessage_whenAsbFailureIsNonTransient() {
+        // Given — ASB rejects with a non-transient error (e.g. entity not found)
+        AmqpException nonTransientCause = new AmqpException(false, AmqpErrorCondition.NOT_FOUND, "entity not found", null);
+        ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
+        doThrow(nonTransientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
+
+        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        sendToSqs(eventBody, AGGREGATE_ID);
+
+        // When / Then — listener must discard (not retry) after a non-transient ASB failure
+        await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+            assertThat(totalMessagesInQueue())
+                .as("non-transient ASB failures must discard the message, not retry")
+                .isZero());
     }
 
     private int totalMessagesInQueue() {

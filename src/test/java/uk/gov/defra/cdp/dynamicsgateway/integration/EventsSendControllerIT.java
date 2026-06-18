@@ -86,6 +86,30 @@ class EventsSendControllerIT extends IntegrationBase {
     }
 
     @Test
+    void post_shouldReturnBadRequest_whenAggregateIdIsMissing() {
+        // When
+        ResponseEntity<String> response = restTemplate.postForEntity(
+            "/events", jsonEntity("{\"eventType\":\"NotificationSubmitted\"}"), String.class);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("aggregateId is required");
+        assertThat(receiveNoMessage()).isEmpty();
+    }
+
+    @Test
+    void post_shouldReturnBadRequest_whenAggregateIdIsBlank() {
+        // When
+        ResponseEntity<String> response = restTemplate.postForEntity(
+            "/events", jsonEntity("{\"aggregateId\":\"  \"}"), String.class);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).contains("aggregateId is required");
+        assertThat(receiveNoMessage()).isEmpty();
+    }
+
+    @Test
     void post_shouldReturnBadGateway_whenSendFails() {
         // Given
         doThrow(new RuntimeException("ASB send failed")).when(senderClient).sendMessage(any(ServiceBusMessage.class));
