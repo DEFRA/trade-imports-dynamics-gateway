@@ -53,10 +53,10 @@ services:
       - localstack-data:/var/lib/localstack
       - './compose/start-localstack.sh:/etc/localstack/init/ready.d/start-localstack.sh'
     healthcheck:
-      test: ['CMD', 'curl', 'localhost:4566']
+      test: ['CMD-SHELL', 'curl -sf localhost:4566 >/dev/null && test -f /tmp/localstack-notification-pipeline-ready']
       interval: 5s
-      start_period: 5s
-      retries: 3
+      start_period: 15s
+      retries: 10
     networks:
       - trade-imports-tenant
 

@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.awspring.cloud.sqs.listener.AsyncAdapterBlockingExecutionFailedException;
 import io.awspring.cloud.sqs.listener.ListenerExecutionFailedException;
 import org.springframework.messaging.support.GenericMessage;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
@@ -71,6 +72,19 @@ class NotificationErrorHandlerTest {
         assertThatCode(() -> handler.handle(message(), wrapped))
             .doesNotThrowAnyException();
         assertThat(errorCount("discarded")).isEqualTo(1.0);
+    }
+
+    @Test
+    void handle_shouldRethrow_whenRetryableWrappedInBlockingAdapterException() {
+        SqsRetryableException retryable = new SqsRetryableException("transient", new RuntimeException("timeout"));
+        ListenerExecutionFailedException listenerFailed =
+            new ListenerExecutionFailedException("Listener failed", retryable, message());
+        AsyncAdapterBlockingExecutionFailedException wrapped =
+            new AsyncAdapterBlockingExecutionFailedException("Error executing action", listenerFailed);
+
+        assertThatThrownBy(() -> handler.handle(message(), wrapped))
+            .isInstanceOf(SqsRetryableException.class);
+        assertThat(errorCount("retry")).isEqualTo(1.0);
     }
 
     private GenericMessage<Object> message() {

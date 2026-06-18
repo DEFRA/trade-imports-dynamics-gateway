@@ -5,13 +5,15 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
+import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 /**
- * Routes SQS listener errors based on exception type — no unwrapping needed because
- * {@link uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender} already classifies
- * ASB failures into {@link SqsRetryableException} or
- * {@link uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException}.
+ * Routes SQS listener errors based on exception type. {@link uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender} classifies
+ * ASB failures into {@link SqsRetryableException} or {@link SqsNonRetryableException}, but
+ * Spring Cloud AWS wraps listener failures (e.g. {@code AsyncAdapterBlockingExecutionFailedException}
+ * → {@code ListenerExecutionFailedException} → classified exception), so the full cause chain
+ * is walked before deciding retry vs discard.
  *
  * <p>Spring Cloud AWS behaviour:
  * <ul>
@@ -41,18 +43,25 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
 
     @Override
     public void handle(Message<Object> message, Throwable t) {
-        Throwable cause = unwrap(t);
-        if (cause instanceof SqsRetryableException retryableException) {
+        Throwable classified = findClassifiedCause(t);
+        if (classified instanceof SqsRetryableException retryableException) {
             retryCounter.increment();
-            log.warn("Retryable error, message left for retry: {}", cause.getMessage());
+            log.warn("Retryable error, message left for retry: {}", classified.getMessage());
             throw retryableException;
         }
 
         discardedCounter.increment();
-        log.error("Non-retryable error, message will be deleted: {}", cause.getMessage(), cause);
+        log.error("Non-retryable error, message will be deleted: {}", t.getMessage(), t);
     }
 
-    private Throwable unwrap(Throwable t) {
-        return t.getCause() != null && !(t instanceof SqsRetryableException) ? t.getCause() : t;
+    private Throwable findClassifiedCause(Throwable t) {
+        Throwable current = t;
+        while (current != null) {
+            if (current instanceof SqsRetryableException || current instanceof SqsNonRetryableException) {
+                return current;
+            }
+            current = current.getCause();
+        }
+        return t;
     }
 }

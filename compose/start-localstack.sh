@@ -17,12 +17,19 @@ awslocal sqs create-queue \
 
 DLQ_ARN="arn:aws:sqs:${REGION}:${ACCOUNT}:${DLQ_NAME}"
 
-REDRIVE_POLICY=$(printf '{"deadLetterTargetArn":"%s","maxReceiveCount":"3"}' "${DLQ_ARN}")
+QUEUE_ATTRIBUTES=$(cat <<EOF
+{
+  "FifoQueue": "true",
+  "ContentBasedDeduplication": "true",
+  "RedrivePolicy": "{\"deadLetterTargetArn\":\"${DLQ_ARN}\",\"maxReceiveCount\":\"3\"}"
+}
+EOF
+)
 
 echo "Creating FIFO queue: ${QUEUE_NAME}"
 awslocal sqs create-queue \
   --queue-name "${QUEUE_NAME}" \
-  --attributes "FifoQueue=true,ContentBasedDeduplication=true,RedrivePolicy=${REDRIVE_POLICY}" \
+  --attributes "${QUEUE_ATTRIBUTES}" \
   --region "${REGION}"
 
 QUEUE_ARN="arn:aws:sqs:${REGION}:${ACCOUNT}:${QUEUE_NAME}"
@@ -43,4 +50,5 @@ awslocal sns subscribe \
   --attributes RawMessageDelivery=true \
   --region "${REGION}"
 
+touch /tmp/localstack-notification-pipeline-ready
 echo "LocalStack notification pipeline ready"
