@@ -28,8 +28,9 @@ class NotificationErrorHandlerTest {
     @Test
     void handle_shouldRethrow_whenSqsRetryableException() {
         SqsRetryableException retryable = new SqsRetryableException("transient", new RuntimeException("timeout"));
+        var msg = message();
 
-        assertThatThrownBy(() -> handler.handle(message(), retryable))
+        assertThatThrownBy(() -> handler.handle(msg, retryable))
             .isInstanceOf(SqsRetryableException.class);
         assertThat(errorCount("retry")).isEqualTo(1.0);
     }
@@ -57,8 +58,9 @@ class NotificationErrorHandlerTest {
         SqsRetryableException retryable = new SqsRetryableException("transient", new RuntimeException("timeout"));
         ListenerExecutionFailedException wrapped =
             new ListenerExecutionFailedException("Listener failed", retryable, message());
+        var msg = message();
 
-        assertThatThrownBy(() -> handler.handle(message(), wrapped))
+        assertThatThrownBy(() -> handler.handle(msg, wrapped))
             .isInstanceOf(SqsRetryableException.class);
         assertThat(errorCount("retry")).isEqualTo(1.0);
     }
@@ -81,8 +83,9 @@ class NotificationErrorHandlerTest {
             new ListenerExecutionFailedException("Listener failed", retryable, message());
         AsyncAdapterBlockingExecutionFailedException wrapped =
             new AsyncAdapterBlockingExecutionFailedException("Error executing action", listenerFailed);
+        var msg = message();
 
-        assertThatThrownBy(() -> handler.handle(message(), wrapped))
+        assertThatThrownBy(() -> handler.handle(msg, wrapped))
             .isInstanceOf(SqsRetryableException.class);
         assertThat(errorCount("retry")).isEqualTo(1.0);
     }

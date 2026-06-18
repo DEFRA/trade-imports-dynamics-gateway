@@ -14,8 +14,12 @@ import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -58,55 +62,28 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
     }
 
-    @Test
-    void post_shouldReturnBadRequest_forMissingBody() {
-        // Given — no body
-
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("badRequestCases")
+    void post_shouldReturnBadRequest(String description, String body, String expectedBodyContains) {
         // When
         ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity(null), String.class);
+            "/events", jsonEntity(body), String.class);
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).contains("bad-request");
+        if (expectedBodyContains != null) {
+            assertThat(response.getBody()).contains(expectedBodyContains);
+        }
         assertThat(receiveNoMessage()).isEmpty();
     }
 
-    @Test
-    void post_shouldReturnBadRequest_forMalformedJson() {
-        // Given — malformed JSON body
-
-        // When
-        ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{bad json"), String.class);
-
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(receiveNoMessage()).isEmpty();
-    }
-
-    @Test
-    void post_shouldReturnBadRequest_whenAggregateIdIsMissing() {
-        // When
-        ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{\"eventType\":\"NotificationSubmitted\"}"), String.class);
-
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).contains("aggregateId is required");
-        assertThat(receiveNoMessage()).isEmpty();
-    }
-
-    @Test
-    void post_shouldReturnBadRequest_whenAggregateIdIsBlank() {
-        // When
-        ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{\"aggregateId\":\"  \"}"), String.class);
-
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).contains("aggregateId is required");
-        assertThat(receiveNoMessage()).isEmpty();
+    static Stream<Arguments> badRequestCases() {
+        return Stream.of(
+            Arguments.of("missing body", null, "bad-request"),
+            Arguments.of("malformed JSON", "{bad json", null),
+            Arguments.of("missing aggregateId", "{\"eventType\":\"NotificationSubmitted\"}", "aggregateId is required"),
+            Arguments.of("blank aggregateId", "{\"aggregateId\":\"  \"}", "aggregateId is required")
+        );
     }
 
     @Test
