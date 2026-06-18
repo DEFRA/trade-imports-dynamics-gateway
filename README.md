@@ -2,7 +2,7 @@
 
 Centralised gateway forwarding notification events to Azure Service Bus (ASB). Events arrive via two paths: an SQS FIFO queue (primary production pipeline) and an HTTP endpoint (secondary/diagnostic path).
 
-* [Docker Compose](#docker-compose)
+* [Local stack](#local-stack)
 * [Configuration](#configuration)
 * [Notification pipeline (SQS)](#notification-pipeline-sqs)
 * [Endpoint](#endpoint)
@@ -12,34 +12,24 @@ Centralised gateway forwarding notification events to Azure Service Bus (ASB). E
 * [Dependabot](#dependabot)
 
 
-### Docker Compose
+### Local stack
 
-A Docker Compose template is in [compose.yml](compose.yml).
-
-A local environment with:
-
-- LocalStack for AWS services (SQS, SNS, S3, STS, CloudWatch)
-- Azure Service Bus emulator (backed by SQL Server)
-- This service.
+The local environment for the trade-imports-animals services is the workspace
+stack in
+[DEFRA/trade-imports-animals-workspace](https://github.com/DEFRA/trade-imports-animals-workspace):
 
 ```bash
-docker compose --profile services up --build -d
+# from the workspace root
+./scripts/stack/run-stack.sh        # full stack from published images
+./scripts/stack/run-stack.sh -e gateway   # everything except this service (run it natively)
+./scripts/stack/stop-stack.sh       # tear down and wipe volumes
 ```
 
-Start just infrastructure (emulator + Localstack, no service):
-
-```bash
-docker compose --profile infra up -d
-```
-
-The gateway connects to the local Service Bus emulator by default using `local-queue`. To target TST instead, export the SAS connection string (with `EntityPath`) in your shell before running compose — it will override the emulator default:
-
-```bash
-export AZURE_SERVICE_BUS_CONNECTION_STRING="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=..."
-docker compose --profile services up --build -d
-```
-
-A more extensive setup is available in [github.com/DEFRA/cdp-local-environment](https://github.com/DEFRA/cdp-local-environment)
+This gateway runs as part of that stack (the `servicebus` profile provides a
+local Azure Service Bus emulator for it to talk to). The stack stages this
+repo's `servicebus/servicebus-config.json` as the emulator's entity config.
+The integration tests, by contrast, are self-contained — they spin up their
+own emulator via Testcontainers (`mvn verify`), no running stack required.
 
 ### Configuration
 
@@ -111,17 +101,15 @@ Integration tests use [Testcontainers](https://testcontainers.com/) to spin up a
 
 ### Running
 
-Run the application with the `local` Spring profile (after starting infrastructure):
+Run the application with the `local` Spring profile, which enables LocalStack endpoint override and additional actuator endpoints for debugging:
 
 ```bash
-docker compose --profile infra up -d
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 Or equivalently:
 
 ```bash
-docker compose --profile infra up -d
 SPRING_PROFILES_ACTIVE=local mvn spring-boot:run
 ```
 
