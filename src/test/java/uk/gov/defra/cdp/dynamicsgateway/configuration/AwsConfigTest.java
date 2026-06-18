@@ -80,6 +80,17 @@ class AwsConfigTest {
     }
 
     @Test
+    void sqsAsyncClient_shouldBuildWithDefaultCredentials_whenEndpointSetButSecretKeyIsNull() {
+        AppAwsConfig appAwsConfig = new AppAwsConfig(ENDPOINT, ACCESS_KEY, null);
+        AwsConfig awsConfig = new AwsConfig(REGION, appAwsConfig);
+
+        SqsAsyncClient client = awsConfig.sqsAsyncClient();
+
+        assertThat(client).isNotNull();
+        client.close();
+    }
+
+    @Test
     void s3Client_shouldBuildWithStaticCredentials_whenEndpointAndBothStaticCredsAreSet() {
         AppAwsConfig appAwsConfig = new AppAwsConfig(ENDPOINT, ACCESS_KEY, SECRET_KEY);
         AwsConfig awsConfig = new AwsConfig(REGION, appAwsConfig);

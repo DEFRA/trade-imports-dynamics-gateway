@@ -104,6 +104,18 @@ class EventsSendControllerTest {
     }
 
     @Test
+    void post_returnsBadRequest_whenAggregateIdIsBlank() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/events")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"aggregateId\":\"  \"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("aggregateId is required"));
+
+        verifyNoInteractions(queueMessageSender);
+    }
+
+    @Test
     void post_returnsUnsupportedMediaType_forPlainText() throws Exception {
         // When & Then
         mockMvc.perform(post("/events")
