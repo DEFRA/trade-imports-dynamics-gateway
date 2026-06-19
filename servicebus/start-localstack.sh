@@ -12,7 +12,7 @@ export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 
 aws() { command aws --endpoint-url="$ENDPOINT" --region "$AWS_REGION" "$@"; }
 
-DLQ_NAME="trade_imports_animals_eu_notifications_dlq.fifo"
+DLQ_NAME="trade_imports_animals_eu_notifications_gateway-deadletter.fifo"
 QUEUE_NAME="trade_imports_animals_eu_notifications_gateway.fifo"
 TOPIC_NAME="trade_imports_animals_eu_notifications.fifo"
 ACCOUNT="000000000000"
