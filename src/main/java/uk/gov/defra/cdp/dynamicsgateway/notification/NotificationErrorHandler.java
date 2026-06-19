@@ -51,7 +51,7 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
         }
 
         discardedCounter.increment();
-        log.error("Non-retryable error, message will be deleted: {}", t.getMessage(), t);
+        log.error("Non-retryable error, message will be deleted: {}", classified.getMessage(), t);
     }
 
     private Throwable findClassifiedCause(Throwable t) {

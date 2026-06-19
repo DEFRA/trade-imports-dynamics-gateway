@@ -129,6 +129,27 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleIllegalArgument_shouldReturn400WithProblemDetail() {
+        // Given
+        MDC.put("trace.id", "trace-xyz");
+        IllegalArgumentException ex = new IllegalArgumentException("aggregateId is required");
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleIllegalArgument(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
+        assertThat(problem.getTitle()).isEqualTo("Bad Request");
+        assertThat(problem.getDetail()).isEqualTo("aggregateId is required");
+        assertThat(problem.getProperties()).containsEntry("traceId", "trace-xyz");
+    }
+
+    @Test
     void handleSqsRetryableException_shouldReturn502WithProblemDetail() {
         // Given
         SqsRetryableException ex = new SqsRetryableException("ASB timeout", new RuntimeException());

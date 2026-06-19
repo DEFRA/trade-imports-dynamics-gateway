@@ -3,6 +3,15 @@
 # Runs once inside the LocalStack container after it is ready.
 set -euo pipefail
 
+if ! command -v awslocal &> /dev/null; then
+  echo "ERROR: awslocal not found — install localstack CLI or run inside the LocalStack container" >&2
+  exit 1
+fi
+
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=eu-west-2
+
 DLQ_NAME="trade_imports_animals_eu_notifications_dlq.fifo"
 QUEUE_NAME="trade_imports_animals_eu_notifications_gateway.fifo"
 TOPIC_NAME="trade_imports_animals_eu_notifications.fifo"
@@ -13,24 +22,21 @@ echo "Creating DLQ: ${DLQ_NAME}"
 awslocal sqs create-queue \
   --queue-name "${DLQ_NAME}" \
   --attributes FifoQueue=true,ContentBasedDeduplication=true \
-  --region "${REGION}"
+  --region "${REGION}" || true
 
 DLQ_ARN="arn:aws:sqs:${REGION}:${ACCOUNT}:${DLQ_NAME}"
-
-QUEUE_ATTRIBUTES=$(cat <<EOF
-{
-  "FifoQueue": "true",
-  "ContentBasedDeduplication": "true",
-  "RedrivePolicy": "{\"deadLetterTargetArn\":\"${DLQ_ARN}\",\"maxReceiveCount\":\"3\"}"
-}
-EOF
-)
 
 echo "Creating FIFO queue: ${QUEUE_NAME}"
 awslocal sqs create-queue \
   --queue-name "${QUEUE_NAME}" \
-  --attributes "${QUEUE_ATTRIBUTES}" \
-  --region "${REGION}"
+  --attributes FifoQueue=true,ContentBasedDeduplication=true \
+  --region "${REGION}" || true
+
+echo "Applying RedrivePolicy to ${QUEUE_NAME}"
+awslocal sqs set-queue-attributes \
+  --queue-url "http://localhost:4566/000000000000/${QUEUE_NAME}" \
+  --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"${DLQ_ARN}\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}" \
+  --region "${REGION}" || true
 
 QUEUE_ARN="arn:aws:sqs:${REGION}:${ACCOUNT}:${QUEUE_NAME}"
 
@@ -38,7 +44,7 @@ echo "Creating SNS FIFO topic: ${TOPIC_NAME}"
 awslocal sns create-topic \
   --name "${TOPIC_NAME}" \
   --attributes FifoTopic=true,ContentBasedDeduplication=true \
-  --region "${REGION}"
+  --region "${REGION}" || true
 
 TOPIC_ARN="arn:aws:sns:${REGION}:${ACCOUNT}:${TOPIC_NAME}"
 
@@ -48,7 +54,6 @@ awslocal sns subscribe \
   --protocol sqs \
   --notification-endpoint "${QUEUE_ARN}" \
   --attributes RawMessageDelivery=true \
-  --region "${REGION}"
+  --region "${REGION}" || true
 
-touch /tmp/localstack-notification-pipeline-ready
 echo "LocalStack notification pipeline ready"

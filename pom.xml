@@ -32,7 +32,6 @@
     <lombok.version>1.18.42</lombok.version>
     <logback-ecs-encoder.version>1.6.0</logback-ecs-encoder.version>
     <aws-embedded-metrics.version>4.2.0</aws-embedded-metrics.version>
-    <commons-lang3.version>3.18.0</commons-lang3.version>
     <testcontainers.version>1.21.4</testcontainers.version>
     <jacoco.version>0.8.14</jacoco.version>
     <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>

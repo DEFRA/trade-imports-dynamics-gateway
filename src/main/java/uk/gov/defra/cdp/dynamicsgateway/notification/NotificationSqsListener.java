@@ -43,10 +43,15 @@ public class NotificationSqsListener {
             String body,
             @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId) {
 
-        log.info("Received notification event from SQS: aggregateId={}", aggregateId);
+        log.info("Received notification event from SQS: aggregateId={}, bodyLength={}",
+            aggregateId, body != null ? body.length() : 0);
 
         if (aggregateId == null || aggregateId.isBlank()) {
-            throw new SqsNonRetryableException("Missing or blank MESSAGE_GROUP_ID", null);
+            throw new SqsNonRetryableException("Missing or blank MESSAGE_GROUP_ID: " + aggregateId);
+        }
+
+        if (body == null || body.isBlank()) {
+            throw new SqsNonRetryableException("Empty message body");
         }
 
         try {

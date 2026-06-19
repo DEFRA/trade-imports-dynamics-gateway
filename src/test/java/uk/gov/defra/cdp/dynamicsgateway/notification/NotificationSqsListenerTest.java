@@ -75,12 +75,22 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldThrow_whenAsbFails() {
-        doThrow(new SqsRetryableException("ASB down", new RuntimeException()))
+    void receive_shouldThrowRetryable_whenAsbFailsTransiently() {
+        doThrow(new SqsRetryableException("ASB down", new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any());
 
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID))
             .isInstanceOf(SqsRetryableException.class);
+        assertThat(counterValue("forwarded")).isEqualTo(0.0);
+    }
+
+    @Test
+    void receive_shouldThrowNonRetryable_whenAsbFailsPermanently() {
+        doThrow(new SqsNonRetryableException("entity not found", new RuntimeException("Simulated permanent failure")))
+            .when(queueMessageSender).publish(any(), any());
+
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID))
+            .isInstanceOf(SqsNonRetryableException.class);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 

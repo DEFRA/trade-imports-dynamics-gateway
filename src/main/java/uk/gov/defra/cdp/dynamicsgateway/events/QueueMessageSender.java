@@ -45,6 +45,9 @@ public class QueueMessageSender {
      * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */
     public void publish(String messageBody, String sessionId) {
+        if (messageBody == null) {
+            throw new SqsNonRetryableException("messageBody must not be null");
+        }
         String messageId = UUID.randomUUID().toString();
         ServiceBusMessage message = new ServiceBusMessage(messageBody)
             .setMessageId(messageId)
@@ -55,18 +58,24 @@ public class QueueMessageSender {
             senderClient.sendMessage(message);
             log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", messageId, sessionId);
         } catch (ServiceBusException e) {
-            if (e.isTransient()) {
-                log.warn("Transient ASB error ({}), retryable: {}", e.getReason(), e.getMessage());
-                throw new SqsRetryableException("Transient ASB send failure", e);
-            }
-            log.error("Non-transient ASB error ({}), non-retryable: {}", e.getReason(), e.getMessage(), e);
-            throw new SqsNonRetryableException("Non-transient ASB send failure", e);
+            classifyAndThrow(e, messageId, sessionId);
         } catch (IllegalStateException e) {
-            log.warn("ASB sender in illegal state, retryable: {}", e.getMessage());
+            log.warn("ASB sender in illegal state ({}), retryable: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new SqsRetryableException("ASB sender disposed", e);
         } catch (Exception e) {
-            log.error("Unexpected error sending to ASB, non-retryable: {}", e.getMessage(), e);
+            log.error("Unexpected error ({}) sending to ASB, non-retryable: {}", e.getClass().getSimpleName(), e.getMessage(), e);
             throw new SqsNonRetryableException("Unexpected ASB send failure", e);
         }
+    }
+
+    private void classifyAndThrow(ServiceBusException e, String messageId, String sessionId) {
+        if (e.isTransient()) {
+            log.warn("Transient ASB error (reason={}, messageId={}, sessionId={}): {}",
+                e.getReason(), messageId, sessionId, e.getMessage());
+            throw new SqsRetryableException("Transient ASB send failure", e);
+        }
+        log.error("Non-transient ASB error (reason={}, messageId={}, sessionId={}): {}",
+            e.getReason(), messageId, sessionId, e.getMessage(), e);
+        throw new SqsNonRetryableException("Non-transient ASB send failure", e);
     }
 }

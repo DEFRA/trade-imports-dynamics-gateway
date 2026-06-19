@@ -26,13 +26,17 @@ public class EventsSendController {
     @Timed("events.publish")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public void publishEvent(@RequestBody JsonNode body) throws JsonProcessingException {
+    public void publishEvent(@RequestBody JsonNode body) {
         String aggregateId = body.path("aggregateId").asText(null);
         if (aggregateId == null || aggregateId.isBlank()) {
             throw new IllegalArgumentException("aggregateId is required");
         }
 
         log.info("Received event for forwarding to Azure Service Bus");
-        queueMessageSender.publish(objectMapper.writeValueAsString(body), aggregateId);
+        try {
+            queueMessageSender.publish(objectMapper.writeValueAsString(body), aggregateId);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Request body is not serializable", e);
+        }
     }
 }

@@ -2,6 +2,24 @@ server:
   port: ${PORT:8088}
   shutdown: graceful
 
+# AWS configuration — defined before spring.cloud.aws references ${aws.region}
+aws:
+  region: ${AWS_REGION:eu-west-2}
+  emf:
+    enabled: ${AWS_EMF_ENABLED:true}
+    environment: ${AWS_EMF_ENVIRONMENT:Local}
+    namespace: ${AWS_EMF_NAMESPACE:trade-imports-dynamics-gateway}
+    service:
+      name: ${AWS_EMF_SERVICE_NAME:trade-imports-dynamics-gateway}
+      type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
+  sqs:
+    notification:
+      # Required in non-local environments — @NotBlank on NotificationSqsConfig.queueUrl
+      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}
+      visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
+      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
+      max-messages: ${SQS_MAX_MESSAGES:10}
+
 spring:
   application:
     name: trade-imports-dynamics-gateway
@@ -63,23 +81,6 @@ app:
     # Do NOT set real credentials here; these keys are ignored in deployed environments.
     # access-key-id: ${APP_AWS_ACCESS_KEY_ID:}
     # secret-access-key: ${APP_AWS_SECRET_ACCESS_KEY:}
-
-# AWS configuration
-aws:
-  region: ${AWS_REGION:eu-west-2}
-  emf:
-    enabled: ${AWS_EMF_ENABLED:true}
-    environment: ${AWS_EMF_ENVIRONMENT:Local}
-    namespace: ${AWS_EMF_NAMESPACE:trade-imports-dynamics-gateway}
-    service:
-      name: ${AWS_EMF_SERVICE_NAME:trade-imports-dynamics-gateway}
-      type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
-  sqs:
-    notification:
-      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}
-      visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
-      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
-      max-messages: ${SQS_MAX_MESSAGES:10}
 
 logging:
   level:

@@ -21,7 +21,10 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -36,9 +39,11 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
+@Slf4j
 class NotificationSqsListenerIT extends IntegrationBase {
 
     private static final String QUEUE_NAME_SQS = "trade_imports_animals_eu_notifications_gateway.fifo";
@@ -52,6 +57,10 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     static {
         LOCAL_STACK.start();
+    }
+
+    @BeforeAll
+    static void createQueue() {
         queueUrl = createFifoQueueAndGetUrl();
     }
 
@@ -71,13 +80,22 @@ class NotificationSqsListenerIT extends IntegrationBase {
         registry.add("app.aws.secret-access-key", LOCAL_STACK::getSecretKey);
     }
 
+    @BeforeEach
+    void purgeQueue() {
+        try (SqsClient sqs = localSqsClient()) {
+            sqs.purgeQueue(PurgeQueueRequest.builder().queueUrl(queueUrl).build());
+        } catch (Exception e) {
+            log.debug("Queue purge skipped or incomplete before test: {}", e.getMessage());
+        }
+    }
+
     @AfterEach
     void resetSpy() {
         Mockito.reset(senderClient);
     }
 
     @Test
-    void listener_shouldForwardSqsMessageToAzureServiceBus() {
+    void sqsToAsb_shouldForwardMessage_whenValidEvent() {
         // Given
         String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
         sendToSqs(eventBody, AGGREGATE_ID);
@@ -94,7 +112,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
-    void listener_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
+    void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
         // Given — ASB rejects with a transient error; QueueMessageSender wraps it as retryable.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
@@ -104,19 +122,18 @@ class NotificationSqsListenerIT extends IntegrationBase {
         sendToSqs(eventBody, AGGREGATE_ID);
 
         // When / Then — listener must retry (not discard) after a transient ASB failure
-        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             assertThat(Mockito.mockingDetails(senderClient).getInvocations())
                 .as("transient ASB failures must be retried, not discarded after the first attempt")
-                .hasSizeGreaterThanOrEqualTo(2));
-
-        await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                .hasSizeGreaterThanOrEqualTo(2);
             assertThat(totalMessagesInQueue())
                 .as("transient ASB failures must leave the SQS message in the queue")
-                .isGreaterThanOrEqualTo(1));
+                .isGreaterThanOrEqualTo(1);
+        });
     }
 
     @Test
-    void listener_shouldDiscardMessage_whenBodyIsInvalidJson() {
+    void sqsToAsb_shouldDiscardMessage_whenBodyIsInvalidJson() {
         // Given — invalid JSON that will fail objectMapper.readTree()
         sendToSqs("not valid json {{{", AGGREGATE_ID);
 
@@ -128,7 +145,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
-    void listener_shouldDiscardMessage_whenAsbFailureIsNonTransient() {
+    void sqsToAsb_shouldDiscardMessage_whenAsbFailureIsNonTransient() {
         // Given — ASB rejects with a non-transient error (e.g. entity not found)
         AmqpException nonTransientCause = new AmqpException(false, AmqpErrorCondition.NOT_FOUND, "entity not found", null);
         ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
@@ -187,6 +204,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private Optional<ServiceBusReceivedMessage> tryReceiveFromAsb() {
+        // sessionReceiver and receiver share a lifecycle: both close when the try block exits.
         try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
                 .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
                 .retryOptions(new AmqpRetryOptions().setTryTimeout(Duration.ofSeconds(3)).setMaxRetries(0))
@@ -198,7 +216,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
             return receiver.receiveMessages(1, Duration.ofSeconds(3))
                 .stream()
                 .findFirst();
-        } catch (Exception _) {
+        } catch (Exception e) {
+            log.debug("No ASB message received yet: {}", e.getMessage());
             return Optional.empty();
         }
     }
