@@ -5,11 +5,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.AppAwsConfig;
-import uk.gov.defra.cdp.dynamicsgateway.configuration.AppConfig;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.CdpConfig;
 
 @SpringBootApplication
-@EnableConfigurationProperties({CdpConfig.class, AppConfig.class, AppAwsConfig.class})
+@EnableConfigurationProperties({CdpConfig.class, AppAwsConfig.class})
 @EnableScheduling
 public class Application {
 

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -39,7 +40,8 @@ class GlobalExceptionHandlerTest {
         MDC.put("trace.id", "trace-abc");
         HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
             "Invalid JSON",
-            new JsonParseException(null, "Unexpected character")
+            new JsonParseException(null, "Unexpected character"),
+            (HttpInputMessage) null
         );
 
         // When
@@ -62,7 +64,8 @@ class GlobalExceptionHandlerTest {
         // Given
         HttpMessageNotReadableException ex = new HttpMessageNotReadableException(
             "Invalid JSON",
-            new JsonParseException(null, "Unexpected character")
+            new JsonParseException(null, "Unexpected character"),
+            (HttpInputMessage) null
         );
 
         // When
@@ -126,12 +129,50 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleGatewayException_shouldReturn502WithProblemDetail() {
+    void handleIllegalArgument_shouldReturn400WithProblemDetail() {
         // Given
-        DynamicsGatewayException ex = new DynamicsGatewayException("ASB send failed");
+        MDC.put("trace.id", "trace-xyz");
+        IllegalArgumentException ex = new IllegalArgumentException("aggregateId is required");
 
         // When
-        ResponseEntity<ProblemDetail> response = handler.handleGatewayException(ex);
+        ResponseEntity<ProblemDetail> response = handler.handleIllegalArgument(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
+        assertThat(problem.getTitle()).isEqualTo("Bad Request");
+        assertThat(problem.getDetail()).isEqualTo("aggregateId is required");
+        assertThat(problem.getProperties()).containsEntry("traceId", "trace-xyz");
+    }
+
+    @Test
+    void handleSqsRetryableException_shouldReturn502WithProblemDetail() {
+        // Given
+        SqsRetryableException ex = new SqsRetryableException("ASB timeout", new RuntimeException());
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleSqsRetryableException(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY.value());
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/upstream-error"));
+        assertThat(problem.getDetail()).contains("Azure Service Bus");
+    }
+
+    @Test
+    void handleSqsNonRetryableException_shouldReturn502WithProblemDetail() {
+        // Given
+        SqsNonRetryableException ex = new SqsNonRetryableException("message too large", new RuntimeException());
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleSqsNonRetryableException(ex);
         ProblemDetail problem = response.getBody();
 
         // Then

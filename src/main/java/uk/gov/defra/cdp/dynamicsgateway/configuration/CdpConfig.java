@@ -10,12 +10,9 @@ public record CdpConfig(
     MetricsConfig metrics,
     String serviceVersion,
     TracingConfig tracing,
-    CloudwatchConfig cloudwatch,
     String proxyUrl) {
 
   public record MetricsConfig(boolean enabled) {}
 
   public record TracingConfig(String headerName) {}
-
-  public record CloudwatchConfig(String endpoint) {}
 }

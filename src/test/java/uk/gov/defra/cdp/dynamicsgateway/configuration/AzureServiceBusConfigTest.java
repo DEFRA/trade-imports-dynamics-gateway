@@ -18,7 +18,6 @@ class AzureServiceBusConfigTest {
         String result = config.toString();
 
         // Then
-        assertThat(result).contains("***").doesNotContain("secret");
-        assertThat(result).contains("AmqpWebSockets");
+        assertThat(result).contains("***").doesNotContain("secret").contains("AmqpWebSockets");
     }
 }

@@ -14,8 +14,12 @@ import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -42,7 +46,7 @@ class EventsSendControllerIT extends IntegrationBase {
     @Test
     void post_shouldReturnAccepted_andMessageLandsInQueue() {
         // Given
-        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"reference\":\"TEST-REF-001\"}";
+        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}";
 
         // When
         ResponseEntity<Void> response = restTemplate.postForEntity(
@@ -55,34 +59,31 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(received.getBody()).hasToString(postedJson);
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
-        assertThat(received.getSessionId()).isEqualTo("TEST-REF-001");
+        assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
     }
 
-    @Test
-    void post_shouldReturnBadRequest_forMissingBody() {
-        // Given — no body
-
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("badRequestCases")
+    void post_shouldReturnBadRequest(String description, String body, String expectedBodyContains) {
         // When
         ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity(null), String.class);
+            "/events", jsonEntity(body), String.class);
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).contains("bad-request");
+        if (expectedBodyContains != null) {
+            assertThat(response.getBody()).contains(expectedBodyContains);
+        }
         assertThat(receiveNoMessage()).isEmpty();
     }
 
-    @Test
-    void post_shouldReturnBadRequest_forMalformedJson() {
-        // Given — malformed JSON body
-
-        // When
-        ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{bad json"), String.class);
-
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(receiveNoMessage()).isEmpty();
+    static Stream<Arguments> badRequestCases() {
+        return Stream.of(
+            Arguments.of("missing body", null, "bad-request"),
+            Arguments.of("malformed JSON", "{bad json", null),
+            Arguments.of("missing aggregateId", "{\"eventType\":\"NotificationSubmitted\"}", "aggregateId is required"),
+            Arguments.of("blank aggregateId", "{\"aggregateId\":\"  \"}", "aggregateId is required")
+        );
     }
 
     @Test
@@ -92,7 +93,7 @@ class EventsSendControllerIT extends IntegrationBase {
 
         // When
         ResponseEntity<String> response = restTemplate.postForEntity(
-            "/events", jsonEntity("{\"reference\":\"REF-001\"}"), String.class);
+            "/events", jsonEntity("{\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}"), String.class);
 
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
@@ -126,7 +127,7 @@ class EventsSendControllerIT extends IntegrationBase {
             return receiver.receiveMessages(1, Duration.ofSeconds(1))
                 .stream()
                 .findFirst();
-        } catch (Exception e) {
+        } catch (Exception _) {
             return Optional.empty();
         }
     }

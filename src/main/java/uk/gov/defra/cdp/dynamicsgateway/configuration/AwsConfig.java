@@ -2,7 +2,6 @@ package uk.gov.defra.cdp.dynamicsgateway.configuration;
 
 import java.net.URI;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -16,47 +15,56 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.sts.StsClient;
-import software.amazon.awssdk.services.sts.model.GetWebIdentityTokenRequest;
-import software.amazon.awssdk.services.sts.model.GetWebIdentityTokenResponse;
-import software.amazon.awssdk.services.sts.model.StsException;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.DynamicsGatewayException;
+import io.awspring.cloud.sqs.config.SqsMessageListenerContainerFactory;
+import io.micrometer.core.instrument.MeterRegistry;
+import software.amazon.awssdk.services.sqs.SqsAsyncClient;
+import software.amazon.awssdk.services.sqs.SqsAsyncClientBuilder;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler;
 
 @Slf4j
 @Configuration
+@EnableConfigurationProperties(NotificationSqsConfig.class)
 public class AwsConfig {
 
     private final String region;
-    private final String audience;
-    private final Integer expiration;
     private final AppAwsConfig appAwsConfig;
 
     public AwsConfig(
         @Value("${aws.region}") String region,
-        @Value("${aws.sts.token.audience}") String audience,
-        @Value("${aws.sts.token.expiration}") Integer expiration,
         AppAwsConfig appAwsConfig) {
         this.region = region;
-        this.audience = audience;
-        this.expiration = expiration;
         this.appAwsConfig = appAwsConfig;
     }
 
-    public String getWebIdentityToken() {
-        try (StsClient stsClient = stsClient()) {
-            GetWebIdentityTokenRequest request = GetWebIdentityTokenRequest.builder()
-                .audience(audience)
-                .signingAlgorithm("RS256")
-                .durationSeconds(expiration)
-                .build();
-            GetWebIdentityTokenResponse response = stsClient.getWebIdentityToken(request);
-
-            log.info("STS WebIdentityToken issued at: {}", LocalDateTime.now());
-
-            return response.webIdentityToken();
-        } catch (StsException ex) {
-            throw new DynamicsGatewayException("Sts connection error: " + ex.getMessage());
+    @Bean
+    public SqsAsyncClient sqsAsyncClient() {
+        SqsAsyncClientBuilder builder = SqsAsyncClient.builder()
+            .region(Region.of(region))
+            .credentialsProvider(resolveCredentialsProvider())
+            .overrideConfiguration(c -> c
+                .retryStrategy(RetryMode.ADAPTIVE_V2)
+                .apiCallTimeout(Duration.ofSeconds(30)));
+        if (hasEndpointOverride()) {
+            log.info("Using SQS endpoint override: {}", appAwsConfig.endpointOverride());
+            builder.endpointOverride(URI.create(appAwsConfig.endpointOverride()));
         }
+        return builder.build();
+    }
+
+    @Bean
+    public SqsMessageListenerContainerFactory<Object> defaultSqsListenerContainerFactory(
+            SqsAsyncClient sqsAsyncClient,
+            NotificationSqsConfig sqsConfig,
+            MeterRegistry meterRegistry) {
+        return SqsMessageListenerContainerFactory.builder()
+            .configure(options -> options
+                .maxConcurrentMessages(sqsConfig.maxMessages())
+                .pollTimeout(Duration.ofSeconds(sqsConfig.waitTimeSeconds()))
+                .messageVisibility(Duration.ofSeconds(sqsConfig.visibilityTimeoutSeconds())))
+            .sqsAsyncClient(sqsAsyncClient)
+            .errorHandler(new NotificationErrorHandler(meterRegistry))
+            .build();
     }
 
     @Bean
@@ -70,13 +78,6 @@ public class AwsConfig {
                 .apiCallAttemptTimeout(Duration.ofSeconds(10)));
         applyEndpointOverride(builder);
         return builder.build();
-    }
-
-    private StsClient stsClient() {
-        return StsClient.builder()
-            .region(Region.of(region))
-            .credentialsProvider(DefaultCredentialsProvider.builder().build())
-            .build();
     }
 
     private boolean hasEndpointOverride() {

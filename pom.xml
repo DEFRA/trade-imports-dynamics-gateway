@@ -8,7 +8,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.5</version>
+    <version>3.5.15</version>
     <relativePath/>
   </parent>
 
@@ -24,7 +24,18 @@
     <maven.compiler.target>25</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <sonar.organization>defra</sonar.organization>
+    <aws-sdk.version>2.46.11</aws-sdk.version>
+    <azure-sdk-bom.version>1.2.35</azure-sdk-bom.version>
+    <azure-core-amqp.version>2.11.4</azure-core-amqp.version>
+    <azure-messaging-servicebus.version>7.17.18</azure-messaging-servicebus.version>
+    <spring-cloud-aws.version>3.4.2</spring-cloud-aws.version>
+    <lombok.version>1.18.42</lombok.version>
+    <logback-ecs-encoder.version>1.6.0</logback-ecs-encoder.version>
+    <aws-embedded-metrics.version>4.2.0</aws-embedded-metrics.version>
     <testcontainers.version>1.21.4</testcontainers.version>
+    <jacoco.version>0.8.14</jacoco.version>
+    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+    <sonar-maven-plugin.version>5.1.0.4751</sonar-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -32,14 +43,14 @@
       <dependency>
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>bom</artifactId>
-        <version>2.40.2</version>
+        <version>${aws-sdk.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>com.azure</groupId>
         <artifactId>azure-sdk-bom</artifactId>
-        <version>1.2.35</version>
+        <version>${azure-sdk-bom.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -48,7 +59,7 @@
       <dependency>
         <groupId>com.azure</groupId>
         <artifactId>azure-core-amqp</artifactId>
-        <version>2.11.4</version>
+        <version>${azure-core-amqp.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -69,14 +80,14 @@
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
-      <version>1.18.42</version>
+      <version>${lombok.version}</version>
       <scope>provided</scope>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>co.elastic.logging</groupId>
       <artifactId>logback-ecs-encoder</artifactId>
-      <version>1.6.0</version>
+      <version>${logback-ecs-encoder.version}</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.datatype</groupId>
@@ -94,15 +105,20 @@
     <dependency>
       <groupId>software.amazon.cloudwatchlogs</groupId>
       <artifactId>aws-embedded-metrics</artifactId>
-      <version>4.2.0</version>
-    </dependency>
-    <dependency>
-      <groupId>software.amazon.awssdk</groupId>
-      <artifactId>sts</artifactId>
+      <version>${aws-embedded-metrics.version}</version>
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>s3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sqs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.awspring.cloud</groupId>
+      <artifactId>spring-cloud-aws-starter-sqs</artifactId>
+      <version>${spring-cloud-aws.version}</version>
     </dependency>
 
     <dependency>
@@ -110,7 +126,7 @@
       <artifactId>azure-messaging-servicebus</artifactId>
       <!-- Override BOM: 7.17.18 brings azure-core-amqp 2.11.4 which fixes proxy
            handshake resumption when the proxy closes the connection (Connection: close). -->
-      <version>7.17.18</version>
+      <version>${azure-messaging-servicebus.version}</version>
     </dependency>
 
     <!-- Testing -->
@@ -132,6 +148,11 @@
     <dependency>
       <groupId>com.microsoft.sqlserver</groupId>
       <artifactId>mssql-jdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>localstack</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -168,7 +189,7 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <version>0.8.14</version>
+        <version>${jacoco.version}</version>
         <executions>
           <execution>
             <goals>
@@ -208,7 +229,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
+        <version>${maven-compiler-plugin.version}</version>
         <configuration>
           <source>25</source>
           <target>25</target>
@@ -216,7 +237,7 @@
             <path>
               <groupId>org.projectlombok</groupId>
               <artifactId>lombok</artifactId>
-              <version>1.18.42</version>
+              <version>${lombok.version}</version>
             </path>
           </annotationProcessorPaths>
         </configuration>
@@ -224,7 +245,7 @@
       <plugin>
         <groupId>org.sonarsource.scanner.maven</groupId>
         <artifactId>sonar-maven-plugin</artifactId>
-        <version>5.1.0.4751</version>
+        <version>${sonar-maven-plugin.version}</version>
       </plugin>
     </plugins>
   </build>
