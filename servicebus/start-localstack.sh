@@ -43,7 +43,7 @@ QUEUE_ARN="arn:aws:sqs:${AWS_REGION}:${ACCOUNT}:${QUEUE_NAME}"
 echo "Creating SNS FIFO topic: ${TOPIC_NAME}"
 aws sns create-topic \
   --name "${TOPIC_NAME}" \
-  --attributes FifoTopic=true,ContentBasedDeduplication=true || true
+  --attributes FifoTopic=true,ContentBasedDeduplication=false || true
 
 TOPIC_ARN="arn:aws:sns:${AWS_REGION}:${ACCOUNT}:${TOPIC_NAME}"
 
