@@ -76,6 +76,13 @@ class QueueMessageSenderTest {
     }
 
     @Test
+    void publish_shouldThrowSqsNonRetryableException_whenMessageBodyIsNull() {
+        assertThatThrownBy(() -> queueMessageSender.publish(null, "session-1"))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasMessage("messageBody must not be null");
+    }
+
+    @Test
     void publish_shouldThrowSqsRetryableException_whenServiceBusExceptionIsTransient() {
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);

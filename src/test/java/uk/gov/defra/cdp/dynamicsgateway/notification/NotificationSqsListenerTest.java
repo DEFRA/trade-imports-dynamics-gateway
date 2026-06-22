@@ -43,7 +43,7 @@ class NotificationSqsListenerTest {
     void receive_shouldForwardToAsb_whenValid() {
         listener.receive(VALID_BODY, AGGREGATE_ID);
 
-        verify(queueMessageSender).publish(any(), eq(AGGREGATE_ID));
+        verify(queueMessageSender).publish(eq(VALID_BODY), eq(AGGREGATE_ID));
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -61,6 +61,24 @@ class NotificationSqsListenerTest {
         assertThatThrownBy(() -> listener.receive(VALID_BODY, "  "))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("MESSAGE_GROUP_ID");
+
+        verify(queueMessageSender, never()).publish(any(), any());
+    }
+
+    @Test
+    void receive_shouldThrowNonRetryable_whenBodyIsNull() {
+        assertThatThrownBy(() -> listener.receive(null, AGGREGATE_ID))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasMessage("Empty message body");
+
+        verify(queueMessageSender, never()).publish(any(), any());
+    }
+
+    @Test
+    void receive_shouldThrowNonRetryable_whenBodyIsBlank() {
+        assertThatThrownBy(() -> listener.receive("  ", AGGREGATE_ID))
+            .isInstanceOf(SqsNonRetryableException.class)
+            .hasMessage("Empty message body");
 
         verify(queueMessageSender, never()).publish(any(), any());
     }

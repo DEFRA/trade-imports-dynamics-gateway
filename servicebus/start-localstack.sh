@@ -17,22 +17,26 @@ QUEUE_NAME="trade_imports_animals_eu_notifications_gateway.fifo"
 TOPIC_NAME="trade_imports_animals_eu_notifications.fifo"
 ACCOUNT="000000000000"
 
+# ContentBasedDeduplication=false matches the CDP platform default and real dev
+# (verified: ...notifications_gateway.fifo has it false). With it off, producers must
+# supply a MessageDeduplicationId per send — here the SNS topic (content-based) provides
+# it on delivery to the subscribed FIFO queue, keeping local like-for-like with dev.
 echo "Creating DLQ: ${DLQ_NAME}"
 aws sqs create-queue \
   --queue-name "${DLQ_NAME}" \
-  --attributes FifoQueue=true,ContentBasedDeduplication=true || true
+  --attributes FifoQueue=true,ContentBasedDeduplication=false || true
 
 DLQ_ARN="arn:aws:sqs:${AWS_REGION}:${ACCOUNT}:${DLQ_NAME}"
 
 echo "Creating FIFO queue: ${QUEUE_NAME}"
 aws sqs create-queue \
   --queue-name "${QUEUE_NAME}" \
-  --attributes FifoQueue=true,ContentBasedDeduplication=true || true
+  --attributes FifoQueue=true,ContentBasedDeduplication=false || true
 
 echo "Applying RedrivePolicy to ${QUEUE_NAME}"
 aws sqs set-queue-attributes \
   --queue-url "${ENDPOINT}/${ACCOUNT}/${QUEUE_NAME}" \
-  --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"${DLQ_ARN}\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}" || true
+  --attributes "{\"RedrivePolicy\":\"{\\\"deadLetterTargetArn\\\":\\\"${DLQ_ARN}\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"}"
 
 QUEUE_ARN="arn:aws:sqs:${AWS_REGION}:${ACCOUNT}:${QUEUE_NAME}"
 
@@ -48,6 +52,6 @@ aws sns subscribe \
   --topic-arn "${TOPIC_ARN}" \
   --protocol sqs \
   --notification-endpoint "${QUEUE_ARN}" \
-  --attributes RawMessageDelivery=true || true
+  --attributes RawMessageDelivery=true
 
 echo "Floci notification pipeline ready"
