@@ -57,7 +57,12 @@ The primary production flow:
 SNS (FIFO) → SQS FIFO queue → NotificationSqsListener → QueueMessageSender → ASB session queue
 ```
 
-The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards it to Azure Service Bus. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message is assigned a UUID `messageId` and `contentType` of `application/json`.
+The listener consumes messages from the SQS FIFO queue, validates the message group id and body (non-null, non-blank, valid JSON), and forwards the payload to Azure Service Bus with `contentType` of `application/json`. Two identifiers are carried through:
+
+* The SQS `MessageGroupId` becomes the ASB `sessionId`.
+* The inbound SQS `MessageDeduplicationId` (the backend outbox `eventId`) is set as the ASB `messageId`, keeping the deduplication key consistent end-to-end — backend `eventId` → SNS `MessageDeduplicationId` → ASB `messageId`. A fresh UUID is generated only when no deduplication id is present.
+
+A stable `messageId` means ASB duplicate detection can suppress messages that SQS redelivers (at-least-once processing), if the destination queue has it enabled.
 
 Error handling:
 
@@ -66,6 +71,7 @@ Error handling:
 | Transient ASB failure (timeout, throttle) | Message left in SQS for retry → DLQ after max receive count |
 | Non-transient ASB failure (unauthorized, entity not found) | Message deleted from SQS |
 | Invalid JSON body | Message deleted from SQS |
+| Missing or blank message body | Message deleted from SQS |
 | Missing or blank `MessageGroupId` | Message deleted from SQS |
 
 ### Endpoint
@@ -81,7 +87,7 @@ The request body must include an `aggregateId` field, which is used as the ASB `
 | `415 Unsupported Media Type` | Content-Type is not `application/json` |
 | `502 Bad Gateway` | Azure Service Bus send failed |
 
-Each message is assigned a UUID `messageId` which is logged on success for correlation.
+This path has no upstream deduplication id, so a fresh UUID `messageId` is generated and logged on success for correlation. (The SQS pipeline, by contrast, reuses the inbound deduplication id — see above.)
 
 ### Testing
 
