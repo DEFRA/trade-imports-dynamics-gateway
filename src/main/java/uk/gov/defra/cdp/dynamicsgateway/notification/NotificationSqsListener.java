@@ -41,10 +41,12 @@ public class NotificationSqsListener {
     @SqsListener("${aws.sqs.notification.queue-url}")
     public void receive(
             String body,
-            @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId) {
+            @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId,
+            @Header(name = SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_DEDUPLICATION_ID_HEADER,
+                required = false) String deduplicationId) {
 
-        log.info("Received notification event from SQS: aggregateId={}, bodyLength={}",
-            aggregateId, body != null ? body.length() : 0);
+        log.info("Received notification event from SQS: aggregateId={}, deduplicationId={}, bodyLength={}",
+            aggregateId, deduplicationId, body != null ? body.length() : 0);
 
         if (aggregateId == null || aggregateId.isBlank()) {
             throw new SqsNonRetryableException("Missing or blank MESSAGE_GROUP_ID: " + aggregateId);
@@ -60,7 +62,9 @@ public class NotificationSqsListener {
             throw new SqsNonRetryableException("Message body is not valid JSON", e);
         }
 
-        queueMessageSender.publish(body, aggregateId);
+        // Carry the inbound SQS dedup id (the backend outbox eventId) through as the ASB messageId,
+        // so the dedup key is consistent end-to-end. Falls back to a fresh UUID if absent.
+        queueMessageSender.publish(body, aggregateId, deduplicationId);
         forwardedCounter.increment();
     }
 }

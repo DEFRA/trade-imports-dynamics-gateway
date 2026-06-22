@@ -37,7 +37,10 @@ public class QueueMessageSender {
     private final ServiceBusSenderClient senderClient;
 
     /**
-     * Send a pre-serialised message to ASB on the given session.
+     * Send a pre-serialised message to ASB on the given session, generating a fresh ASB messageId.
+     *
+     * <p>Use {@link #publish(String, String, String)} to carry a stable upstream id (e.g. the SQS
+     * MessageDeduplicationId) when one is available.
      *
      * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
      * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
@@ -45,20 +48,39 @@ public class QueueMessageSender {
      * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */
     public void publish(String messageBody, String sessionId) {
+        publish(messageBody, sessionId, null);
+    }
+
+    /**
+     * Send a pre-serialised message to ASB on the given session.
+     *
+     * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
+     * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
+     * @param messageId   stable id to set as the ASB messageId (e.g. the upstream SQS
+     *                    MessageDeduplicationId, derived from the backend outbox eventId); a fresh
+     *                    UUID is generated when null or blank. A stable id keeps the dedup key
+     *                    consistent across the pipeline and makes ASB duplicate detection effective
+     *                    if it is ever enabled — see docs/notification-pipeline-dedup.md.
+     * @throws SqsRetryableException if the failure is transient and worth retrying
+     * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
+     */
+    public void publish(String messageBody, String sessionId, String messageId) {
         if (messageBody == null) {
             throw new SqsNonRetryableException("messageBody must not be null");
         }
-        String messageId = UUID.randomUUID().toString();
+        String resolvedMessageId = (messageId != null && !messageId.isBlank())
+            ? messageId
+            : UUID.randomUUID().toString();
         ServiceBusMessage message = new ServiceBusMessage(messageBody)
-            .setMessageId(messageId)
+            .setMessageId(resolvedMessageId)
             .setContentType("application/json")
             .setSessionId(sessionId);
 
         try {
             senderClient.sendMessage(message);
-            log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", messageId, sessionId);
+            log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", resolvedMessageId, sessionId);
         } catch (ServiceBusException e) {
-            classifyAndThrow(e, messageId, sessionId);
+            classifyAndThrow(e, resolvedMessageId, sessionId);
         } catch (IllegalStateException e) {
             log.warn("ASB sender in illegal state ({}), retryable: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new SqsRetryableException("ASB sender disposed", e);

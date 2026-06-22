@@ -63,6 +63,36 @@ class QueueMessageSenderTest {
     }
 
     @Test
+    void publish_shouldUseProvidedMessageId_whenSupplied() {
+        ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
+
+        queueMessageSender.publish("{\"key\":\"value\"}", "session-1", "event-123");
+
+        verify(senderClient).sendMessage(captor.capture());
+        assertThat(captor.getValue().getMessageId()).isEqualTo("event-123");
+    }
+
+    @Test
+    void publish_shouldGenerateMessageId_whenProvidedIdIsNull() {
+        ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
+
+        queueMessageSender.publish("{\"key\":\"value\"}", "session-1", null);
+
+        verify(senderClient).sendMessage(captor.capture());
+        assertThat(captor.getValue().getMessageId()).isNotBlank();
+    }
+
+    @Test
+    void publish_shouldGenerateMessageId_whenProvidedIdIsBlank() {
+        ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);
+
+        queueMessageSender.publish("{\"key\":\"value\"}", "session-1", "   ");
+
+        verify(senderClient).sendMessage(captor.capture());
+        assertThat(captor.getValue().getMessageId()).isNotBlank().isNotEqualTo("   ");
+    }
+
+    @Test
     void publish_shouldSetSessionIdFromParameter() {
         // Given
         ArgumentCaptor<ServiceBusMessage> captor = ArgumentCaptor.forClass(ServiceBusMessage.class);

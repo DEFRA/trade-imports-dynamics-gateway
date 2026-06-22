@@ -98,7 +98,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
     void sqsToAsb_shouldForwardMessage_whenValidEvent() {
         // Given
         String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
-        sendToSqs(eventBody, AGGREGATE_ID);
+        String deduplicationId = UUID.randomUUID().toString();
+        sendToSqs(eventBody, AGGREGATE_ID, deduplicationId);
 
         // When / Then — wait up to 30s for the listener to poll + forward
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
@@ -106,7 +107,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(received).isPresent();
             assertThat(received.get().getBody()).hasToString(eventBody);
             assertThat(received.get().getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
-            assertThat(received.get().getMessageId()).isNotBlank();
+            // The inbound SQS MessageDeduplicationId is carried through as the ASB messageId.
+            assertThat(received.get().getMessageId()).isEqualTo(deduplicationId);
             assertThat(received.get().getSessionId()).isEqualTo(AGGREGATE_ID);
         });
     }
@@ -193,12 +195,16 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private void sendToSqs(String body, String messageGroupId) {
+        sendToSqs(body, messageGroupId, UUID.randomUUID().toString());
+    }
+
+    private void sendToSqs(String body, String messageGroupId, String deduplicationId) {
         try (SqsClient sqs = localSqsClient()) {
             sqs.sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .messageBody(body)
                 .messageGroupId(messageGroupId)
-                .messageDeduplicationId(UUID.randomUUID().toString())
+                .messageDeduplicationId(deduplicationId)
                 .build());
         }
     }
