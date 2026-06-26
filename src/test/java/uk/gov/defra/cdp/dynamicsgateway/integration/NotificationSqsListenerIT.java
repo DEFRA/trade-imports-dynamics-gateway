@@ -213,10 +213,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .as("first backoff should be ~%dms (initial interval)", expectedFirstMs)
             .isGreaterThanOrEqualTo(expectedFirstMs - toleranceMs);
         assertThat(secondGapMs)
-            .as("second backoff should be ~%dms (initial interval × multiplier)", expectedSecondMs)
-            .isGreaterThanOrEqualTo(expectedSecondMs - toleranceMs);
-        assertThat(secondGapMs)
-            .as("backoff must escalate: the second gap is longer than the first")
+            .as("second backoff ~%dms (initial × multiplier) and escalating beyond the first gap", expectedSecondMs)
+            .isGreaterThanOrEqualTo(expectedSecondMs - toleranceMs)
             .isGreaterThan(firstGapMs);
     }
 

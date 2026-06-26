@@ -56,7 +56,7 @@ class NotificationSqsListenerTest {
     void receive_shouldForwardToAsb_whenValid() {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
 
-        verify(queueMessageSender).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -121,7 +121,7 @@ class NotificationSqsListenerTest {
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
             .isInstanceOf(SqsRetryableException.class);
         // Retried in-process up to maxAttempts before propagating to the SQS error handler.
-        verify(queueMessageSender, times(MAX_ATTEMPTS)).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender, times(MAX_ATTEMPTS)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
@@ -133,7 +133,7 @@ class NotificationSqsListenerTest {
 
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
 
-        verify(queueMessageSender, times(2)).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender, times(2)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -145,7 +145,7 @@ class NotificationSqsListenerTest {
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
             .isInstanceOf(SqsNonRetryableException.class);
         // Non-retryable failures are not retried — single attempt then propagate to discard.
-        verify(queueMessageSender, times(1)).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender, times(1)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
