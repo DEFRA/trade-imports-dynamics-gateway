@@ -54,8 +54,9 @@ class NotificationSqsListenerIT extends IntegrationBase {
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
 
     // Deterministic in-process retry budget for the ITs: 3 attempts at 500ms then 1000ms backoff =
-    // a 1.5s window that stays below the 2s visibility timeout, so retries run inside a single
-    // SQS receive (no redelivery interleaving) and the backoff intervals can be measured cleanly.
+    // a 1.5s window that stays well below the 30s visibility timeout, so retries run inside a single
+    // SQS receive (no redelivery interleaving), the backoff intervals can be measured cleanly, and
+    // an exhausted message stays invisible long enough to assert one processing cycle's attempt count.
     private static final int RETRY_MAX_ATTEMPTS = 3;
     private static final long RETRY_INITIAL_INTERVAL_MS = 500L;
     private static final double RETRY_MULTIPLIER = 2.0;
@@ -82,7 +83,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     static void setLocalStackProperties(DynamicPropertyRegistry registry) {
         registry.add("aws.sqs.notification.queue-url", () -> queueUrl);
         registry.add("aws.sqs.notification.wait-time-seconds", () -> "1");
-        registry.add("aws.sqs.notification.visibility-timeout-seconds", () -> "2");
+        registry.add("aws.sqs.notification.visibility-timeout-seconds", () -> "30");
         registry.add("aws.sqs.notification.retry.max-attempts", () -> String.valueOf(RETRY_MAX_ATTEMPTS));
         registry.add("aws.sqs.notification.retry.initial-interval", () -> String.valueOf(RETRY_INITIAL_INTERVAL_MS));
         registry.add("aws.sqs.notification.retry.multiplier", () -> String.valueOf(RETRY_MULTIPLIER));
@@ -132,8 +133,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
-    void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
-        // Given — ASB rejects with a transient error; QueueMessageSender wraps it as retryable.
+    void sqsToAsb_shouldExhaustRetriesThenLeaveMessageInSqs_whenAsbFailureIsTransient() {
+        // Given — ASB always rejects with a transient error; QueueMessageSender wraps it as retryable.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
@@ -141,15 +142,17 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
         sendToSqs(eventBody, AGGREGATE_ID);
 
-        // When / Then — listener must retry (not discard) after a transient ASB failure
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+        // When / Then — the in-process retry exhausts at exactly maxAttempts for the single processing
+        // cycle, then the exception propagates so the message is left in SQS for redelivery (→ DLQ after
+        // maxReceiveCount). The 30s visibility timeout keeps the message invisible well past the ~1.5s
+        // retry window, so the count settles at maxAttempts before any redelivery could re-invoke the sender.
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
             assertThat(Mockito.mockingDetails(senderClient).getInvocations())
-                .as("transient ASB failures must be retried, not discarded after the first attempt")
-                .hasSizeGreaterThanOrEqualTo(2);
-            assertThat(totalMessagesInQueue())
-                .as("transient ASB failures must leave the SQS message in the queue")
-                .isGreaterThanOrEqualTo(1);
-        });
+                .as("a transient failure must be retried in-process up to maxAttempts before giving up")
+                .hasSize(RETRY_MAX_ATTEMPTS));
+        assertThat(totalMessagesInQueue())
+            .as("after exhausting in-process retries the message must remain in SQS for redelivery, not be deleted")
+            .isGreaterThanOrEqualTo(1);
     }
 
     @Test
