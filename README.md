@@ -44,6 +44,12 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 | `SQS_VISIBILITY_TIMEOUT_SECONDS` | SQS visibility timeout (default: `30`) |
 | `SQS_WAIT_TIME_SECONDS` | SQS long-poll wait time (default: `20`) |
 | `SQS_MAX_MESSAGES` | Maximum concurrent SQS messages (default: `10`) |
+| `SQS_RETRY_MAX_ATTEMPTS` | In-process retry attempts for a transient ASB publish failure, including the first (default: `4`; `1` disables retry) |
+| `SQS_RETRY_INITIAL_INTERVAL_MS` | First backoff before retrying, in ms (default: `1000`) |
+| `SQS_RETRY_MULTIPLIER` | Growth factor applied to the backoff between attempts (default: `2.0`) |
+| `SQS_RETRY_MAX_INTERVAL_MS` | Ceiling for any single backoff, in ms (default: `10000`) |
+
+The transient-failure retry happens in-process and holds the message, so the total retry window (the sum of the backoffs across `SQS_RETRY_MAX_ATTEMPTS`) must stay below `SQS_VISIBILITY_TIMEOUT_SECONDS`; otherwise the message reappears on the queue and is processed concurrently. The defaults give `1s + 2s + 4s = 7s` across 4 attempts, well under the 30s visibility timeout. The service validates this invariant at startup and refuses to start if it is violated.
 
 The service validates the ASB connection string at startup and will refuse to start if it is missing or blank. The target queue is taken from the `EntityPath` component of the connection string.
 
@@ -63,7 +69,7 @@ Error handling:
 
 | Scenario | Behaviour |
 |---|---|
-| Transient ASB failure (timeout, throttle) | Message left in SQS for retry → DLQ after max receive count |
+| Transient ASB failure (timeout, throttle) | Retried in-process with exponential backoff (`SQS_RETRY_*`); on exhaustion the message is left in SQS for redelivery → DLQ after max receive count |
 | Non-transient ASB failure (unauthorized, entity not found) | Message deleted from SQS |
 | Invalid JSON body | Message deleted from SQS |
 | Missing or blank `MessageGroupId` | Message deleted from SQS |

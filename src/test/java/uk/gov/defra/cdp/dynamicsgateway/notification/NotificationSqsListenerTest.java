@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,12 +18,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.retry.support.RetryTemplate;
 import uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationSqsListenerTest {
+
+    private static final int MAX_ATTEMPTS = 3;
 
     @Mock
     private QueueMessageSender queueMessageSender;
@@ -38,7 +42,14 @@ class NotificationSqsListenerTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        listener = new NotificationSqsListener(queueMessageSender, new ObjectMapper(), meterRegistry);
+        // Tiny backoff so retries run instantly; retries only SqsRetryableException, matching prod wiring.
+        RetryTemplate retryTemplate = RetryTemplate.builder()
+            .maxAttempts(MAX_ATTEMPTS)
+            .fixedBackoff(1)
+            .retryOn(SqsRetryableException.class)
+            .build();
+        listener = new NotificationSqsListener(
+            queueMessageSender, new ObjectMapper(), retryTemplate, meterRegistry);
     }
 
     @Test
@@ -103,22 +114,38 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldThrowRetryable_whenAsbFailsTransiently() {
+    void receive_shouldRetryThenThrowRetryable_whenAsbFailsTransiently() {
         doThrow(new SqsRetryableException("ASB down", new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
             .isInstanceOf(SqsRetryableException.class);
+        // Retried in-process up to maxAttempts before propagating to the SQS error handler.
+        verify(queueMessageSender, times(MAX_ATTEMPTS)).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
     @Test
-    void receive_shouldThrowNonRetryable_whenAsbFailsPermanently() {
+    void receive_shouldForwardOnRetry_whenTransientFailureRecoversWithinWindow() {
+        doThrow(new SqsRetryableException("ASB blip", new RuntimeException("transient")))
+            .doNothing()
+            .when(queueMessageSender).publish(any(), any(), any());
+
+        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
+
+        verify(queueMessageSender, times(2)).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        assertThat(counterValue("forwarded")).isEqualTo(1.0);
+    }
+
+    @Test
+    void receive_shouldNotRetryAndThrowNonRetryable_whenAsbFailsPermanently() {
         doThrow(new SqsNonRetryableException("entity not found", new RuntimeException("Simulated permanent failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
             .isInstanceOf(SqsNonRetryableException.class);
+        // Non-retryable failures are not retried — single attempt then propagate to discard.
+        verify(queueMessageSender, times(1)).publish(eq(VALID_BODY), eq(AGGREGATE_ID), eq(DEDUP_ID));
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 

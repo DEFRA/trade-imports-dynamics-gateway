@@ -19,6 +19,14 @@ aws:
       visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
       wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
       max-messages: ${SQS_MAX_MESSAGES:10}
+      # In-process exponential backoff for a transient ASB publish failure (Spring RetryTemplate +
+      # ExponentialBackOffPolicy, retrying only SqsRetryableException). The total retry window must
+      # stay below visibility-timeout-seconds; defaults give 1s + 2s + 4s = 7s across 4 attempts.
+      retry:
+        max-attempts: ${SQS_RETRY_MAX_ATTEMPTS:4}
+        initial-interval: ${SQS_RETRY_INITIAL_INTERVAL_MS:1000}
+        multiplier: ${SQS_RETRY_MULTIPLIER:2.0}
+        max-interval: ${SQS_RETRY_MAX_INTERVAL_MS:10000}
 
 spring:
   application:

@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 import uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
@@ -24,14 +25,17 @@ public class NotificationSqsListener {
 
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
+    private final RetryTemplate retryTemplate;
     private final Counter forwardedCounter;
 
     public NotificationSqsListener(
             QueueMessageSender queueMessageSender,
             ObjectMapper objectMapper,
+            RetryTemplate notificationRetryTemplate,
             MeterRegistry meterRegistry) {
         this.queueMessageSender = queueMessageSender;
         this.objectMapper = objectMapper;
+        this.retryTemplate = notificationRetryTemplate;
         this.forwardedCounter = Counter.builder("notification.sqs.messages")
             .tag("outcome", "forwarded")
             .description("Messages successfully forwarded to ASB")
@@ -64,7 +68,12 @@ public class NotificationSqsListener {
 
         // Carry the inbound SQS dedup id (the backend outbox eventId) through as the ASB messageId,
         // so the dedup key is consistent end-to-end. Falls back to a fresh UUID if absent.
-        queueMessageSender.publish(body, aggregateId, deduplicationId);
+        // A transient ASB failure is retried in-process with exponential backoff (retryTemplate only
+        // retries SqsRetryableException); on exhaustion it propagates so SQS redelivers, then DLQs.
+        retryTemplate.execute(_ -> {
+            queueMessageSender.publish(body, aggregateId, deduplicationId);
+            return null;
+        });
         forwardedCounter.increment();
     }
 }
