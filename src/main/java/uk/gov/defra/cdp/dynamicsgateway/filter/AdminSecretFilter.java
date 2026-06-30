@@ -33,8 +33,11 @@ public class AdminSecretFilter extends OncePerRequestFilter {
     private static final String HEADER_NAME = "Trade-Imports-Animals-Admin-Secret";
     private static final String GUARDED_PATH = "/dlq/notifications";
 
-    @Value("${admin.secret}")
-    private String adminSecret;
+    private final String adminSecret;
+
+    public AdminSecretFilter(@Value("${admin.secret}") String adminSecret) {
+        this.adminSecret = adminSecret;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,

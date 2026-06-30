@@ -37,7 +37,7 @@ final class EventEnvelope {
                 return Optional.of(eventId.asText());
             }
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            log.debug("Could not parse body to read eventId, falling back: {}", e.getMessage());
+            log.warn("Could not parse body to read eventId, falling back", e);
         }
         return Optional.empty();
     }

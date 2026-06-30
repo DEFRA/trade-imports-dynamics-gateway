@@ -66,6 +66,17 @@ class DlqControllerSecurityTest {
     }
 
     @Test
+    void replay_isRejected_withWrongSecret() throws Exception {
+        mockMvc.perform(post("/dlq/notifications/replay")
+                .header(HEADER, "wrong-secret")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[\"id-1\"]}"))
+            .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(dlqService);
+    }
+
+    @Test
     void delete_isRejected_withoutSecret() throws Exception {
         mockMvc.perform(delete("/dlq/notifications")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -81,8 +92,19 @@ class DlqControllerSecurityTest {
                 .header(HEADER, SECRET)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[\"id-1\"]}"))
-            .andExpect(status().isOk());
+            .andExpect(status().isNoContent());
 
         verify(dlqService).delete(List.of("id-1"));
+    }
+
+    @Test
+    void delete_isRejected_withWrongSecret() throws Exception {
+        mockMvc.perform(delete("/dlq/notifications")
+                .header(HEADER, "wrong-secret")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[\"id-1\"]}"))
+            .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(dlqService);
     }
 }

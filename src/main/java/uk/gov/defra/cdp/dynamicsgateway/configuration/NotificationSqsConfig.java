@@ -54,9 +54,9 @@ public record NotificationSqsConfig(
      */
     public record Retry(
         @Min(1) @Max(10) int maxAttempts,
-        @Min(0) long initialInterval,
+        @Min(1) long initialInterval,
         @DecimalMin("1.0") double multiplier,
-        @Min(0) long maxInterval) {
+        @Min(1) long maxInterval) {
 
         /**
          * Worst-case total time spent sleeping between attempts, mirroring Spring's

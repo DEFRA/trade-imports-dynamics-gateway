@@ -105,6 +105,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-aop</artifactId>
     </dependency>
+    <!-- Used directly by AwsConfig/NotificationSqsListener; declared explicitly rather than relying
+         on the transitive copy from spring-cloud-aws-starter-sqs. Version managed by the Boot BOM. -->
+    <dependency>
+      <groupId>org.springframework.retry</groupId>
+      <artifactId>spring-retry</artifactId>
+    </dependency>
     <dependency>
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-core</artifactId>

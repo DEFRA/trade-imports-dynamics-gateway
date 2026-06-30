@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
+import software.amazon.awssdk.services.sqs.model.BatchResultErrorEntry;
 import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityBatchRequest;
 import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityBatchResponse;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageBatchRequest;
@@ -271,6 +272,26 @@ class DlqServiceTest {
         verify(sqsAsyncClient, never()).deleteMessageBatch(any(Consumer.class));
         // The unrequested message it scanned past is released once (the second poll is empty).
         verify(sqsAsyncClient, times(1)).changeMessageVisibilityBatch(any(Consumer.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void replay_deletesOnlyReSentEntries_whenSendBatchPartiallyFails() {
+        stubReceive(batch(
+            message("dedup-1", "{\"key\":\"a\"}", 3, "rh-1"),
+            message("dedup-2", "{\"key\":\"b\"}", 3, "rh-2")));
+        // Entry 0 re-sends; entry 1 fails — only the re-sent one may be deleted from the DLQ.
+        when(sqsAsyncClient.sendMessageBatch(any(Consumer.class)))
+            .thenReturn(CompletableFuture.completedFuture(SendMessageBatchResponse.builder()
+                .successful(SendMessageBatchResultEntry.builder().id("0").messageId("m-0").build())
+                .failed(BatchResultErrorEntry.builder().id("1").message("boom").senderFault(false).build())
+                .build()));
+        stubDeleteBatch();
+
+        service(DLQ_URL).replay(List.of("dedup-1", "dedup-2"));
+
+        assertThat(captureDeleteBatch().entries()).singleElement()
+            .satisfies(entry -> assertThat(entry.receiptHandle()).isEqualTo("rh-1"));
     }
 
     @Test

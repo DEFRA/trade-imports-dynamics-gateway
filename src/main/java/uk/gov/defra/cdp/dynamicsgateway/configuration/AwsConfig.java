@@ -23,6 +23,7 @@ import software.amazon.awssdk.services.sqs.SqsAsyncClientBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler;
+import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationRetryListener;
 
 @Slf4j
 @Configuration
@@ -81,8 +82,11 @@ public class AwsConfig {
         NotificationSqsConfig.Retry retry = sqsConfig.retry();
         return RetryTemplate.builder()
             .maxAttempts(retry.maxAttempts())
-            .exponentialBackoff(retry.initialInterval(), retry.multiplier(), retry.maxInterval())
+            // 4th arg = withRandom: adds jitter (ExponentialRandomBackOffPolicy) so concurrent
+            // listeners failing together against a degraded ASB don't retry in synchronised bursts.
+            .exponentialBackoff(retry.initialInterval(), retry.multiplier(), retry.maxInterval(), true)
             .retryOn(SqsRetryableException.class)
+            .withListener(new NotificationRetryListener(retry.maxAttempts()))
             .build();
     }
 

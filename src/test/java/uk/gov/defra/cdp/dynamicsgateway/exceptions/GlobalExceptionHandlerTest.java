@@ -145,7 +145,8 @@ class GlobalExceptionHandlerTest {
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
         assertThat(problem.getTitle()).isEqualTo("Bad Request");
-        assertThat(problem.getDetail()).isEqualTo("aggregateId is required");
+        // The handler must not echo the raw exception message back to the caller (it may leak internals).
+        assertThat(problem.getDetail()).isEqualTo("Request parameter is invalid");
         assertThat(problem.getProperties()).containsEntry("traceId", "trace-xyz");
     }
 

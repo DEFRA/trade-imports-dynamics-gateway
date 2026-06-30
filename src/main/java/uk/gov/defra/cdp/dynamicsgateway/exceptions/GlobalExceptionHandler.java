@@ -1,5 +1,6 @@
 package uk.gov.defra.cdp.dynamicsgateway.exceptions;
 
+import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -40,7 +41,18 @@ public class GlobalExceptionHandler {
             HttpStatus.BAD_REQUEST,
             BAD_REQUEST_TITLE,
             BAD_REQUEST_TYPE,
-            ex.getMessage()
+            "Request parameter is invalid"
+        );
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ProblemDetail> handleConstraintViolation(ConstraintViolationException ex) {
+        log.warn("Rejected request — constraint violation: {}", ex.getMessage());
+        return problemResponse(
+            HttpStatus.BAD_REQUEST,
+            BAD_REQUEST_TITLE,
+            BAD_REQUEST_TYPE,
+            "Request parameter is invalid"
         );
     }
 

@@ -115,36 +115,41 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldRetryThenThrowRetryable_whenAsbFailsTransiently() {
+        // Given
         doThrow(new SqsRetryableException("ASB down", new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
+        // When / Then — retried in-process up to maxAttempts before propagating to the SQS error handler.
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
             .isInstanceOf(SqsRetryableException.class);
-        // Retried in-process up to maxAttempts before propagating to the SQS error handler.
         verify(queueMessageSender, times(MAX_ATTEMPTS)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
     @Test
     void receive_shouldForwardOnRetry_whenTransientFailureRecoversWithinWindow() {
+        // Given
         doThrow(new SqsRetryableException("ASB blip", new RuntimeException("transient")))
             .doNothing()
             .when(queueMessageSender).publish(any(), any(), any());
 
+        // When
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
 
+        // Then
         verify(queueMessageSender, times(2)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
     @Test
     void receive_shouldNotRetryAndThrowNonRetryable_whenAsbFailsPermanently() {
+        // Given
         doThrow(new SqsNonRetryableException("entity not found", new RuntimeException("Simulated permanent failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
+        // When / Then — non-retryable failures are not retried: single attempt then propagate to discard.
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
             .isInstanceOf(SqsNonRetryableException.class);
-        // Non-retryable failures are not retried — single attempt then propagate to discard.
         verify(queueMessageSender, times(1)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }

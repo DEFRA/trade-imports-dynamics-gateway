@@ -4,12 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +59,7 @@ class DlqServiceIT {
 
     private static String sourceQueueUrl;
     private static String dlqUrl;
+    private static SqsAsyncClient asyncSqsClient;
 
     static {
         LOCAL_STACK.start();
@@ -69,10 +70,16 @@ class DlqServiceIT {
 
     @BeforeAll
     static void createQueues() {
+        asyncSqsClient = buildAsyncSqsClient();
         try (SqsClient sqs = localSqsClient()) {
             sourceQueueUrl = createFifoQueue(sqs, SOURCE_QUEUE);
             dlqUrl = createFifoQueue(sqs, DLQ_QUEUE);
         }
+    }
+
+    @AfterAll
+    static void closeAsyncClient() {
+        asyncSqsClient.close();
     }
 
     @BeforeEach
@@ -82,7 +89,7 @@ class DlqServiceIT {
         NotificationSqsConfig config = new NotificationSqsConfig(
             sourceQueueUrl, dlqUrl, 30, 20, 10,
             new NotificationSqsConfig.Retry(4, 1000, 2.0, 10000));
-        dlqService = new DlqService(asyncSqsClient(), config, objectMapper);
+        dlqService = new DlqService(asyncSqsClient, config, objectMapper);
     }
 
     @Test
@@ -257,9 +264,11 @@ class DlqServiceIT {
     private static String createFifoQueue(SqsClient sqs, String name) {
         sqs.createQueue(CreateQueueRequest.builder()
             .queueName(name)
+            // CONTENT_BASED_DEDUPLICATION off to match the CDP-provisioned production queues, so the
+            // tests exercise the explicit-dedup-id path rather than relying on SQS auto-generating one.
             .attributes(Map.of(
                 QueueAttributeName.FIFO_QUEUE, "true",
-                QueueAttributeName.CONTENT_BASED_DEDUPLICATION, "true"))
+                QueueAttributeName.CONTENT_BASED_DEDUPLICATION, "false"))
             .build());
         return sqs.getQueueUrl(GetQueueUrlRequest.builder().queueName(name).build()).queueUrl();
     }
@@ -273,10 +282,9 @@ class DlqServiceIT {
             .build();
     }
 
-    private static SqsAsyncClient asyncSqsClient() {
+    private static SqsAsyncClient buildAsyncSqsClient() {
         return SqsAsyncClient.builder()
-            .endpointOverride(URI.create(
-                LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString()))
+            .endpointOverride(LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS))
             .region(Region.of("us-east-1"))
             .credentialsProvider(StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(LOCAL_STACK.getAccessKey(), LOCAL_STACK.getSecretKey())))

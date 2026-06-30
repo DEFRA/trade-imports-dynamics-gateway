@@ -66,14 +66,20 @@ public class NotificationSqsListener {
             throw new SqsNonRetryableException("Message body is not valid JSON", e);
         }
 
-        // Carry the inbound SQS dedup id (the backend outbox eventId) through as the ASB messageId,
-        // so the dedup key is consistent end-to-end. Falls back to a fresh UUID if absent.
-        // A transient ASB failure is retried in-process with exponential backoff (retryTemplate only
-        // retries SqsRetryableException); on exhaustion it propagates so SQS redelivers, then DLQs.
+        publishWithRetry(body, aggregateId, deduplicationId);
+        forwardedCounter.increment();
+    }
+
+    /**
+     * Carry the inbound SQS dedup id (the backend outbox eventId) through as the ASB messageId, so the
+     * dedup key is consistent end-to-end (a fresh UUID is used downstream if absent). A transient ASB
+     * failure is retried in-process with exponential backoff (the retry template only retries
+     * {@code SqsRetryableException}); on exhaustion it propagates so SQS redelivers, then DLQs.
+     */
+    private void publishWithRetry(String body, String aggregateId, String deduplicationId) {
         retryTemplate.execute(_ -> {
             queueMessageSender.publish(body, aggregateId, deduplicationId);
             return null;
         });
-        forwardedCounter.increment();
     }
 }

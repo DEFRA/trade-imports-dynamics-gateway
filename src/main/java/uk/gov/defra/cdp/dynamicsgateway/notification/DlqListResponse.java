@@ -14,4 +14,8 @@ import java.util.List;
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DlqListResponse(List<DlqMessage> messages, long approximateCount) {
+
+    public DlqListResponse {
+        messages = messages != null ? List.copyOf(messages) : null;
+    }
 }

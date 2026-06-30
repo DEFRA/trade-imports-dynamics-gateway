@@ -9,4 +9,8 @@ import java.util.List;
  * @param ids the message ids (see {@link DlqMessage#id()}); must contain at least one
  */
 public record DlqBatchRequest(@NotEmpty List<String> ids) {
+
+    public DlqBatchRequest {
+        ids = ids != null ? List.copyOf(ids) : null;
+    }
 }

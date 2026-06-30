@@ -7,9 +7,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,9 +43,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/dlq/notifications")
 @Tag(name = "DLQ API", description = "List, replay and delete notification dead-letter queue messages")
+@Validated
 public class DlqController {
 
     private static final int DEFAULT_LIMIT = 10;
+    private static final int MAX_LIMIT = 200;
 
     private final DlqService dlqService;
 
@@ -51,8 +56,10 @@ public class DlqController {
         description = "Returns a best-effort snapshot page of dead-letter messages plus the queue's approximate depth")
     @ApiResponse(responseCode = "200", description = "Page of DLQ messages",
         content = @Content(schema = @Schema(implementation = DlqListResponse.class)))
+    @ApiResponse(responseCode = "400", description = "limit is below 1 or above " + MAX_LIMIT, content = @Content)
     @Timed("dlq.list")
-    public DlqListResponse list(@RequestParam(name = "limit", defaultValue = "" + DEFAULT_LIMIT) int limit) {
+    public DlqListResponse list(
+            @RequestParam(name = "limit", defaultValue = "" + DEFAULT_LIMIT) @Min(1) @Max(MAX_LIMIT) int limit) {
         return dlqService.list(limit);
     }
 
@@ -70,10 +77,10 @@ public class DlqController {
     }
 
     @DeleteMapping
-    @ResponseStatus(HttpStatus.OK)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete DLQ messages",
         description = "Removes the selected messages from the DLQ. Requires the admin secret header.")
-    @ApiResponse(responseCode = "200", description = "Delete batch processed", content = @Content)
+    @ApiResponse(responseCode = "204", description = "Delete batch processed", content = @Content)
     @ApiResponse(responseCode = "400", description = "Request body is missing or ids is empty", content = @Content)
     @ApiResponse(responseCode = "401", description = "Missing or invalid admin secret", content = @Content)
     @Timed("dlq.delete")

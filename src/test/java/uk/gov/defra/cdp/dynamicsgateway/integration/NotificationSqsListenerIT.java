@@ -4,8 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import com.azure.core.amqp.AmqpRetryOptions;
 import com.azure.core.amqp.exception.AmqpErrorCondition;
@@ -116,7 +117,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     @Test
     void sqsToAsb_shouldForwardMessage_whenValidEvent() {
         // Given
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(eventBody, AGGREGATE_ID, deduplicationId);
 
@@ -139,7 +140,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
         // When / Then — the in-process retry exhausts at exactly maxAttempts for the single processing
@@ -147,12 +148,10 @@ class NotificationSqsListenerIT extends IntegrationBase {
         // maxReceiveCount). The 30s visibility timeout keeps the message invisible well past the ~1.5s
         // retry window, so the count settles at maxAttempts before any redelivery could re-invoke the sender.
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
-            assertThat(Mockito.mockingDetails(senderClient).getInvocations())
-                .as("a transient failure must be retried in-process up to maxAttempts before giving up")
-                .hasSize(RETRY_MAX_ATTEMPTS));
+            verify(senderClient, times(RETRY_MAX_ATTEMPTS)).sendMessage(any(ServiceBusMessage.class)));
         assertThat(totalMessagesInQueue())
             .as("after exhausting in-process retries the message must remain in SQS for redelivery, not be deleted")
-            .isGreaterThanOrEqualTo(1);
+            .isEqualTo(1);
     }
 
     @Test
@@ -163,7 +162,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).doCallRealMethod().when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(eventBody, AGGREGATE_ID, deduplicationId);
 
@@ -176,9 +175,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(received.get().getBody()).hasToString(eventBody);
             assertThat(received.get().getMessageId()).isEqualTo(deduplicationId);
         });
-        assertThat(Mockito.mockingDetails(senderClient).getInvocations())
-            .as("recovery should take exactly two attempts: one transient failure then one success")
-            .hasSize(2);
+        verify(senderClient, times(2)).sendMessage(any(ServiceBusMessage.class));
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
             assertThat(totalMessagesInQueue())
                 .as("a recovered message must be deleted from SQS, not left for the DLQ")
@@ -196,7 +193,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             throw transientEx;
         }).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
         // When — wait for the in-process retry budget to be exhausted (maxAttempts publishes, one receive).
@@ -213,9 +210,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .as("first backoff should be ~%dms (initial interval)", expectedFirstMs)
             .isGreaterThanOrEqualTo(expectedFirstMs - toleranceMs);
         assertThat(secondGapMs)
-            .as("second backoff ~%dms (initial × multiplier) and escalating beyond the first gap", expectedSecondMs)
-            .isGreaterThanOrEqualTo(expectedSecondMs - toleranceMs)
-            .isGreaterThan(firstGapMs);
+            .as("second backoff should be ~%dms (initial × multiplier)", expectedSecondMs)
+            .isGreaterThanOrEqualTo(expectedSecondMs - toleranceMs);
     }
 
     @Test
@@ -237,7 +233,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
         doThrow(nonTransientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
         // When / Then — listener must discard (not retry) after a non-transient ASB failure
@@ -245,13 +241,15 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(totalMessagesInQueue())
                 .as("non-transient ASB failures must discard the message, not retry")
                 .isZero());
-        assertThat(Mockito.mockingDetails(senderClient).getInvocations())
-            .as("non-retryable failures must not be retried — exactly one publish attempt, no backoff")
-            .hasSize(1);
+        verify(senderClient, times(1)).sendMessage(any(ServiceBusMessage.class));
     }
 
     private static long millisBetween(long startNanos, long endNanos) {
         return Duration.ofNanos(endNanos - startNanos).toMillis();
+    }
+
+    private static String notificationJson(String aggregateId) {
+        return "{\"aggregateId\":\"" + aggregateId + "\",\"eventType\":\"NotificationSubmitted\"}";
     }
 
     private int totalMessagesInQueue() {

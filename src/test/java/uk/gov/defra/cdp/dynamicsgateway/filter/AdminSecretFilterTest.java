@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AdminSecretFilterTest {
@@ -28,8 +27,7 @@ class AdminSecretFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new AdminSecretFilter();
-        ReflectionTestUtils.setField(filter, "adminSecret", SECRET);
+        filter = new AdminSecretFilter(SECRET);
     }
 
     @Test
@@ -76,6 +74,7 @@ class AdminSecretFilterTest {
         filter.doFilter(request, response, chain);
 
         verify(chain).doFilter(request, response);
+        verify(response, never()).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
     }
 
     @Test
@@ -104,7 +103,7 @@ class AdminSecretFilterTest {
 
     @Test
     void rejectsReplay_whenConfiguredSecretBlank_failClosed() throws Exception {
-        ReflectionTestUtils.setField(filter, "adminSecret", "");
+        filter = new AdminSecretFilter("");
         when(request.getMethod()).thenReturn("POST");
         when(request.getRequestURI()).thenReturn("/dlq/notifications/replay");
         when(request.getHeader(HEADER_NAME)).thenReturn("anything");

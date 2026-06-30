@@ -71,11 +71,11 @@ class DlqControllerTest {
     }
 
     @Test
-    void delete_callsServiceWithIds_andReturnsOkWithNoBody() throws Exception {
+    void delete_callsServiceWithIds_andReturnsNoContent() throws Exception {
         mockMvc.perform(delete("/dlq/notifications")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[\"id-1\"]}"))
-            .andExpect(status().isOk())
+            .andExpect(status().isNoContent())
             .andExpect(content().string(""));
 
         verify(dlqService).delete(List.of("id-1"));
@@ -97,7 +97,8 @@ class DlqControllerTest {
         mockMvc.perform(delete("/dlq/notifications")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[]}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.type").value("/problems/bad-request"));
 
         verifyNoInteractions(dlqService);
     }
@@ -106,6 +107,31 @@ class DlqControllerTest {
     void replay_returnsBadRequest_whenBodyMissing() throws Exception {
         mockMvc.perform(post("/dlq/notifications/replay")
                 .contentType(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(dlqService);
+    }
+
+    @Test
+    void delete_returnsBadRequest_whenBodyMissing() throws Exception {
+        mockMvc.perform(delete("/dlq/notifications")
+                .contentType(MediaType.APPLICATION_JSON))
+            .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(dlqService);
+    }
+
+    @Test
+    void list_returnsBadRequest_whenLimitExceedsMax() throws Exception {
+        mockMvc.perform(get("/dlq/notifications").param("limit", "100000"))
+            .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(dlqService);
+    }
+
+    @Test
+    void list_returnsBadRequest_whenLimitBelowMin() throws Exception {
+        mockMvc.perform(get("/dlq/notifications").param("limit", "0"))
             .andExpect(status().isBadRequest());
 
         verifyNoInteractions(dlqService);

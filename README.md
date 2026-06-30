@@ -108,8 +108,8 @@ The read-only list is open; **replay and delete require the shared-secret header
 `Trade-Imports-Animals-Admin-Secret` matching `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` — a missing,
 blank or mismatched secret is rejected with `401 Unauthorized` before reaching the handler.
 
-Replay and delete take a JSON body of message ids and return `200 OK` with no body once the batch has
-been processed:
+Replay and delete take a JSON body of message ids; replay returns `200 OK` and delete returns
+`204 No Content`, both with no body, once the batch has been processed:
 
 ```jsonc
 // request — POST /dlq/notifications/replay  or  DELETE /dlq/notifications
@@ -122,8 +122,9 @@ remain.
 
 | Response | Condition |
 |---|---|
-| `200 OK` | List succeeded, or the replay/delete batch was processed |
-| `400 Bad Request` | Replay/delete body is missing, malformed, or `ids` is empty |
+| `200 OK` | List succeeded, or the replay batch was processed |
+| `204 No Content` | The delete batch was processed |
+| `400 Bad Request` | `limit` is below 1 or above 200, or a replay/delete body is missing, malformed, or has empty `ids` |
 | `401 Unauthorized` | Replay/delete called without a valid `Trade-Imports-Animals-Admin-Secret` header |
 
 The `id` is the message's `eventId` from the enveloped body when present, otherwise its SQS
