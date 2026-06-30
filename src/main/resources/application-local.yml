@@ -17,6 +17,11 @@ management:
     health:
       show-details: when-authorized
 
+# SpringDoc — enable Swagger UI locally
+springdoc:
+  swagger-ui:
+    enabled: true
+
 # App-level overrides for local development
 # AWS credentials are dummy values accepted by LocalStack — never use real keys here
 app:

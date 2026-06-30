@@ -8,7 +8,7 @@ import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig.Retr
 class NotificationSqsConfigTest {
 
     private static NotificationSqsConfig config(int visibilityTimeoutSeconds, Retry retry) {
-        return new NotificationSqsConfig("http://queue", visibilityTimeoutSeconds, 20, 10, retry);
+        return new NotificationSqsConfig("http://queue", "http://dlq", visibilityTimeoutSeconds, 20, 10, retry);
     }
 
     @Test

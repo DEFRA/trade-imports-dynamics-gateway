@@ -6,6 +6,8 @@ Centralised gateway forwarding notification events to Azure Service Bus (ASB). E
 * [Configuration](#configuration)
 * [Notification pipeline (SQS)](#notification-pipeline-sqs)
 * [Endpoint](#endpoint)
+* [DLQ API](#dlq-api)
+* [API documentation (OpenAPI)](#api-documentation-openapi)
 * [Testing](#testing)
 * [Running](#running)
 * [SonarCloud](#sonarcloud)
@@ -39,6 +41,7 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 |---|---|
 | `AZURE_SERVICE_BUS_CONNECTION_STRING` | SAS connection string including `EntityPath` — e.g. `Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=<queue>` |
 | `NOTIFICATION_SQS_QUEUE_URL` | URL of the SQS FIFO queue for notification events |
+| `NOTIFICATION_SQS_DLQ_URL` | URL of the notification dead-letter queue (CDP provisions it with a `-deadletter` suffix), used by the [DLQ API](#dlq-api) |
 | `AWS_REGION` | AWS region (default: `eu-west-2`) |
 | `APP_AWS_ENDPOINT_OVERRIDE` | LocalStack endpoint for local development (leave unset in deployed environments) |
 | `SQS_VISIBILITY_TIMEOUT_SECONDS` | SQS visibility timeout (default: `30`) |
@@ -48,6 +51,7 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 | `SQS_RETRY_INITIAL_INTERVAL_MS` | First backoff before retrying, in ms (default: `1000`) |
 | `SQS_RETRY_MULTIPLIER` | Growth factor applied to the backoff between attempts (default: `2.0`) |
 | `SQS_RETRY_MAX_INTERVAL_MS` | Ceiling for any single backoff, in ms (default: `10000`) |
+| `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` | Shared secret required on the [DLQ API](#dlq-api) replay/delete calls (`Trade-Imports-Animals-Admin-Secret` header). The same value the admin app holds; must match across both services per environment. A blank value rejects all replay/delete calls |
 
 The transient-failure retry happens in-process and holds the message, so the total retry window (the sum of the backoffs across `SQS_RETRY_MAX_ATTEMPTS`) must stay below `SQS_VISIBILITY_TIMEOUT_SECONDS`; otherwise the message reappears on the queue and is processed concurrently. The defaults give `1s + 2s + 4s = 7s` across 4 attempts, well under the 30s visibility timeout. The service validates this invariant at startup and refuses to start if it is violated.
 
@@ -88,6 +92,65 @@ The request body must include an `aggregateId` field, which is used as the ASB `
 | `502 Bad Gateway` | Azure Service Bus send failed |
 
 Each message is assigned a UUID `messageId` which is logged on success for correlation.
+
+### DLQ API
+
+A REST API over the notification dead-letter queue (`NOTIFICATION_SQS_DLQ_URL`) for operators to
+list, replay and delete individual dead-lettered messages. JSON is snake_case.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /dlq/notifications?limit={n}` | List up to `n` DLQ messages from the front, plus the queue's approximate depth (`limit` defaults to 10; assembled from successive ≤10-message SQS receives until `n` or the queue is exhausted) |
+| `POST /dlq/notifications/replay` | Re-send the selected messages to the source queue, then remove them from the DLQ |
+| `DELETE /dlq/notifications` | Delete the selected messages from the DLQ |
+
+The read-only list is open; **replay and delete require the shared-secret header**
+`Trade-Imports-Animals-Admin-Secret` matching `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` — a missing,
+blank or mismatched secret is rejected with `401 Unauthorized` before reaching the handler.
+
+Replay and delete take a JSON body of message ids and return `200 OK` with no body once the batch has
+been processed:
+
+```jsonc
+// request — POST /dlq/notifications/replay  or  DELETE /dlq/notifications
+{ "ids": ["<id>", "<id>"] }
+```
+
+Ids that are not found on the DLQ (e.g. blocked behind an in-flight FIFO group) are logged and left
+on the DLQ rather than reported in the response, so the action can simply be retried for any that
+remain.
+
+| Response | Condition |
+|---|---|
+| `200 OK` | List succeeded, or the replay/delete batch was processed |
+| `400 Bad Request` | Replay/delete body is missing, malformed, or `ids` is empty |
+| `401 Unauthorized` | Replay/delete called without a valid `Trade-Imports-Animals-Admin-Secret` header |
+
+The `id` is the message's `eventId` from the enveloped body when present, otherwise its SQS
+`MessageDeduplicationId`. Because SQS has no stable cursor and `GetQueueAttributes` counts are
+eventually consistent, a list is a **best-effort snapshot** — the set and `approximate_count` can
+drift between calls. Replay preserves the FIFO `MessageGroupId` and re-sends with the `id` as the
+dedup id, so the eventual ASB `messageId` stays equal to the original `eventId`. Messages are only
+ever removed individually, never by purging the queue.
+
+#### Operator runbook — replay & delete
+
+* **Replay only after the underlying bug is fixed.** A replayed message is re-consumed and
+  re-published immediately; replaying into a still-broken pipeline just dead-letters it again.
+* **Receive count resets on replay.** The re-sent message starts at receive count 1 on the source
+  queue, so it gets the full `maxReceiveCount` budget again.
+* **FIFO group-blocking.** Messages in the same `MessageGroupId` are processed in order; a message
+  cannot be replayed/listed past an earlier in-flight message in its group until that one clears.
+  Drain a group by actioning the messages shown, then listing again.
+* **Snapshot, not a guarantee.** `approximate_count` and the listed set can drift between calls; treat
+  the list as best-effort.
+* **Delete is irreversible** for the selected ids and leaves all other messages untouched.
+
+### API documentation (OpenAPI)
+
+The REST endpoints are documented with OpenAPI via [springdoc](https://springdoc.org/). The generated
+spec is served at `/v3/api-docs`. The Swagger UI is **enabled only in the `local` profile**
+(`/swagger-ui.html`) and disabled in deployed environments (`springdoc.swagger-ui.enabled=false`).
 
 ### Testing
 

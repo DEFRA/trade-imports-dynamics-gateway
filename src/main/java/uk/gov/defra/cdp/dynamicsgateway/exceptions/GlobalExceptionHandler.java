@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -18,14 +19,16 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
     private static final String MDC_TRACE_ID = "trace.id";
+    private static final String BAD_REQUEST_TITLE = "Bad Request";
+    private static final String BAD_REQUEST_TYPE = "/problems/bad-request";
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetail> handleUnreadableBody(HttpMessageNotReadableException ex) {
         log.warn("Rejected request — unreadable body: {}", ex.getMessage());
         return problemResponse(
             HttpStatus.BAD_REQUEST,
-            "Bad Request",
-            "/problems/bad-request",
+            BAD_REQUEST_TITLE,
+            BAD_REQUEST_TYPE,
             "Request body is missing or not valid JSON"
         );
     }
@@ -35,9 +38,20 @@ public class GlobalExceptionHandler {
         log.warn("Rejected request — invalid argument: {}", ex.getMessage());
         return problemResponse(
             HttpStatus.BAD_REQUEST,
-            "Bad Request",
-            "/problems/bad-request",
+            BAD_REQUEST_TITLE,
+            BAD_REQUEST_TYPE,
             ex.getMessage()
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidBody(MethodArgumentNotValidException ex) {
+        log.warn("Rejected request — invalid body: {}", ex.getMessage());
+        return problemResponse(
+            HttpStatus.BAD_REQUEST,
+            BAD_REQUEST_TITLE,
+            BAD_REQUEST_TYPE,
+            "Request body failed validation"
         );
     }
 
