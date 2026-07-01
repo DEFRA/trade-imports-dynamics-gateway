@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -97,10 +98,13 @@ public class DlqService {
     }
 
     /**
-     * Re-send each selected message to the source queue (preserving its FIFO group and a stable dedup
-     * id) then delete it from the DLQ. The re-send happens before the delete, and only messages that
-     * actually re-sent are deleted, so a failed publish leaves the message on the DLQ. Ids not found
-     * within the receive window are logged and left for the caller to retry.
+     * Re-send each selected message to the source queue (preserving its FIFO group) then delete it from
+     * the DLQ. The re-send happens before the delete, and only messages that actually re-sent are
+     * deleted, so a failed publish leaves the message on the DLQ. Ids not found within the receive window
+     * are logged and left for the caller to retry.
+     *
+     * <p>The re-send deliberately does NOT reuse the message's original source-queue dedup id — see
+     * {@link #replayBatch} and {@code docs/notification-pipeline-dedup.md}.
      */
     public void replay(Collection<String> ids) {
         actOnMatching(ids, this::replayBatch);
@@ -156,6 +160,16 @@ public class DlqService {
     /**
      * Re-send a batch (≤10) to the source queue, then delete from the DLQ only the entries that
      * re-sent. Batch entry ids are the index into {@code messages}, so the per-entry results map back.
+     *
+     * <p>Each entry gets a fresh, unique {@link #replayDedupId(Message) transport dedup id} rather than
+     * reusing the message's original {@code idOf(message)} — reusing it would collide with the source
+     * queue's 5-minute FIFO dedup window when a message is replayed soon after its original send (a
+     * fast-failing message can reach the DLQ in well under 5 minutes), causing SQS to silently accept
+     * the send without delivering it, after which this method would delete the "replayed" message from
+     * the DLQ — a silent, unrecoverable loss. See {@code docs/notification-pipeline-dedup.md}.
+     *
+     * <p>The ASB-level dedup key stays stable across the replay regardless: {@link NotificationSqsListener}
+     * derives the ASB messageId from the body {@code eventId}, not from this transport dedup id.
      */
     private void replayBatch(List<Message> messages) {
         List<SendMessageBatchRequestEntry> sendEntries = new ArrayList<>();
@@ -165,7 +179,7 @@ public class DlqService {
                 .id(String.valueOf(i))
                 .messageBody(message.body())
                 .messageGroupId(message.attributes().get(MessageSystemAttributeName.MESSAGE_GROUP_ID))
-                .messageDeduplicationId(idOf(message))
+                .messageDeduplicationId(replayDedupId(message))
                 .build());
         }
         SendMessageBatchResponse sent = sqsAsyncClient.sendMessageBatch(request -> request
@@ -240,13 +254,26 @@ public class DlqService {
     }
 
     /**
-     * The stable id a caller selects on: the {@code eventId} from the body once EUDPA-261 ships it,
-     * otherwise the SQS {@code MessageDeduplicationId}. Replay reuses this as the source re-send dedup
-     * id so the eventual ASB {@code messageId} stays equal to the original {@code eventId}.
+     * The stable id a caller selects on: the {@code eventId} from the body, otherwise the SQS
+     * {@code MessageDeduplicationId}. This is the operator-facing id ({@link DlqMessage#id()}) and the
+     * ASB {@code messageId} ({@link NotificationSqsListener} derives it the same way) — but it is
+     * deliberately NOT reused as the source-queue transport dedup id on replay; see
+     * {@link #replayDedupId(Message)}.
      */
     private String idOf(Message message) {
         return EventEnvelope.eventId(objectMapper, message.body())
             .orElseGet(() -> message.attributes().get(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID));
+    }
+
+    /**
+     * A fresh, unique {@code MessageDeduplicationId} for re-sending {@code message} to the source queue
+     * on replay — never the same value twice, so the source queue's 5-minute FIFO dedup window can never
+     * suppress a deliberate re-drive (see {@link #replayBatch}). Prefixed with {@link #idOf(Message)} so
+     * the transport id stays traceable back to the operator-facing selection id in SQS-level logs/traces,
+     * while staying comfortably under SQS's 128-character {@code MessageDeduplicationId} limit.
+     */
+    private String replayDedupId(Message message) {
+        return idOf(message) + ":replay:" + UUID.randomUUID();
     }
 
     private int receiveCount(Message message) {

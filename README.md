@@ -130,14 +130,20 @@ remain.
 The `id` is the message's `eventId` from the enveloped body when present, otherwise its SQS
 `MessageDeduplicationId`. Because SQS has no stable cursor and `GetQueueAttributes` counts are
 eventually consistent, a list is a **best-effort snapshot** — the set and `approximate_count` can
-drift between calls. Replay preserves the FIFO `MessageGroupId` and re-sends with the `id` as the
-dedup id, so the eventual ASB `messageId` stays equal to the original `eventId`. Messages are only
-ever removed individually, never by purging the queue.
+drift between calls. Replay preserves the FIFO `MessageGroupId` but re-sends with a **fresh, unique**
+transport dedup id — not the original `id` — so a prompt replay is never silently swallowed by the
+source queue's 5-minute FIFO dedup window; the eventual ASB `messageId` still stays equal to the
+original `eventId` regardless (see `docs/notification-pipeline-dedup.md`). Messages are only ever
+removed individually, never by purging the queue.
 
 #### Operator runbook — replay & delete
 
 * **Replay only after the underlying bug is fixed.** A replayed message is re-consumed and
   re-published immediately; replaying into a still-broken pipeline just dead-letters it again.
+* **Don't replay the same message twice in quick succession.** Unlike list/delete, replay is not
+  idempotent at the transport level — a double-click (or repeated retry of a failed replay request)
+  can produce two separate deliveries to the source queue, each independently forwarded to ASB. If a
+  replay's outcome is unclear, check the source queue / ASB rather than replaying again.
 * **Receive count resets on replay.** The re-sent message starts at receive count 1 on the source
   queue, so it gets the full `maxReceiveCount` budget again.
 * **FIFO group-blocking.** Messages in the same `MessageGroupId` are processed in order; a message

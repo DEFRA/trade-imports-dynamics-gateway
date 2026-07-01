@@ -3,6 +3,7 @@ package uk.gov.defra.cdp.dynamicsgateway.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -190,7 +191,7 @@ class DlqServiceTest {
     }
 
     @Test
-    void replay_reSendsBatchToSourcePreservingGroupAndDedupId_thenDeletesFromDlq() {
+    void replay_reSendsBatchToSourcePreservingGroupButMintingFreshDedupId_thenDeletesFromDlq() {
         stubReceive(batch(message("dedup-1", "{\"key\":\"a\"}", 3, "rh-1")));
         stubSendBatch("0");
         stubDeleteBatch();
@@ -201,7 +202,12 @@ class DlqServiceTest {
         assertThat(sent.queueUrl()).isEqualTo(SOURCE_URL);
         assertThat(sent.entries()).singleElement().satisfies(entry -> {
             assertThat(entry.messageGroupId()).isEqualTo(GROUP_ID);
-            assertThat(entry.messageDeduplicationId()).isEqualTo("dedup-1");
+            // Must NOT reuse the original dedup id — reusing it would collide with the source queue's
+            // 5-minute FIFO dedup window on a prompt replay and cause a silent, undelivered "success".
+            assertThat(entry.messageDeduplicationId())
+                .isNotEqualTo("dedup-1")
+                .startsWith("dedup-1:replay:")
+                .hasSizeLessThanOrEqualTo(128); // SQS MessageDeduplicationId limit
             assertThat(entry.messageBody()).isEqualTo("{\"key\":\"a\"}");
         });
 
@@ -212,7 +218,7 @@ class DlqServiceTest {
     }
 
     @Test
-    void replay_usesEventIdAsSourceDedupId_whenBodyIsEnveloped() {
+    void replay_prefixesFreshDedupIdWithEventId_whenBodyIsEnveloped() {
         stubReceive(batch(message("dedup-1", "{\"eventId\":\"evt-77\"}", 3, "rh-1")));
         stubSendBatch("0");
         stubDeleteBatch();
@@ -220,7 +226,27 @@ class DlqServiceTest {
         service(DLQ_URL).replay(List.of("evt-77"));
 
         assertThat(captureSendBatch().entries()).singleElement()
-            .satisfies(entry -> assertThat(entry.messageDeduplicationId()).isEqualTo("evt-77"));
+            .satisfies(entry -> assertThat(entry.messageDeduplicationId())
+                .isNotEqualTo("evt-77")
+                .startsWith("evt-77:replay:"));
+    }
+
+    @Test
+    void replay_mintsADifferentDedupId_onEachReplayOfTheSameMessage() {
+        stubReceive(batch(message("dedup-1", "{\"key\":\"a\"}", 3, "rh-1")));
+        stubSendBatch("0");
+        stubDeleteBatch();
+        service(DLQ_URL).replay(List.of("dedup-1"));
+        String firstDedupId = captureSendBatch().entries().getFirst().messageDeduplicationId();
+
+        clearInvocations(sqsAsyncClient);
+        stubReceive(batch(message("dedup-1", "{\"key\":\"a\"}", 3, "rh-2")));
+        stubSendBatch("0");
+        stubDeleteBatch();
+        service(DLQ_URL).replay(List.of("dedup-1"));
+        String secondDedupId = captureSendBatch().entries().getFirst().messageDeduplicationId();
+
+        assertThat(secondDedupId).isNotEqualTo(firstDedupId);
     }
 
     @Test

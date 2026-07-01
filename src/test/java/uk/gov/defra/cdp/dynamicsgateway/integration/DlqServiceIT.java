@@ -21,6 +21,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
+import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
@@ -145,13 +146,17 @@ class DlqServiceIT {
         assertThat(onSource).isPresent();
         assertThat(onSource.get().body()).isEqualTo("{\"key\":\"a\"}");
         assertThat(onSource.get().attributes())
-            .containsEntry(MessageSystemAttributeName.MESSAGE_GROUP_ID, GROUP_A)
-            .containsEntry(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID, "dedup-a");
+            .containsEntry(MessageSystemAttributeName.MESSAGE_GROUP_ID, GROUP_A);
+        // A fresh, unique dedup id — never the original — so a prompt replay can't collide with the
+        // source queue's 5-minute FIFO dedup window.
+        assertThat(onSource.get().attributes().get(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID))
+            .isNotEqualTo("dedup-a")
+            .startsWith("dedup-a:replay:");
         await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 0);
     }
 
     @Test
-    void replay_usesEventIdAsSourceDedupId_whenBodyIsEnveloped() {
+    void replay_prefixesFreshSourceDedupIdWithEventId_whenBodyIsEnveloped() {
         seedDlq("{\"eventId\":\"evt-42\",\"key\":\"a\"}", GROUP_A, "dedup-a");
         await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
 
@@ -159,8 +164,37 @@ class DlqServiceIT {
 
         Optional<Message> onSource = receiveFromSource();
         assertThat(onSource).isPresent();
-        assertThat(onSource.get().attributes())
-            .containsEntry(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID, "evt-42");
+        assertThat(onSource.get().attributes().get(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID))
+            .isNotEqualTo("evt-42")
+            .startsWith("evt-42:replay:");
+    }
+
+    @Test
+    void replay_reDeliversToSource_evenWhenOriginalDedupIdStillInsideSourceFifoDedupWindow() {
+        // Simulate the message's original journey: sent to the source queue and consumed (deleted) —
+        // but SQS remembers its MessageDeduplicationId for 5 minutes regardless of queue depth, so the
+        // id is still "in the window" even though the queue itself is now empty.
+        String dedupId = "evt-replay-dedup-window";
+        String body = "{\"eventId\":\"" + dedupId + "\",\"key\":\"a\"}";
+        primeSourceDedupWindow(body, GROUP_A, dedupId);
+
+        // The same message (same body, same original dedup id) has since reached the DLQ and is replayed
+        // promptly — well within the 5-minute window a naive re-send with the same dedup id would collide
+        // with.
+        seedDlq(body, GROUP_A, dedupId);
+        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
+
+        dlqService.replay(List.of(dedupId));
+
+        // Must actually reach the source queue — not be silently swallowed by the dedup window and then
+        // deleted from the DLQ as if it had succeeded.
+        Optional<Message> onSource = receiveFromSource();
+        assertThat(onSource)
+            .as("replay must re-deliver even though the original dedup id is still inside "
+                + "SQS's 5-minute FIFO dedup window")
+            .isPresent();
+        assertThat(onSource.get().body()).isEqualTo(body);
+        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 0);
     }
 
     @Test
@@ -210,6 +244,33 @@ class DlqServiceIT {
 
         // Nothing matched, so the message stays on the DLQ.
         await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
+    }
+
+    /**
+     * Send {@code body} to the SOURCE queue with {@code dedupId}, then immediately receive+delete it so
+     * the queue is empty again — but SQS's FIFO dedup memory for {@code dedupId} persists for 5 minutes
+     * regardless, so a later send re-using the same id would be silently deduped.
+     */
+    private void primeSourceDedupWindow(String body, String group, String dedupId) {
+        try (SqsClient sqs = localSqsClient()) {
+            sqs.sendMessage(SendMessageRequest.builder()
+                .queueUrl(sourceQueueUrl)
+                .messageBody(body)
+                .messageGroupId(group)
+                .messageDeduplicationId(dedupId)
+                .build());
+            List<Message> received = sqs.receiveMessage(ReceiveMessageRequest.builder()
+                    .queueUrl(sourceQueueUrl)
+                    .maxNumberOfMessages(1)
+                    .waitTimeSeconds(5)
+                    .build())
+                .messages();
+            assertThat(received).as("priming send must be received before delete").hasSize(1);
+            sqs.deleteMessage(DeleteMessageRequest.builder()
+                .queueUrl(sourceQueueUrl)
+                .receiptHandle(received.getFirst().receiptHandle())
+                .build());
+        }
     }
 
     private void seedDlq(String body, String group, String dedupId) {

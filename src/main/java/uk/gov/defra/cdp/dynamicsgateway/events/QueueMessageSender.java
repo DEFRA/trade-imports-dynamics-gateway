@@ -56,11 +56,18 @@ public class QueueMessageSender {
      *
      * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
      * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
-     * @param messageId   stable id to set as the ASB messageId (e.g. the upstream SQS
-     *                    MessageDeduplicationId, derived from the backend outbox eventId); a fresh
-     *                    UUID is generated when null or blank. A stable id keeps the dedup key
-     *                    consistent across the pipeline and makes ASB duplicate detection effective
-     *                    if it is ever enabled — see docs/notification-pipeline-dedup.md.
+     * @param messageId   stable id to set as the ASB messageId — the backend outbox {@code eventId}
+     *                    when available (falling back to the upstream SQS MessageDeduplicationId); a
+     *                    fresh UUID is generated when null or blank. A stable id keeps the dedup key
+     *                    consistent across the pipeline, including across DLQ replay, and makes ASB
+     *                    duplicate detection effective if it is ever enabled — see
+     *                    docs/notification-pipeline-dedup.md.
+     *                    {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationSqsListener}
+     *                    resolves this once per message before its retry loop (including the UUID
+     *                    fallback), so every in-process retry attempt reuses the identical id — the
+     *                    null/blank fallback here only fires for callers that don't do that (e.g.
+     *                    {@link #publish(String, String)}, used by the un-retried {@code /events}
+     *                    REST endpoint).
      * @throws SqsRetryableException if the failure is transient and worth retrying
      * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */

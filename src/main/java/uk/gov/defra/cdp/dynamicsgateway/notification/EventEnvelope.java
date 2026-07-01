@@ -9,10 +9,10 @@ import lombok.extern.slf4j.Slf4j;
  * Reads the stable {@code eventId} from an enveloped notification body.
  *
  * <p>The backend outbox publishes the full event envelope (carrying {@code eventId}) in the message
- * body via EUDPA-261. Until that lands the field is absent and callers fall back to the SQS
- * {@code MessageDeduplicationId}. Using {@code eventId} as the ASB {@code messageId} keeps the dedup
- * key stable end-to-end and survives the FIFO-DLQ overwrite of {@code MessageDeduplicationId} on
- * replay — see {@code docs/notification-pipeline-dedup.md}.
+ * body (EUDPA-261). Callers fall back to the SQS {@code MessageDeduplicationId} when the field is
+ * absent. Using {@code eventId} as the ASB {@code messageId} keeps the dedup key stable end-to-end
+ * and survives {@link DlqService} minting a fresh, unique transport dedup id on replay — see
+ * {@code docs/notification-pipeline-dedup.md}.
  */
 @Slf4j
 final class EventEnvelope {
