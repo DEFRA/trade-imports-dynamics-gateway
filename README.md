@@ -133,8 +133,8 @@ eventually consistent, a list is a **best-effort snapshot** — the set and `app
 drift between calls. Replay preserves the FIFO `MessageGroupId` but re-sends with a **fresh, unique**
 transport dedup id — not the original `id` — so a prompt replay is never silently swallowed by the
 source queue's 5-minute FIFO dedup window; the eventual ASB `messageId` still stays equal to the
-original `eventId` regardless (see `docs/notification-pipeline-dedup.md`). Messages are only ever
-removed individually, never by purging the queue.
+original `eventId` regardless. Messages are only ever removed individually, never by purging the
+queue.
 
 #### Operator runbook — replay & delete
 
