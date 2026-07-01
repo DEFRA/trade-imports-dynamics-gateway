@@ -63,6 +63,10 @@ public class AwsConfig {
         return SqsMessageListenerContainerFactory.builder()
             .configure(options -> options
                 .maxConcurrentMessages(sqsConfig.maxMessages())
+                // Keep the receive-poll batch in step with the concurrency ceiling: awspring asserts
+                // maxMessagesPerPoll <= maxConcurrentMessages (default 10), and there is no point
+                // fetching more than we can process at once.
+                .maxMessagesPerPoll(sqsConfig.maxMessages())
                 .pollTimeout(Duration.ofSeconds(sqsConfig.waitTimeSeconds()))
                 .messageVisibility(Duration.ofSeconds(sqsConfig.visibilityTimeoutSeconds())))
             .sqsAsyncClient(sqsAsyncClient)

@@ -20,7 +20,10 @@ aws:
       dlq-url: ${NOTIFICATION_SQS_DLQ_URL:}
       visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
       wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
-      max-messages: ${SQS_MAX_MESSAGES:10}
+      # Max messages processed concurrently by the listener (also the receive-poll batch size). Across
+      # distinct FIFO message groups only; within a group SQS still delivers one at a time. Max 10 (SQS
+      # ReceiveMessage limit / awspring maxMessagesPerPoll).
+      max-messages: ${SQS_MAX_MESSAGES:3}
       # In-process exponential backoff for a transient ASB publish failure (Spring RetryTemplate +
       # ExponentialBackOffPolicy, retrying only SqsRetryableException). The total retry window must
       # stay below visibility-timeout-seconds; defaults give 1s + 2s + 4s = 7s across 4 attempts.
@@ -108,6 +111,9 @@ logging:
     uk.gov.defra.cdp.dynamicsgateway: ${LOG_LEVEL:DEBUG}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
     org.springframework.web: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB:INFO}
+    # Azure Service Bus SDK logs AMQP link/session lifecycle ("az.sdk.message") at INFO, which floods
+    # the logs (especially against the local ASB emulator's reconnect churn). WARN keeps real problems.
+    com.azure: ${LOGGING_LEVEL_COM_AZURE:WARN}
 
 info:
   app:

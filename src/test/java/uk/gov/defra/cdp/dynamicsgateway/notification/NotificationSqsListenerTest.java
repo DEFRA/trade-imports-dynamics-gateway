@@ -36,6 +36,7 @@ class NotificationSqsListenerTest {
 
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final String DEDUP_ID = "11111111-2222-3333-4444-555555555555";
+    private static final String RECEIVE_COUNT = "1";
     private static final String VALID_BODY =
         "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
 
@@ -54,7 +55,7 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldForwardToAsb_whenValid() {
-        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
+        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
@@ -62,15 +63,23 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldForwardWithNullDedupId_whenHeaderAbsent() {
-        listener.receive(VALID_BODY, AGGREGATE_ID, null);
+        listener.receive(VALID_BODY, AGGREGATE_ID, null, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(eq(VALID_BODY), eq(AGGREGATE_ID), isNull());
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
     @Test
+    void receive_shouldForward_whenReceiveCountHeaderAbsent() {
+        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, null);
+
+        verify(queueMessageSender).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
+        assertThat(counterValue("forwarded")).isEqualTo(1.0);
+    }
+
+    @Test
     void receive_shouldThrowNonRetryable_whenAggregateIdIsNull() {
-        assertThatThrownBy(() -> listener.receive(VALID_BODY, null, DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, null, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("MESSAGE_GROUP_ID");
 
@@ -79,7 +88,7 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenAggregateIdIsBlank() {
-        assertThatThrownBy(() -> listener.receive(VALID_BODY, "  ", DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, "  ", DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("MESSAGE_GROUP_ID");
 
@@ -88,7 +97,7 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenBodyIsNull() {
-        assertThatThrownBy(() -> listener.receive(null, AGGREGATE_ID, DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive(null, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessage("Empty message body");
 
@@ -97,7 +106,7 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenBodyIsBlank() {
-        assertThatThrownBy(() -> listener.receive("  ", AGGREGATE_ID, DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive("  ", AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessage("Empty message body");
 
@@ -106,7 +115,7 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenBodyIsInvalidJson() {
-        assertThatThrownBy(() -> listener.receive("not-json", AGGREGATE_ID, DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive("not-json", AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("not valid JSON");
 
@@ -120,7 +129,7 @@ class NotificationSqsListenerTest {
             .when(queueMessageSender).publish(any(), any(), any());
 
         // When / Then — retried in-process up to maxAttempts before propagating to the SQS error handler.
-        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsRetryableException.class);
         verify(queueMessageSender, times(MAX_ATTEMPTS)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
@@ -134,7 +143,7 @@ class NotificationSqsListenerTest {
             .when(queueMessageSender).publish(any(), any(), any());
 
         // When
-        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
+        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         // Then
         verify(queueMessageSender, times(2)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
@@ -148,7 +157,7 @@ class NotificationSqsListenerTest {
             .when(queueMessageSender).publish(any(), any(), any());
 
         // When / Then — non-retryable failures are not retried: single attempt then propagate to discard.
-        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID))
+        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class);
         verify(queueMessageSender, times(1)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);

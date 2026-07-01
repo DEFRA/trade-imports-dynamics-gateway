@@ -38,7 +38,9 @@ aws:
 
 # Local default so the DLQ replay/delete endpoints are exercisable without extra env setup.
 admin:
-  secret: ${TRADE_IMPORTS_ANIMALS_ADMIN_SECRET:local-admin-secret}
+  # Local default must match the admin + backend default (local-trade-imports-animals-admin-secret)
+  # so the admin app's replay/delete calls authenticate against this gateway without extra env setup.
+  secret: ${TRADE_IMPORTS_ANIMALS_ADMIN_SECRET:local-trade-imports-animals-admin-secret}
 
 azure:
   servicebus:

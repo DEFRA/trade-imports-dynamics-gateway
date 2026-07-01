@@ -47,10 +47,15 @@ public class NotificationSqsListener {
             String body,
             @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId,
             @Header(name = SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_DEDUPLICATION_ID_HEADER,
-                required = false) String deduplicationId) {
+                required = false) String deduplicationId,
+            // SQS ApproximateReceiveCount — climbs 1, 2, 3... on each redelivery. Logged so a failing
+            // message's progress toward the DLQ is visible: once it hits the queue's maxReceiveCount and
+            // fails again, SQS (not this app) moves it to the DLQ — there is no gateway "sent to DLQ" log.
+            @Header(name = SqsHeaders.MessageSystemAttributes.SQS_APPROXIMATE_RECEIVE_COUNT,
+                required = false) String receiveCount) {
 
-        log.info("Received notification event from SQS: aggregateId={}, deduplicationId={}, bodyLength={}",
-            aggregateId, deduplicationId, body != null ? body.length() : 0);
+        log.info("Received notification event from SQS: aggregateId={}, deduplicationId={}, receiveCount={}, bodyLength={}",
+            aggregateId, deduplicationId, receiveCount, body != null ? body.length() : 0);
 
         if (aggregateId == null || aggregateId.isBlank()) {
             throw new SqsNonRetryableException("Missing or blank MESSAGE_GROUP_ID: " + aggregateId);

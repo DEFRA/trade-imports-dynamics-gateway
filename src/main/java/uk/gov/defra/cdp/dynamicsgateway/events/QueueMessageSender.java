@@ -84,6 +84,10 @@ public class QueueMessageSender {
         } catch (IllegalStateException e) {
             log.warn("ASB sender in illegal state ({}), retryable: {}", e.getClass().getSimpleName(), e.getMessage());
             throw new SqsRetryableException("ASB sender disposed", e);
+        } catch (SqsRetryableException | SqsNonRetryableException e) {
+            // Already classified upstream — preserve it. Without this guard the broad catch below
+            // re-wraps it as non-retryable, silently flipping a retryable failure to discard/delete.
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error ({}) sending to ASB, non-retryable: {}", e.getClass().getSimpleName(), e.getMessage(), e);
             throw new SqsNonRetryableException("Unexpected ASB send failure", e);

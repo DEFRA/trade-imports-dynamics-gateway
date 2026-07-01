@@ -30,8 +30,13 @@ public class NotificationRetryListener implements RetryListener {
     public <T, E extends Throwable> void close(
             RetryContext context, RetryCallback<T, E> callback, Throwable throwable) {
         if (throwable != null) {
+            // Message + type only, not the throwable itself: a poison message is redelivered by SQS on
+            // every receive (receiveCount climbs 1,2,3...), so logging the full stack trace each time
+            // would flood the log with duplicate traces. The SqsRetryableException stack adds nothing
+            // beyond the underlying cause's message, which we surface here.
             log.error("Transient ASB publish retries exhausted after {} attempt(s); "
-                + "leaving message in SQS for redelivery", context.getRetryCount(), throwable);
+                + "leaving message in SQS for redelivery ({}: {})",
+                context.getRetryCount(), throwable.getClass().getSimpleName(), throwable.getMessage());
         }
     }
 }
