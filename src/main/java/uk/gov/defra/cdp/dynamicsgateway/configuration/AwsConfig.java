@@ -88,6 +88,9 @@ public class AwsConfig {
             .maxAttempts(retry.maxAttempts())
             // 4th arg = withRandom: adds jitter (ExponentialRandomBackOffPolicy) so concurrent
             // listeners failing together against a degraded ASB don't retry in synchronised bursts.
+            // Keep this true — NotificationSqsConfig.Retry.worstCaseJitteredWindowMillis() models
+            // exactly this policy for the startup visibility-timeout safety check; changing it here
+            // without updating that method silently invalidates the check.
             .exponentialBackoff(retry.initialInterval(), retry.multiplier(), retry.maxInterval(), true)
             .retryOn(SqsRetryableException.class)
             .withListener(new NotificationRetryListener(retry.maxAttempts()))
