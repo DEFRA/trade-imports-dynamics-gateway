@@ -151,4 +151,26 @@ class QueueMessageSenderTest {
             .isInstanceOf(SqsNonRetryableException.class)
             .hasCauseInstanceOf(NullPointerException.class);
     }
+
+    @Test
+    void publish_shouldPreserveAlreadyClassifiedRetryableException_ratherThanReWrappingAsNonRetryable() {
+        // A retryable failure surfacing from the send must NOT be flipped to non-retryable (which the
+        // error handler would then discard/delete instead of routing to the DLQ via redelivery).
+        SqsRetryableException alreadyClassified =
+            new SqsRetryableException("transient ASB failure", new RuntimeException("boom"));
+        doThrow(alreadyClassified).when(senderClient).sendMessage(any());
+
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isSameAs(alreadyClassified);
+    }
+
+    @Test
+    void publish_shouldPreserveAlreadyClassifiedNonRetryableException_ratherThanDoubleWrapping() {
+        SqsNonRetryableException alreadyClassified =
+            new SqsNonRetryableException("permanent ASB failure");
+        doThrow(alreadyClassified).when(senderClient).sendMessage(any());
+
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isSameAs(alreadyClassified);
+    }
 }

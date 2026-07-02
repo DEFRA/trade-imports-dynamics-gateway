@@ -98,7 +98,7 @@ class EventsSendControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"eventType\":\"NotificationSubmitted\"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("aggregateId is required"));
+            .andExpect(jsonPath("$.detail").value("Request parameter is invalid"));
 
         verifyNoInteractions(queueMessageSender);
     }
@@ -110,7 +110,7 @@ class EventsSendControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"aggregateId\":\"  \"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").value("aggregateId is required"));
+            .andExpect(jsonPath("$.detail").value("Request parameter is invalid"));
 
         verifyNoInteractions(queueMessageSender);
     }

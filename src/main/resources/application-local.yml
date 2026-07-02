@@ -17,6 +17,11 @@ management:
     health:
       show-details: when-authorized
 
+# SpringDoc — enable Swagger UI locally
+springdoc:
+  swagger-ui:
+    enabled: true
+
 # App-level overrides for local development
 # AWS credentials are dummy values accepted by LocalStack — never use real keys here
 app:
@@ -29,6 +34,13 @@ aws:
   sqs:
     notification:
       queue-url: ${NOTIFICATION_SQS_QUEUE_URL:http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway.fifo}
+      dlq-url: ${NOTIFICATION_SQS_DLQ_URL:http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway-deadletter.fifo}
+
+# Local default so the DLQ replay/delete endpoints are exercisable without extra env setup.
+admin:
+  # Local default must match the admin + backend default (local-trade-imports-animals-admin-secret)
+  # so the admin app's replay/delete calls authenticate against this gateway without extra env setup.
+  secret: ${TRADE_IMPORTS_ANIMALS_ADMIN_SECRET:local-trade-imports-animals-admin-secret}
 
 azure:
   servicebus:
