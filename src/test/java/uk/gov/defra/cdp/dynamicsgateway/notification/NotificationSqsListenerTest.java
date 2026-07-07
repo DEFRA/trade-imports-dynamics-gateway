@@ -13,7 +13,6 @@ import static org.mockito.Mockito.verify;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,15 +20,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.retry.support.RetryTemplate;
 import uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationSqsListenerTest {
-
-    private static final int MAX_ATTEMPTS = 3;
 
     @Mock
     private QueueMessageSender queueMessageSender;
@@ -50,14 +46,7 @@ class NotificationSqsListenerTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        // Tiny backoff so retries run instantly; retries only SqsRetryableException, matching prod wiring.
-        RetryTemplate retryTemplate = RetryTemplate.builder()
-            .maxAttempts(MAX_ATTEMPTS)
-            .fixedBackoff(1)
-            .retryOn(SqsRetryableException.class)
-            .build();
-        listener = new NotificationSqsListener(
-            queueMessageSender, new ObjectMapper(), retryTemplate, meterRegistry);
+        listener = new NotificationSqsListener(queueMessageSender, new ObjectMapper(), meterRegistry);
     }
 
     @Test
@@ -82,9 +71,9 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldUseBodyEventIdAsAsbMessageId_whenPresent_evenIfDedupHeaderDiffers() {
-        // The SQS dedup header can legitimately differ from the body eventId on a DLQ replay (DlqService
-        // mints a fresh transport dedup id per replay) — the ASB messageId must still track the body
-        // eventId, not the header, so the ASB-level dedup key stays stable across the replay.
+        // The SQS dedup header can legitimately differ from the body eventId on a DLQ replay (a native
+        // SQS redrive can carry a different transport dedup id) — the ASB messageId must still track
+        // the body eventId, not the header, so the ASB-level dedup key stays stable across the replay.
         listener.receive(ENVELOPED_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(ENVELOPED_BODY, AGGREGATE_ID, EVENT_ID);
@@ -92,59 +81,14 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldUseSameGeneratedId_acrossRetries_whenNoEventIdAndNoDedupHeader() {
-        // Given — the regression this fix targets: previously each in-process retry attempt minted its
-        // own fallback UUID inside QueueMessageSender.publish, so a "transient" failure that was actually
-        // a false negative (ASB durably received the message; only the ack was lost) could duplicate-
-        // publish under a different id per attempt, defeating ASB duplicate detection if ever enabled.
-        doThrow(new SqsRetryableException("ASB blip", new RuntimeException("transient")))
-            .doNothing()
-            .when(queueMessageSender).publish(any(), any(), any());
-
-        // When
-        listener.receive(VALID_BODY, AGGREGATE_ID, null, RECEIVE_COUNT);
-
-        // Then — both attempts (the failed one and the recovering one) used the identical resolved id.
-        ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
-        verify(queueMessageSender, times(2))
-            .publish(eq(VALID_BODY), eq(AGGREGATE_ID), messageIdCaptor.capture());
-        List<String> messageIds = messageIdCaptor.getAllValues();
-        assertThat(messageIds.get(1)).isEqualTo(messageIds.get(0));
-        assertThatCode(() -> UUID.fromString(messageIds.get(0))).doesNotThrowAnyException();
-    }
-
-    @Test
-    void receive_shouldTreatBlankDedupHeaderAsAbsent_andMintOneStableIdAcrossRetries() {
+    void receive_shouldTreatBlankDedupHeaderAsAbsent_andMintAGeneratedId() {
         // Given — a blank (non-null) header must not be treated as "present" and skip UUID generation.
-        doThrow(new SqsRetryableException("ASB blip", new RuntimeException("transient")))
-            .doNothing()
-            .when(queueMessageSender).publish(any(), any(), any());
-
-        // When
         listener.receive(VALID_BODY, AGGREGATE_ID, "   ", RECEIVE_COUNT);
 
         // Then
         ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
-        verify(queueMessageSender, times(2))
-            .publish(eq(VALID_BODY), eq(AGGREGATE_ID), messageIdCaptor.capture());
-        List<String> messageIds = messageIdCaptor.getAllValues();
-        assertThat(messageIds.get(1)).isEqualTo(messageIds.get(0));
-        assertThatCode(() -> UUID.fromString(messageIds.get(0))).doesNotThrowAnyException();
-    }
-
-    @Test
-    void receive_shouldUseSameBodyEventId_acrossRetries() {
-        // Given — regression coverage for the eventId path (already stable via the finding-1 fix; this
-        // locks it in explicitly rather than relying only on the single-attempt assertion elsewhere).
-        doThrow(new SqsRetryableException("ASB blip", new RuntimeException("transient")))
-            .doNothing()
-            .when(queueMessageSender).publish(any(), any(), any());
-
-        // When
-        listener.receive(ENVELOPED_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
-
-        // Then — every attempt uses the body eventId, not the (differing) SQS dedup header.
-        verify(queueMessageSender, times(2)).publish(ENVELOPED_BODY, AGGREGATE_ID, EVENT_ID);
+        verify(queueMessageSender).publish(eq(VALID_BODY), eq(AGGREGATE_ID), messageIdCaptor.capture());
+        assertThatCode(() -> UUID.fromString(messageIdCaptor.getValue())).doesNotThrowAnyException();
     }
 
     @Test
@@ -201,31 +145,17 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldRetryThenThrowRetryable_whenAsbFailsTransiently() {
+    void receive_shouldThrowRetryable_onFirstAttempt_whenAsbFailsTransiently() {
         // Given
         doThrow(new SqsRetryableException("ASB down", new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
-        // When / Then — retried in-process up to maxAttempts before propagating to the SQS error handler.
+        // When / Then — no in-process retry: a single attempt, then the exception propagates so SQS
+        // redelivers the message (and, after maxReceiveCount, routes it to the DLQ).
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsRetryableException.class);
-        verify(queueMessageSender, times(MAX_ATTEMPTS)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
+        verify(queueMessageSender, times(1)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
-    }
-
-    @Test
-    void receive_shouldForwardOnRetry_whenTransientFailureRecoversWithinWindow() {
-        // Given
-        doThrow(new SqsRetryableException("ASB blip", new RuntimeException("transient")))
-            .doNothing()
-            .when(queueMessageSender).publish(any(), any(), any());
-
-        // When
-        listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
-
-        // Then
-        verify(queueMessageSender, times(2)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
-        assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
     @Test

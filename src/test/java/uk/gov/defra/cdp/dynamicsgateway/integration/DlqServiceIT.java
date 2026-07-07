@@ -5,9 +5,7 @@ import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,31 +19,24 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
-import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
-import software.amazon.awssdk.services.sqs.model.Message;
-import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
 import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
-import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqListResponse;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqService;
 
 /**
- * Exercises {@link DlqService} against a real SQS (LocalStack) so the net-new DLQ plumbing — FIFO
+ * Exercises {@link DlqService} against a real SQS (LocalStack) so the DLQ list/peek plumbing — FIFO
  * receive semantics, receipt-handle lifecycle, system attributes, {@code GetQueueAttributes} counting
  * and the early visibility-release — runs against the actual API rather than mocks. Standalone (no
- * Spring context, no ASB emulator): replay's downstream consume → ASB publish is the existing
- * source-queue path already covered by {@link NotificationSqsListenerIT}, so this asserts replay lands
- * the message back on the source queue.
+ * Spring context, no ASB emulator).
  */
 @Slf4j
 class DlqServiceIT {
 
-    private static final String SOURCE_QUEUE = "trade_imports_animals_eu_notifications_gateway.fifo";
     private static final String DLQ_QUEUE = "trade_imports_animals_eu_notifications_gateway-deadletter.fifo";
     private static final String GROUP_A = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final String GROUP_B = "Imports.Notification.GBN-AG.GBN-AG-26-002";
@@ -58,7 +49,6 @@ class DlqServiceIT {
         DockerImageName.parse("localstack/localstack:3.8.1"))
         .withServices(LocalStackContainer.Service.SQS);
 
-    private static String sourceQueueUrl;
     private static String dlqUrl;
     private static SqsAsyncClient asyncSqsClient;
 
@@ -73,7 +63,6 @@ class DlqServiceIT {
     static void createQueues() {
         asyncSqsClient = buildAsyncSqsClient();
         try (SqsClient sqs = localSqsClient()) {
-            sourceQueueUrl = createFifoQueue(sqs, SOURCE_QUEUE);
             dlqUrl = createFifoQueue(sqs, DLQ_QUEUE);
         }
     }
@@ -85,11 +74,10 @@ class DlqServiceIT {
 
     @BeforeEach
     void setUp() {
-        purge(sourceQueueUrl);
         purge(dlqUrl);
-        NotificationSqsConfig config = new NotificationSqsConfig(
-            sourceQueueUrl, dlqUrl, 30, 20, 10,
-            new NotificationSqsConfig.Retry(4, 1000, 2.0, 10000));
+        // queueUrl is unused by DlqService.list(); a placeholder satisfies @NotBlank without standing
+        // up a source queue this IT no longer needs.
+        NotificationSqsConfig config = new NotificationSqsConfig("http://localhost/unused-source-queue", dlqUrl, 20, 10);
         dlqService = new DlqService(asyncSqsClient, config, objectMapper);
     }
 
@@ -135,144 +123,6 @@ class DlqServiceIT {
         assertThat(dlqService.list(3).messages()).hasSize(3);
     }
 
-    @Test
-    void replay_reSendsToSourceQueueAndRemovesFromDlq() {
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-
-        dlqService.replay(List.of("dedup-a"));
-
-        Optional<Message> onSource = receiveFromSource();
-        assertThat(onSource).isPresent();
-        assertThat(onSource.get().body()).isEqualTo("{\"key\":\"a\"}");
-        assertThat(onSource.get().attributes())
-            .containsEntry(MessageSystemAttributeName.MESSAGE_GROUP_ID, GROUP_A);
-        // A fresh, unique dedup id — never the original — so a prompt replay can't collide with the
-        // source queue's 5-minute FIFO dedup window.
-        assertThat(onSource.get().attributes().get(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID))
-            .isNotEqualTo("dedup-a")
-            .startsWith("dedup-a:replay:");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 0);
-    }
-
-    @Test
-    void replay_prefixesFreshSourceDedupIdWithEventId_whenBodyIsEnveloped() {
-        seedDlq("{\"eventId\":\"evt-42\",\"key\":\"a\"}", GROUP_A, "dedup-a");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-
-        dlqService.replay(List.of("evt-42"));
-
-        Optional<Message> onSource = receiveFromSource();
-        assertThat(onSource).isPresent();
-        assertThat(onSource.get().attributes().get(MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID))
-            .isNotEqualTo("evt-42")
-            .startsWith("evt-42:replay:");
-    }
-
-    @Test
-    void replay_reDeliversToSource_evenWhenOriginalDedupIdStillInsideSourceFifoDedupWindow() {
-        // Simulate the message's original journey: sent to the source queue and consumed (deleted) —
-        // but SQS remembers its MessageDeduplicationId for 5 minutes regardless of queue depth, so the
-        // id is still "in the window" even though the queue itself is now empty.
-        String dedupId = "evt-replay-dedup-window";
-        String body = "{\"eventId\":\"" + dedupId + "\",\"key\":\"a\"}";
-        primeSourceDedupWindow(body, GROUP_A, dedupId);
-
-        // The same message (same body, same original dedup id) has since reached the DLQ and is replayed
-        // promptly — well within the 5-minute window a naive re-send with the same dedup id would collide
-        // with.
-        seedDlq(body, GROUP_A, dedupId);
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-
-        dlqService.replay(List.of(dedupId));
-
-        // Must actually reach the source queue — not be silently swallowed by the dedup window and then
-        // deleted from the DLQ as if it had succeeded.
-        Optional<Message> onSource = receiveFromSource();
-        assertThat(onSource)
-            .as("replay must re-deliver even though the original dedup id is still inside "
-                + "SQS's 5-minute FIFO dedup window")
-            .isPresent();
-        assertThat(onSource.get().body()).isEqualTo(body);
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 0);
-    }
-
-    @Test
-    void replay_reportsNotFoundAndLeavesMessage_whenIdNotOnQueue() {
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-
-        dlqService.replay(List.of("missing"));
-
-        // Nothing replayed: the message stays on the DLQ and nothing reaches the source queue.
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-        assertThat(receiveFromSource()).isEmpty();
-    }
-
-    @Test
-    void delete_removesSelectedAndLeavesOthersImmediatelyVisible() {
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 2);
-
-        dlqService.delete(List.of("dedup-a"));
-
-        // Target gone; the untargeted message was released back, so it lists straight away (no 30s wait).
-        await().atMost(Duration.ofSeconds(10)).until(() -> {
-            var messages = dlqService.list(10).messages();
-            return messages.size() == 1 && messages.getFirst().id().equals("dedup-b");
-        });
-    }
-
-    @Test
-    void delete_removesEverySelectedId_inOneCall() {
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 2);
-
-        dlqService.delete(List.of("dedup-a", "dedup-b"));
-
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 0);
-    }
-
-    @Test
-    void delete_reportsNotFound_whenIdNotOnQueue() {
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-
-        dlqService.delete(List.of("missing"));
-
-        // Nothing matched, so the message stays on the DLQ.
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
-    }
-
-    /**
-     * Send {@code body} to the SOURCE queue with {@code dedupId}, then immediately receive+delete it so
-     * the queue is empty again — but SQS's FIFO dedup memory for {@code dedupId} persists for 5 minutes
-     * regardless, so a later send re-using the same id would be silently deduped.
-     */
-    private void primeSourceDedupWindow(String body, String group, String dedupId) {
-        try (SqsClient sqs = localSqsClient()) {
-            sqs.sendMessage(SendMessageRequest.builder()
-                .queueUrl(sourceQueueUrl)
-                .messageBody(body)
-                .messageGroupId(group)
-                .messageDeduplicationId(dedupId)
-                .build());
-            List<Message> received = sqs.receiveMessage(ReceiveMessageRequest.builder()
-                    .queueUrl(sourceQueueUrl)
-                    .maxNumberOfMessages(1)
-                    .waitTimeSeconds(5)
-                    .build())
-                .messages();
-            assertThat(received).as("priming send must be received before delete").hasSize(1);
-            sqs.deleteMessage(DeleteMessageRequest.builder()
-                .queueUrl(sourceQueueUrl)
-                .receiptHandle(received.getFirst().receiptHandle())
-                .build());
-        }
-    }
-
     private void seedDlq(String body, String group, String dedupId) {
         try (SqsClient sqs = localSqsClient()) {
             sqs.sendMessage(SendMessageRequest.builder()
@@ -281,22 +131,6 @@ class DlqServiceIT {
                 .messageGroupId(group)
                 .messageDeduplicationId(dedupId)
                 .build());
-        }
-    }
-
-    private Optional<Message> receiveFromSource() {
-        try (SqsClient sqs = localSqsClient()) {
-            return sqs.receiveMessage(ReceiveMessageRequest.builder()
-                    .queueUrl(sourceQueueUrl)
-                    .maxNumberOfMessages(1)
-                    .waitTimeSeconds(2)
-                    .messageSystemAttributeNames(
-                        MessageSystemAttributeName.MESSAGE_GROUP_ID,
-                        MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID)
-                    .build())
-                .messages()
-                .stream()
-                .findFirst();
         }
     }
 

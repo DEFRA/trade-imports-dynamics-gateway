@@ -16,25 +16,20 @@ aws:
     notification:
       # Required in non-local environments — @NotBlank on NotificationSqsConfig.queueUrl
       queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}
-      # DLQ for the list/replay/delete API — CDP provisions it with a -deadletter suffix.
+      # DLQ for the DLQ API — CDP provisions it with a -deadletter suffix.
       dlq-url: ${NOTIFICATION_SQS_DLQ_URL:}
-      visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
-      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
+      # awspring's own ContainerOptions default (AbstractContainerOptions.DEFAULT_POLL_TIMEOUT) —
+      # unset means "whatever awspring would already do".
+      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:10}
       # Max messages processed concurrently by the listener (also the receive-poll batch size). Across
-      # distinct FIFO message groups only; within a group SQS still delivers one at a time. Max 10 (SQS
-      # ReceiveMessage limit / awspring maxMessagesPerPoll).
-      max-messages: ${SQS_MAX_MESSAGES:3}
-      # In-process exponential backoff for a transient ASB publish failure (Spring RetryTemplate +
-      # ExponentialBackOffPolicy, retrying only SqsRetryableException). The total retry window must
-      # stay below visibility-timeout-seconds; defaults give 1s + 2s + 4s = 7s across 4 attempts.
-      retry:
-        max-attempts: ${SQS_RETRY_MAX_ATTEMPTS:4}
-        initial-interval: ${SQS_RETRY_INITIAL_INTERVAL_MS:1000}
-        multiplier: ${SQS_RETRY_MULTIPLIER:2.0}
-        max-interval: ${SQS_RETRY_MAX_INTERVAL_MS:10000}
+      # distinct FIFO message groups only; within a group SQS still delivers one at a time. 10 is
+      # awspring's own default (DEFAULT_MAX_INFLIGHT_MSG_PER_QUEUE / DEFAULT_MAX_MESSAGES_PER_POLL),
+      # also the SQS ReceiveMessage hard limit.
+      max-messages: ${SQS_MAX_MESSAGES:10}
 
-# Shared secret guarding the DLQ replay/delete endpoints. Same value the admin app already holds
-# and sends to the backend — both services must be configured with the same value per environment.
+# Shared secret for the (planned) DLQ mutating endpoints — not yet wired to any route. Same value
+# the admin app already holds and sends to the backend — both services must be configured with the
+# same value per environment.
 admin:
   secret: ${TRADE_IMPORTS_ANIMALS_ADMIN_SECRET:}
 

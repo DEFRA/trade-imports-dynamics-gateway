@@ -17,13 +17,10 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import io.awspring.cloud.sqs.config.SqsMessageListenerContainerFactory;
 import io.micrometer.core.instrument.MeterRegistry;
-import org.springframework.retry.support.RetryTemplate;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsAsyncClientBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler;
-import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationRetryListener;
 
 @Slf4j
 @Configuration
@@ -67,33 +64,9 @@ public class AwsConfig {
                 // maxMessagesPerPoll <= maxConcurrentMessages (default 10), and there is no point
                 // fetching more than we can process at once.
                 .maxMessagesPerPoll(sqsConfig.maxMessages())
-                .pollTimeout(Duration.ofSeconds(sqsConfig.waitTimeSeconds()))
-                .messageVisibility(Duration.ofSeconds(sqsConfig.visibilityTimeoutSeconds())))
+                .pollTimeout(Duration.ofSeconds(sqsConfig.waitTimeSeconds())))
             .sqsAsyncClient(sqsAsyncClient)
             .errorHandler(new NotificationErrorHandler(meterRegistry))
-            .build();
-    }
-
-    /**
-     * Retry template for transient ASB publish failures. Uses an exponential backoff and retries
-     * only {@link SqsRetryableException}, so the existing retry-vs-discard classification decides
-     * whether a retry happens — a non-retryable failure propagates on the first attempt. On
-     * exhaustion the retryable exception propagates to {@link NotificationErrorHandler}, which lets
-     * SQS redeliver the message (and, after {@code maxReceiveCount}, route it to the DLQ).
-     */
-    @Bean
-    public RetryTemplate notificationRetryTemplate(NotificationSqsConfig sqsConfig) {
-        NotificationSqsConfig.Retry retry = sqsConfig.retry();
-        return RetryTemplate.builder()
-            .maxAttempts(retry.maxAttempts())
-            // 4th arg = withRandom: adds jitter (ExponentialRandomBackOffPolicy) so concurrent
-            // listeners failing together against a degraded ASB don't retry in synchronised bursts.
-            // Keep this true — NotificationSqsConfig.Retry.worstCaseJitteredWindowMillis() models
-            // exactly this policy for the startup visibility-timeout safety check; changing it here
-            // without updating that method silently invalidates the check.
-            .exponentialBackoff(retry.initialInterval(), retry.multiplier(), retry.maxInterval(), true)
-            .retryOn(SqsRetryableException.class)
-            .withListener(new NotificationRetryListener(retry.maxAttempts()))
             .build();
     }
 
