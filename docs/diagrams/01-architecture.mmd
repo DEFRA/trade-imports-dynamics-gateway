@@ -1,7 +1,0 @@
-flowchart LR
-    BE["Backend<br/>(outbox)"] -->|publish| SNS["SNS FIFO topic"]
-    SNS -->|fan-out| Q["SQS FIFO<br/>source queue"]
-    Q -->|listener consumes| GW["Dynamics Gateway"]
-    GW -->|forward| ASB["Azure Service Bus"]
-    Q -.->|after 3 failed tries| DLQ["SQS FIFO<br/>DLQ"]
-    ADMIN["Admin app<br/>(operator)"] -->|list / replay / delete| GW

@@ -1,7 +1,0 @@
-sequenceDiagram
-    participant BE as Backend
-    participant Q as SQS source queue
-    BE->>Q: send evt-1 (00:00) - accepted
-    BE->>Q: send evt-1 again (00:30)
-    Note over Q: same id within 5 min ->
-    Note over Q: silently ignored (good: no duplicate)
