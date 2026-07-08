@@ -11,20 +11,13 @@ import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 /**
- * Forwards events to Azure Service Bus (ASB).
+ * Forwards events to Azure Service Bus (ASB), classifying send failures as
+ * {@link SqsRetryableException} (transient {@link ServiceBusException}, or a sender-disposed
+ * {@link IllegalStateException}) or {@link SqsNonRetryableException} (non-transient
+ * {@link ServiceBusException}, or an unexpected error).
  *
- * <p>Classifies ASB send failures into retryable and non-retryable exceptions:
- * <ul>
- *   <li>{@link SqsRetryableException} — transient {@link ServiceBusException} (timeout, throttle,
- *       network) or {@link IllegalStateException} (sender disposed, may recover on reconnect).</li>
- *   <li>{@link SqsNonRetryableException} — non-transient {@link ServiceBusException} (message too
- *       large, entity not found, unauthorized) or unexpected errors (NPE, etc.).</li>
- * </ul>
- *
- * <p>When called from {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationSqsListener},
- * these exceptions are routed to
- * {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler} which decides
- * whether to retry (leave in SQS) or discard (delete from SQS).
+ * <p>{@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler} uses that
+ * classification to decide whether to retry (leave in SQS) or discard (delete from SQS).
  *
  * <p>Callers are responsible for validating inputs (sessionId, body) before calling
  * {@link #publish}.
@@ -56,18 +49,11 @@ public class QueueMessageSender {
      *
      * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
      * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
-     * @param messageId   stable id to set as the ASB messageId — the backend outbox {@code eventId}
-     *                    when available (falling back to the upstream SQS MessageDeduplicationId); a
-     *                    fresh UUID is generated when null or blank. A stable id keeps the dedup key
-     *                    consistent across the pipeline, including across DLQ replay, and makes ASB
-     *                    duplicate detection effective if it is ever enabled — see
-     *                    docs/notification-pipeline-dedup.md.
-     *                    {@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationSqsListener}
-     *                    resolves this once per message before its retry loop (including the UUID
-     *                    fallback), so every in-process retry attempt reuses the identical id — the
-     *                    null/blank fallback here only fires for callers that don't do that (e.g.
-     *                    {@link #publish(String, String)}, used by the un-retried {@code /events}
-     *                    REST endpoint).
+     * @param messageId   stable id to set as the ASB messageId (falls back to a fresh UUID when null
+     *                    or blank). Keeping it stable end-to-end is what makes ASB duplicate detection
+     *                    effective if it's ever enabled — see the workspace-local
+     *                    {@code docs/notification-pipeline-dedup.md} (untracked, not part of this
+     *                    repo) for the full write-up.
      * @throws SqsRetryableException if the failure is transient and worth retrying
      * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */
