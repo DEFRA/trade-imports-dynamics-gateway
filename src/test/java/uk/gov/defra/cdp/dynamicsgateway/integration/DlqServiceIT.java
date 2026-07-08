@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
@@ -38,6 +39,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.DlqService;
 @Slf4j
 class DlqServiceIT {
 
+    private static final String SOURCE_QUEUE = "trade_imports_animals_eu_notifications_gateway.fifo";
     private static final String DLQ_QUEUE = "trade_imports_animals_eu_notifications_gateway-deadletter.fifo";
     private static final String GROUP_A = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final String GROUP_B = "Imports.Notification.GBN-AG.GBN-AG-26-002";
@@ -66,13 +68,14 @@ class DlqServiceIT {
     static void createQueues() {
         asyncSqsClient = buildAsyncSqsClient();
         try (SqsClient sqs = localSqsClient()) {
-            dlqUrl = createFifoQueue(sqs, DLQ_QUEUE);
-            dlqArn = sqs.getQueueAttributes(GetQueueAttributesRequest.builder()
-                    .queueUrl(dlqUrl)
-                    .attributeNames(QueueAttributeName.QUEUE_ARN)
-                    .build())
-                .attributes()
-                .get(QueueAttributeName.QUEUE_ARN);
+            dlqUrl = createFifoQueue(sqs, DLQ_QUEUE, Map.of());
+            dlqArn = queueArn(sqs, dlqUrl);
+            // StartMessageMoveTask rejects a queue with "Source queue must be configured as a Dead
+            // Letter Queue" unless some source queue's RedrivePolicy names it as the DLQ target —
+            // this is how AWS (and LocalStack) resolve the implicit "move back to source" destination.
+            createFifoQueue(sqs, SOURCE_QUEUE, Map.of(
+                QueueAttributeName.REDRIVE_POLICY,
+                "{\"deadLetterTargetArn\":\"" + dlqArn + "\",\"maxReceiveCount\":\"3\"}"));
         }
     }
 
@@ -195,16 +198,27 @@ class DlqServiceIT {
         }
     }
 
-    private static String createFifoQueue(SqsClient sqs, String name) {
-        sqs.createQueue(CreateQueueRequest.builder()
-            .queueName(name)
+    private static String createFifoQueue(SqsClient sqs, String name, Map<QueueAttributeName, String> extraAttributes) {
+        Map<QueueAttributeName, String> attributes = new HashMap<>(Map.of(
             // CONTENT_BASED_DEDUPLICATION off to match the CDP-provisioned production queues, so the
             // tests exercise the explicit-dedup-id path rather than relying on SQS auto-generating one.
-            .attributes(Map.of(
-                QueueAttributeName.FIFO_QUEUE, "true",
-                QueueAttributeName.CONTENT_BASED_DEDUPLICATION, "false"))
+            QueueAttributeName.FIFO_QUEUE, "true",
+            QueueAttributeName.CONTENT_BASED_DEDUPLICATION, "false"));
+        attributes.putAll(extraAttributes);
+        sqs.createQueue(CreateQueueRequest.builder()
+            .queueName(name)
+            .attributes(attributes)
             .build());
         return sqs.getQueueUrl(GetQueueUrlRequest.builder().queueName(name).build()).queueUrl();
+    }
+
+    private static String queueArn(SqsClient sqs, String queueUrl) {
+        return sqs.getQueueAttributes(GetQueueAttributesRequest.builder()
+                .queueUrl(queueUrl)
+                .attributeNames(QueueAttributeName.QUEUE_ARN)
+                .build())
+            .attributes()
+            .get(QueueAttributeName.QUEUE_ARN);
     }
 
     private static SqsClient localSqsClient() {
