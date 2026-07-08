@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
+import software.amazon.awssdk.services.sqs.model.ListMessageMoveTasksRequest;
 import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
@@ -40,6 +41,7 @@ class DlqServiceIT {
     private static final String DLQ_QUEUE = "trade_imports_animals_eu_notifications_gateway-deadletter.fifo";
     private static final String GROUP_A = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final String GROUP_B = "Imports.Notification.GBN-AG.GBN-AG-26-002";
+    private static final String REGION = "us-east-1";
 
     // Newer than the listener IT's 3.0.2: that build predates LocalStack's SQS JSON protocol support
     // and silently ignores the MessageSystemAttributeNames request param, so it returns no message
@@ -50,6 +52,7 @@ class DlqServiceIT {
         .withServices(LocalStackContainer.Service.SQS);
 
     private static String dlqUrl;
+    private static String dlqArn;
     private static SqsAsyncClient asyncSqsClient;
 
     static {
@@ -64,6 +67,12 @@ class DlqServiceIT {
         asyncSqsClient = buildAsyncSqsClient();
         try (SqsClient sqs = localSqsClient()) {
             dlqUrl = createFifoQueue(sqs, DLQ_QUEUE);
+            dlqArn = sqs.getQueueAttributes(GetQueueAttributesRequest.builder()
+                    .queueUrl(dlqUrl)
+                    .attributeNames(QueueAttributeName.QUEUE_ARN)
+                    .build())
+                .attributes()
+                .get(QueueAttributeName.QUEUE_ARN);
         }
     }
 
@@ -77,7 +86,8 @@ class DlqServiceIT {
         purge(dlqUrl);
         // queueUrl is unused by DlqService.list(); a placeholder satisfies @NotBlank without standing
         // up a source queue this IT no longer needs.
-        NotificationSqsConfig config = new NotificationSqsConfig("http://localhost/unused-source-queue", dlqUrl, 20, 10);
+        NotificationSqsConfig config = new NotificationSqsConfig(
+            "http://localhost/unused-source-queue", dlqUrl, dlqArn, 20, 10);
         dlqService = new DlqService(asyncSqsClient, config, objectMapper);
     }
 
@@ -121,6 +131,35 @@ class DlqServiceIT {
         await().atMost(Duration.ofSeconds(15)).until(() -> totalInQueue(dlqUrl) == 5);
 
         assertThat(dlqService.list(3).messages()).hasSize(3);
+    }
+
+    @Test
+    void deleteAll_purgesTheRealQueue() {
+        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
+        seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
+        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 2);
+
+        dlqService.deleteAll();
+
+        // PurgeQueue is async — per the AWS API reference, deletion can take up to 60s to complete.
+        await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
+    }
+
+    @Test
+    void replayAll_startsAMoveTaskAgainstTheRealQueue() {
+        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
+        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
+
+        dlqService.replayAll();
+
+        try (SqsClient sqs = localSqsClient()) {
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(sqs.listMessageMoveTasks(ListMessageMoveTasksRequest.builder()
+                        .sourceArn(dlqArn)
+                        .build())
+                    .results())
+                    .isNotEmpty());
+        }
     }
 
     private void seedDlq(String body, String group, String dedupId) {
@@ -171,7 +210,7 @@ class DlqServiceIT {
     private static SqsClient localSqsClient() {
         return SqsClient.builder()
             .endpointOverride(LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS))
-            .region(Region.of("us-east-1"))
+            .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(LOCAL_STACK.getAccessKey(), LOCAL_STACK.getSecretKey())))
             .build();
@@ -180,7 +219,7 @@ class DlqServiceIT {
     private static SqsAsyncClient buildAsyncSqsClient() {
         return SqsAsyncClient.builder()
             .endpointOverride(LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS))
-            .region(Region.of("us-east-1"))
+            .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(LOCAL_STACK.getAccessKey(), LOCAL_STACK.getSecretKey())))
             .build();

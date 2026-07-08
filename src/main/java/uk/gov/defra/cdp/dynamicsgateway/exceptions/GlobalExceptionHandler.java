@@ -2,6 +2,7 @@ package uk.gov.defra.cdp.dynamicsgateway.exceptions;
 
 import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
+import java.util.concurrent.CompletionException;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 
 @Slf4j
 @RestControllerAdvice
@@ -87,6 +89,28 @@ public class GlobalExceptionHandler {
             "/problems/upstream-error",
             "Failed to forward event to Azure Service Bus"
         );
+    }
+
+    @ExceptionHandler(SqsException.class)
+    public ResponseEntity<ProblemDetail> handleSqsException(SqsException ex) {
+        log.error("Upstream SQS error: {}", ex.getMessage(), ex);
+        return problemResponse(
+            HttpStatus.BAD_GATEWAY,
+            "Upstream Service Error",
+            "/problems/upstream-error",
+            "Failed to complete the requested SQS operation"
+        );
+    }
+
+    /** {@code SqsAsyncClient} calls in {@code DlqService} are awaited via {@code .join()}, which wraps
+     * whatever the SDK threw in a {@link CompletionException} — unwrap here so the SQS-specific
+     * mapping above still applies instead of falling through to a generic 500. */
+    @ExceptionHandler(CompletionException.class)
+    public ResponseEntity<ProblemDetail> handleCompletionException(CompletionException ex) {
+        if (ex.getCause() instanceof SqsException sqsException) {
+            return handleSqsException(sqsException);
+        }
+        return handleException(ex);
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)

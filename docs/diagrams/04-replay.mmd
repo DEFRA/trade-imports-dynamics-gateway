@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant OP as Operator (admin app)
+    participant GW as Gateway (DlqService)
+    participant DLQ as DLQ
+    participant Q as SQS source queue
+
+    OP->>GW: replay [evt-1]  (with admin secret)
+    GW->>DLQ: receive & find evt-1
+    GW->>Q: re-send (groupId=A, dedup id from evt-1)
+    Q-->>GW: send OK
+    GW->>DLQ: delete evt-1
+    Note over GW: only messages that actually<br/>re-sent are deleted from the DLQ

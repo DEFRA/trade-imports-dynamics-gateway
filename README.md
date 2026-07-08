@@ -40,13 +40,13 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 | Variable | Description |
 |---|---|
 | `AZURE_SERVICE_BUS_CONNECTION_STRING` | SAS connection string including `EntityPath` — e.g. `Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=<queue>` |
-| `NOTIFICATION_SQS_QUEUE_URL` | URL of the SQS FIFO queue for notification events |
-| `NOTIFICATION_SQS_DLQ_URL` | URL of the notification dead-letter queue (CDP provisions it with a `-deadletter` suffix), used by the [DLQ API](#dlq-api) |
+| `NOTIFICATION_SQS_QUEUE_URL` | Base SQS queue URL, **without** a `.fifo`/`-deadletter.fifo` suffix — the app appends `.fifo` for the source queue and `-deadletter.fifo` for the DLQ (used by the [DLQ API](#dlq-api)), since both are the same base queue name with a different suffix |
+| `NOTIFICATION_SQS_ARN` | Base SQS queue ARN, same base name/suffix convention as `NOTIFICATION_SQS_QUEUE_URL` — the app appends `-deadletter.fifo` for the DLQ's ARN, needed by `replay-all`'s `StartMessageMoveTask` (which takes an ARN, not a URL) |
 | `AWS_REGION` | AWS region (default: `eu-west-2`) |
 | `APP_AWS_ENDPOINT_OVERRIDE` | LocalStack endpoint for local development (leave unset in deployed environments) |
 | `SQS_WAIT_TIME_SECONDS` | SQS long-poll wait time (default: `10`, awspring's own default) |
 | `SQS_MAX_MESSAGES` | Maximum concurrent SQS messages (default: `10`) |
-| `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` | Shared secret for the (planned) [DLQ API](#dlq-api) mutating operations (`Trade-Imports-Animals-Admin-Secret` header). The same value the admin app holds; must match across both services per environment |
+| `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` | Shared secret guarding the [DLQ API](#dlq-api)'s replay-all/delete-all operations (`Trade-Imports-Animals-Admin-Secret` header). The same value the admin app holds; must match across both services per environment |
 
 There is no in-process retry: a transient ASB publish failure propagates on the first attempt, so SQS's own redelivery (governed by the queue's visibility timeout and `maxReceiveCount`, both CDP platform defaults) handles retries and eventual DLQ routing.
 
@@ -90,17 +90,26 @@ Each message is assigned a UUID `messageId` which is logged on success for corre
 
 ### DLQ API
 
-A REST API over the notification dead-letter queue (`NOTIFICATION_SQS_DLQ_URL`) for operators. JSON
-is snake_case.
+A REST API over the notification dead-letter queue (derived from `NOTIFICATION_SQS_QUEUE_URL`, see
+above) for operators. JSON is snake_case.
 
 | Method & path | Purpose |
 |---|---|
 | `GET /dlq/notifications?limit={n}` | List up to `n` DLQ messages from the front, plus the queue's approximate depth (`limit` defaults to 10; assembled from successive ≤10-message SQS receives until `n` or the queue is exhausted) |
+| `POST /dlq/notifications/replay-all` | Move every DLQ message back onto the source queue via native SQS `StartMessageMoveTask` (no destination specified — defaults to the source queue via the DLQ's redrive-allow-policy). Requires the `Trade-Imports-Animals-Admin-Secret` header |
+| `POST /dlq/notifications/delete-all` | Wipe the DLQ via native SQS `PurgeQueue`. Requires the `Trade-Imports-Animals-Admin-Secret` header |
 
-The list is read-only and open (no auth). Bulk replay-all/delete-all operations (backed by native
-SQS `StartMessageMoveTask`/`PurgeQueue`, guarded by the shared-secret
-`Trade-Imports-Animals-Admin-Secret` header) are planned but not yet implemented — see the EUDPA-253
-plan.
+The list is read-only and open (no auth); replay-all/delete-all are guarded by the shared-secret
+header.
+
+There is no per-message replay or delete — only the two bulk actions above. A poison-pill message
+can't be individually removed: it either keeps cycling back into the DLQ via `replay-all`, or is
+cleared (along with everything else) via `delete-all`. Both operations are **asynchronous** and allow
+only one in-flight task per queue — a second call while one is running fails with `502 Bad Gateway`
+(`AWS.SimpleQueueService.MessageMoveTask.LimitExceeded` for replay-all; SQS's 60-second purge cooldown
+for delete-all). `delete-all` in particular can take up to 60 seconds to fully complete per the
+[AWS API reference](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_PurgeQueue.html) —
+a `list` called immediately after may still show messages already slated for removal.
 
 The `id` is the message's `eventId` from the enveloped body when present, otherwise its SQS
 `MessageDeduplicationId`. Because SQS has no stable cursor and `GetQueueAttributes` counts are

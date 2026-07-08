@@ -10,20 +10,28 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityBatchRequest;
 import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityBatchResponse;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueInProgressException;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueResponse;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
+import software.amazon.awssdk.services.sqs.model.SqsException;
+import software.amazon.awssdk.services.sqs.model.StartMessageMoveTaskRequest;
+import software.amazon.awssdk.services.sqs.model.StartMessageMoveTaskResponse;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +39,7 @@ class DlqServiceTest {
 
     private static final String SOURCE_URL = "http://localhost:4566/000000000000/notifications.fifo";
     private static final String DLQ_URL = "http://localhost:4566/000000000000/notifications-deadletter.fifo";
+    private static final String DLQ_ARN = "arn:aws:sqs:eu-west-2:332499610595:notifications-deadletter.fifo";
     private static final String GROUP_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final ReceiveMessageResponse EMPTY = ReceiveMessageResponse.builder().build();
 
@@ -40,7 +49,7 @@ class DlqServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private DlqService service(String dlqUrl) {
-        NotificationSqsConfig config = new NotificationSqsConfig(SOURCE_URL, dlqUrl, 20, 10);
+        NotificationSqsConfig config = new NotificationSqsConfig(SOURCE_URL, dlqUrl, DLQ_ARN, 20, 10);
         return new DlqService(sqsAsyncClient, config, objectMapper);
     }
 
@@ -145,10 +154,60 @@ class DlqServiceTest {
     }
 
     @Test
-    void list_throws_whenDlqUrlNotConfigured() {
-        DlqService service = service("");
-        assertThatThrownBy(() -> service.list(10))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("DLQ URL is not configured");
+    void replayAll_startsMoveTask_sourcedFromConfiguredDlqArn() {
+        when(sqsAsyncClient.startMessageMoveTask(any(Consumer.class)))
+            .thenReturn(CompletableFuture.completedFuture(StartMessageMoveTaskResponse.builder().build()));
+
+        service(DLQ_URL).replayAll();
+
+        ArgumentCaptor<Consumer<StartMessageMoveTaskRequest.Builder>> captor = ArgumentCaptor.forClass(Consumer.class);
+        verify(sqsAsyncClient).startMessageMoveTask(captor.capture());
+        StartMessageMoveTaskRequest.Builder builder = StartMessageMoveTaskRequest.builder();
+        captor.getValue().accept(builder);
+        assertThat(builder.build().sourceArn()).isEqualTo(DLQ_ARN);
+    }
+
+    @Test
+    void replayAll_throwsCompletionException_whenAnotherMoveTaskIsAlreadyRunning() {
+        SqsException limitExceeded = (SqsException) SqsException.builder()
+            .message("A message move task is already in progress")
+            .awsErrorDetails(AwsErrorDetails.builder()
+                .errorCode("AWS.SimpleQueueService.MessageMoveTask.LimitExceeded")
+                .build())
+            .build();
+        when(sqsAsyncClient.startMessageMoveTask(any(Consumer.class)))
+            .thenReturn(CompletableFuture.failedFuture(limitExceeded));
+
+        // join() wraps the SDK exception in a CompletionException; GlobalExceptionHandler unwraps it.
+        assertThatThrownBy(() -> service(DLQ_URL).replayAll())
+            .isInstanceOf(CompletionException.class)
+            .cause().isSameAs(limitExceeded);
+    }
+
+    @Test
+    void deleteAll_purgesQueue() {
+        when(sqsAsyncClient.purgeQueue(any(Consumer.class)))
+            .thenReturn(CompletableFuture.completedFuture(PurgeQueueResponse.builder().build()));
+
+        service(DLQ_URL).deleteAll();
+
+        ArgumentCaptor<Consumer<PurgeQueueRequest.Builder>> captor = ArgumentCaptor.forClass(Consumer.class);
+        verify(sqsAsyncClient).purgeQueue(captor.capture());
+        PurgeQueueRequest.Builder builder = PurgeQueueRequest.builder();
+        captor.getValue().accept(builder);
+        assertThat(builder.build().queueUrl()).isEqualTo(DLQ_URL);
+    }
+
+    @Test
+    void deleteAll_throwsCompletionException_whenPurgeAlreadyInProgress() {
+        PurgeQueueInProgressException alreadyPurging = PurgeQueueInProgressException.builder()
+            .message("Purge already in progress")
+            .build();
+        when(sqsAsyncClient.purgeQueue(any(Consumer.class)))
+            .thenReturn(CompletableFuture.failedFuture(alreadyPurging));
+
+        assertThatThrownBy(() -> service(DLQ_URL).deleteAll())
+            .isInstanceOf(CompletionException.class)
+            .cause().isSameAs(alreadyPurging);
     }
 }

@@ -14,15 +14,19 @@ import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
 
 /**
- * List messages on the notification DLQ.
+ * List, replay-all and delete-all operations on the notification DLQ.
  *
  * <p>SQS has no get-by-id or stable cursor: messages are found by re-receiving batches (≤10 per call),
  * and {@code GetQueueAttributes} counts are eventually consistent, so a list is a best-effort
  * snapshot. A receive hides a message for the visibility timeout, so a browse scans with a short lock
  * and then {@link #release releases} every message immediately, so the browse is non-destructive.
  *
- * <p>Bulk replay/delete of the whole DLQ (native SQS redrive / purge) is planned but not yet
- * implemented — see the EUDPA-253 plan.
+ * <p>Replay-all and delete-all are native SQS bulk operations ({@code StartMessageMoveTask} /
+ * {@code PurgeQueue}) rather than per-message plumbing — there is no selective replay/delete of the
+ * DLQ, only "move everything back" or "wipe everything". Both are asynchronous: AWS completes the
+ * work in the background after the call returns, and each allows only one in-flight operation per
+ * queue (a second call while one is running fails — surfaced as a 502 by
+ * {@link uk.gov.defra.cdp.dynamicsgateway.exceptions.GlobalExceptionHandler}).
  */
 @Slf4j
 @Service
@@ -34,9 +38,6 @@ public class DlqService {
 
     /** Long-poll wait for list paging so a page isn't cut short by SQS short-poll sampling. */
     private static final int LIST_WAIT_SECONDS = 1;
-
-    /** Short visibility lock while browsing/scanning; messages are released back to 0 after. */
-    private static final int SCAN_VISIBILITY_SECONDS = 30;
 
     private final SqsAsyncClient sqsAsyncClient;
     private final NotificationSqsConfig sqsConfig;
@@ -54,7 +55,7 @@ public class DlqService {
      * is the signal that more remain.
      */
     public DlqListResponse list(int limit) {
-        String dlqUrl = requireDlqUrl();
+        String dlqUrl = sqsConfig.dlqUrl();
         // Sample the depth before browsing: receiving holds messages in-flight, and
         // ApproximateNumberOfMessages counts only visible messages, so reading it after the browse
         // would deflate the count by exactly the page just received.
@@ -77,12 +78,32 @@ public class DlqService {
         }
     }
 
+    /**
+     * Move every DLQ message back onto its source queue via {@code StartMessageMoveTask}. No
+     * destination is specified — it defaults to the source queue via the DLQ's redrive-allow-policy,
+     * which is how the CDP-provisioned queues are set up. Fire-and-forget: AWS runs the move in the
+     * background and this call only starts it.
+     */
+    public void replayAll() {
+        sqsAsyncClient.startMessageMoveTask(request -> request.sourceArn(sqsConfig.dlqArn())).join();
+        log.info("Started DLQ replay-all move task");
+    }
+
+    /**
+     * Wipe the DLQ via {@code PurgeQueue}. Asynchronous and approximate: per the AWS API reference,
+     * deletion can take up to 60 seconds, so a {@link #list} called immediately after may still show
+     * messages already slated for removal.
+     */
+    public void deleteAll() {
+        sqsAsyncClient.purgeQueue(request -> request.queueUrl(sqsConfig.dlqUrl())).join();
+        log.info("Purged DLQ");
+    }
+
     private List<Message> receive(String dlqUrl, int maxMessages, int waitSeconds) {
         return sqsAsyncClient.receiveMessage(request -> request
                 .queueUrl(dlqUrl)
                 .maxNumberOfMessages(maxMessages)
                 .waitTimeSeconds(waitSeconds)
-                .visibilityTimeout(SCAN_VISIBILITY_SECONDS)
                 .messageSystemAttributeNames(
                     MessageSystemAttributeName.MESSAGE_GROUP_ID,
                     MessageSystemAttributeName.MESSAGE_DEDUPLICATION_ID,
@@ -109,11 +130,11 @@ public class DlqService {
             }
             try {
                 sqsAsyncClient.changeMessageVisibilityBatch(request -> request
-                        .queueUrl(requireDlqUrl())
+                        .queueUrl(sqsConfig.dlqUrl())
                         .entries(entries))
                     .join();
             } catch (RuntimeException e) {
-                log.debug("Could not release a browsed DLQ batch early: {}", e.getMessage());
+                log.warn("Could not release a browsed DLQ batch early: {}", e.getMessage());
             }
         }
     }
@@ -150,14 +171,5 @@ public class DlqService {
             .attributes()
             .get(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES);
         return value == null ? 0L : Long.parseLong(value);
-    }
-
-    private String requireDlqUrl() {
-        String dlqUrl = sqsConfig.dlqUrl();
-        if (dlqUrl == null || dlqUrl.isBlank()) {
-            throw new IllegalStateException(
-                "DLQ URL is not configured (set NOTIFICATION_SQS_DLQ_URL / aws.sqs.notification.dlq-url)");
-        }
-        return dlqUrl;
     }
 }

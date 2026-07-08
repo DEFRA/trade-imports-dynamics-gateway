@@ -35,6 +35,7 @@ aws:
     notification:
       queue-url: ${NOTIFICATION_SQS_QUEUE_URL:http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway.fifo}
       dlq-url: ${NOTIFICATION_SQS_DLQ_URL:http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway-deadletter.fifo}
+      dlq-arn: ${NOTIFICATION_SQS_DLQ_ARN:arn:aws:sqs:eu-west-2:000000000000:trade_imports_animals_eu_notifications_gateway-deadletter.fifo}
 
 # Local default so the DLQ replay/delete endpoints are exercisable without extra env setup.
 admin:

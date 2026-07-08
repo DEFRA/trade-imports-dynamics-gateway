@@ -1,13 +1,16 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
+import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -16,6 +19,9 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueInProgressException;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.GlobalExceptionHandler;
 import uk.gov.defra.cdp.dynamicsgateway.filter.AdminSecretFilter;
 
@@ -69,5 +75,47 @@ class DlqControllerTest {
             .andExpect(status().isBadRequest());
 
         verifyNoInteractions(dlqService);
+    }
+
+    @Test
+    void replayAll_invokesService() throws Exception {
+        mockMvc.perform(post("/dlq/notifications/replay-all"))
+            .andExpect(status().isOk());
+
+        verify(dlqService).replayAll();
+    }
+
+    @Test
+    void replayAll_returnsBadGateway_whenAnotherMoveTaskIsAlreadyRunning() throws Exception {
+        // Matches what the real DlqService throws: join() wraps the SDK exception in a CompletionException.
+        doThrow(new CompletionException(SqsException.builder()
+            .message("A message move task is already in progress")
+            .awsErrorDetails(AwsErrorDetails.builder()
+                .errorCode("AWS.SimpleQueueService.MessageMoveTask.LimitExceeded")
+                .build())
+            .build()))
+            .when(dlqService).replayAll();
+
+        mockMvc.perform(post("/dlq/notifications/replay-all"))
+            .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void deleteAll_invokesService() throws Exception {
+        mockMvc.perform(post("/dlq/notifications/delete-all"))
+            .andExpect(status().isOk());
+
+        verify(dlqService).deleteAll();
+    }
+
+    @Test
+    void deleteAll_returnsBadGateway_whenPurgeAlreadyInProgress() throws Exception {
+        doThrow(new CompletionException(PurgeQueueInProgressException.builder()
+            .message("Purge already in progress")
+            .build()))
+            .when(dlqService).deleteAll();
+
+        mockMvc.perform(post("/dlq/notifications/delete-all"))
+            .andExpect(status().isBadGateway());
     }
 }

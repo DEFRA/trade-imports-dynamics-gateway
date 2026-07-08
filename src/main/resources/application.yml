@@ -14,22 +14,15 @@ aws:
       type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
   sqs:
     notification:
-      # Required in non-local environments — @NotBlank on NotificationSqsConfig.queueUrl
-      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}
-      # DLQ for the DLQ API — CDP provisions it with a -deadletter suffix.
-      dlq-url: ${NOTIFICATION_SQS_DLQ_URL:}
-      # awspring's own ContainerOptions default (AbstractContainerOptions.DEFAULT_POLL_TIMEOUT) —
-      # unset means "whatever awspring would already do".
+      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}.fifo
+      dlq-url: ${NOTIFICATION_SQS_QUEUE_URL:}-deadletter.fifo
+      dlq-arn: ${NOTIFICATION_SQS_ARN:}-deadletter.fifo
       wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:10}
-      # Max messages processed concurrently by the listener (also the receive-poll batch size). Across
-      # distinct FIFO message groups only; within a group SQS still delivers one at a time. 10 is
-      # awspring's own default (DEFAULT_MAX_INFLIGHT_MSG_PER_QUEUE / DEFAULT_MAX_MESSAGES_PER_POLL),
-      # also the SQS ReceiveMessage hard limit.
       max-messages: ${SQS_MAX_MESSAGES:10}
 
-# Shared secret for the (planned) DLQ mutating endpoints — not yet wired to any route. Same value
-# the admin app already holds and sends to the backend — both services must be configured with the
-# same value per environment.
+# Shared secret guarding the DLQ replay-all/delete-all endpoints. Same value the admin app already
+# holds and sends to the backend — both services must be configured with the same value per
+# environment.
 admin:
   secret: ${TRADE_IMPORTS_ANIMALS_ADMIN_SECRET:}
 

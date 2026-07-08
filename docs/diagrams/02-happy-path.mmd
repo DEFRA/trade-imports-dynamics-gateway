@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant Q as SQS source queue
+    participant L as Gateway listener
+    participant ASB as Azure Service Bus
+
+    Q->>L: deliver event (groupId=A, eventId=evt-1)
+    Note over L: validate: group id present?<br/>body non-blank & valid JSON?
+    L->>ASB: publish (sessionId=A, messageId=evt-1)
+    ASB-->>L: ack
+    L->>Q: delete message (done)

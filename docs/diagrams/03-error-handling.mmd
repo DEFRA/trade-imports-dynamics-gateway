@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant Q as SQS source queue
+    participant L as Gateway listener
+    participant ASB as Azure Service Bus
+    participant DLQ as DLQ
+
+    Q->>L: deliver event (groupId=A, eventId=evt-1)
+    L->>ASB: publish (attempt 1)
+    ASB-->>L: failure
+
+    alt Transient failure (timeout, throttle, network) — RETRYABLE
+        Note over L: in-process retry, up to 4 tries (1s to 2s to 4s + jitter)
+        loop until success or 4 tries used
+            L->>ASB: publish (retry)
+        end
+        alt a retry succeeds
+            ASB-->>L: ack
+            L->>Q: delete message (done)
+        else still failing after 4 tries
+            Note over L,Q: leave on queue (not acknowledged)
+            Q->>Q: visibility timeout expires, redeliver
+            Note over Q: once received 3 times, SQS moves it on
+            Q->>DLQ: move to DLQ
+        end
+    else Permanent failure (bad message, unauthorised) — NON-RETRYABLE
+        L->>Q: delete message immediately (retry won't help)
+    end
