@@ -1,10 +1,14 @@
 package uk.gov.defra.cdp.dynamicsgateway.exceptions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonParseException;
+import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +22,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.services.sqs.model.PurgeQueueInProgressException;
@@ -240,6 +245,43 @@ class GlobalExceptionHandlerTest {
         // The handler must not echo the raw exception message back to the caller (it may leak internals).
         assertThat(problem.getDetail()).isEqualTo("Request parameter is invalid");
         assertThat(problem.getProperties()).containsEntry("traceId", "trace-xyz");
+    }
+
+    @Test
+    void handleConstraintViolation_shouldReturn400WithProblemDetail() {
+        // Given
+        ConstraintViolationException ex =
+            new ConstraintViolationException("limit: must be less than or equal to 100", Set.of());
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleConstraintViolation(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
+        assertThat(problem.getTitle()).isEqualTo("Bad Request");
+        // The handler must not echo the raw exception message back to the caller (it may leak internals).
+        assertThat(problem.getDetail()).isEqualTo("Request parameter is invalid");
+    }
+
+    @Test
+    void handleInvalidBody_shouldReturn400WithProblemDetail() {
+        // Given
+        MethodArgumentNotValidException ex = mock(MethodArgumentNotValidException.class);
+        when(ex.getMessage()).thenReturn("field error: aggregateId must not be blank");
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleInvalidBody(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
+        assertThat(problem.getTitle()).isEqualTo("Bad Request");
+        assertThat(problem.getDetail()).isEqualTo("Request body failed validation");
     }
 
     @Test
