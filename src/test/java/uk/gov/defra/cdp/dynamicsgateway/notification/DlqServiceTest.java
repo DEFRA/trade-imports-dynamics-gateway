@@ -179,7 +179,8 @@ class DlqServiceTest {
             .thenReturn(CompletableFuture.failedFuture(limitExceeded));
 
         // join() wraps the SDK exception in a CompletionException; GlobalExceptionHandler unwraps it.
-        assertThatThrownBy(() -> service(DLQ_URL).replayAll())
+        DlqService service = service(DLQ_URL);
+        assertThatThrownBy(service::replayAll)
             .isInstanceOf(CompletionException.class)
             .cause().isSameAs(limitExceeded);
     }
@@ -206,7 +207,8 @@ class DlqServiceTest {
         when(sqsAsyncClient.purgeQueue(any(Consumer.class)))
             .thenReturn(CompletableFuture.failedFuture(alreadyPurging));
 
-        assertThatThrownBy(() -> service(DLQ_URL).deleteAll())
+        DlqService service = service(DLQ_URL);
+        assertThatThrownBy(service::deleteAll)
             .isInstanceOf(CompletionException.class)
             .cause().isSameAs(alreadyPurging);
     }

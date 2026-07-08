@@ -24,6 +24,8 @@ public class GlobalExceptionHandler {
     private static final String MDC_TRACE_ID = "trace.id";
     private static final String BAD_REQUEST_TITLE = "Bad Request";
     private static final String BAD_REQUEST_TYPE = "/problems/bad-request";
+    private static final String UPSTREAM_ERROR_TITLE = "Upstream Service Error";
+    private static final String UPSTREAM_ERROR_TYPE = "/problems/upstream-error";
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetail> handleUnreadableBody(HttpMessageNotReadableException ex) {
@@ -74,8 +76,8 @@ public class GlobalExceptionHandler {
         log.error("Retryable upstream error: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_GATEWAY,
-            "Upstream Service Error",
-            "/problems/upstream-error",
+            UPSTREAM_ERROR_TITLE,
+            UPSTREAM_ERROR_TYPE,
             "Failed to forward event to Azure Service Bus"
         );
     }
@@ -85,8 +87,8 @@ public class GlobalExceptionHandler {
         log.error("Non-retryable upstream error: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_GATEWAY,
-            "Upstream Service Error",
-            "/problems/upstream-error",
+            UPSTREAM_ERROR_TITLE,
+            UPSTREAM_ERROR_TYPE,
             "Failed to forward event to Azure Service Bus"
         );
     }
@@ -96,8 +98,8 @@ public class GlobalExceptionHandler {
         log.error("Upstream SQS error: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_GATEWAY,
-            "Upstream Service Error",
-            "/problems/upstream-error",
+            UPSTREAM_ERROR_TITLE,
+            UPSTREAM_ERROR_TYPE,
             "Failed to complete the requested SQS operation"
         );
     }

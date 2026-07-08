@@ -5,7 +5,7 @@ import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
@@ -199,7 +199,7 @@ class DlqServiceIT {
     }
 
     private static String createFifoQueue(SqsClient sqs, String name, Map<QueueAttributeName, String> extraAttributes) {
-        Map<QueueAttributeName, String> attributes = new HashMap<>(Map.of(
+        Map<QueueAttributeName, String> attributes = new EnumMap<>(Map.of(
             // CONTENT_BASED_DEDUPLICATION off to match the CDP-provisioned production queues, so the
             // tests exercise the explicit-dedup-id path rather than relying on SQS auto-generating one.
             QueueAttributeName.FIFO_QUEUE, "true",
