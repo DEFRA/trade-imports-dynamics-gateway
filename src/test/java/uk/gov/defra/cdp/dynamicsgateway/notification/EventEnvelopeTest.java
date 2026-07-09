@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class EventEnvelopeTest {
 
@@ -33,82 +36,23 @@ class EventEnvelopeTest {
         assertThat(result).contains(EVENT_ID);
     }
 
-    @Test
-    void eventId_shouldReturnEmpty_whenFieldAbsent() {
-        // Given — a valid JSON body with no eventId field
-        String body = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_shouldReturnEmpty_whenValueBlank() {
-        // Given — a present but blank eventId value
-        String body = "{\"eventId\":\"   \",\"aggregateId\":\"" + AGGREGATE_ID + "\"}";
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_shouldReturnEmpty_whenNodeNumeric() {
-        // Given — a non-textual (numeric) eventId node
-        String body = "{\"eventId\":12345,\"aggregateId\":\"" + AGGREGATE_ID + "\"}";
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_shouldReturnEmpty_whenNodeObject() {
-        // Given — a non-textual (object) eventId node
-        String body = "{\"eventId\":{\"id\":\"" + EVENT_ID + "\"},\"aggregateId\":\"" + AGGREGATE_ID + "\"}";
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_shouldReturnEmpty_whenBodyMalformedJson() {
-        // Given — an unparseable body that trips the JsonProcessingException catch/log.warn fallback
-        String body = "{not valid json";
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_shouldReturnEmpty_whenBodyNull() {
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, null);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_shouldReturnEmpty_whenBodyBlank() {
-        // When
-        Optional<String> result = EventEnvelope.eventId(objectMapper, "   ");
-
-        // Then
-        assertThat(result).isEmpty();
+    // Covers: absent field, blank value, non-textual (numeric/object) node,
+    // malformed JSON (JsonProcessingException catch/log.warn fallback), and
+    // null/blank body — every path where the String overload yields no eventId.
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(
+        strings = {
+            "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}",
+            "{\"eventId\":\"   \",\"aggregateId\":\"" + AGGREGATE_ID + "\"}",
+            "{\"eventId\":12345,\"aggregateId\":\"" + AGGREGATE_ID + "\"}",
+            "{\"eventId\":{\"id\":\"" + EVENT_ID + "\"},\"aggregateId\":\"" + AGGREGATE_ID + "\"}",
+            "{not valid json",
+            "   "
+        })
+    void eventId_shouldReturnEmpty_whenBodyHasNoUsableEventId(String body) {
+        // When / Then
+        assertThat(EventEnvelope.eventId(objectMapper, body)).isEmpty();
     }
 
     @Test
@@ -124,64 +68,23 @@ class EventEnvelopeTest {
         assertThat(result).contains(EVENT_ID);
     }
 
-    @Test
-    void eventId_fromNode_shouldReturnEmpty_whenFieldAbsent() throws JsonProcessingException {
-        // Given — a parsed JSON body with no eventId field
-        JsonNode body = objectMapper.readTree(
-            "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}");
+    // Covers: absent field, blank value, non-textual (numeric/object) node, and
+    // a null node — every path where the JsonNode overload yields no eventId.
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(
+        strings = {
+            "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}",
+            "{\"eventId\":\"   \",\"aggregateId\":\"" + AGGREGATE_ID + "\"}",
+            "{\"eventId\":12345,\"aggregateId\":\"" + AGGREGATE_ID + "\"}",
+            "{\"eventId\":{\"id\":\"" + EVENT_ID + "\"},\"aggregateId\":\"" + AGGREGATE_ID + "\"}"
+        })
+    void eventId_fromNode_shouldReturnEmpty_whenNodeHasNoUsableEventId(String json)
+        throws JsonProcessingException {
+        // Given — a null node, or a parsed node with no usable eventId
+        JsonNode body = json == null ? null : objectMapper.readTree(json);
 
-        // When
-        Optional<String> result = EventEnvelope.eventId(body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_fromNode_shouldReturnEmpty_whenValueBlank() throws JsonProcessingException {
-        // Given — a present but blank eventId value
-        JsonNode body = objectMapper.readTree(
-            "{\"eventId\":\"   \",\"aggregateId\":\"" + AGGREGATE_ID + "\"}");
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_fromNode_shouldReturnEmpty_whenNodeNumeric() throws JsonProcessingException {
-        // Given — a non-textual (numeric) eventId node
-        JsonNode body = objectMapper.readTree(
-            "{\"eventId\":12345,\"aggregateId\":\"" + AGGREGATE_ID + "\"}");
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_fromNode_shouldReturnEmpty_whenNodeObject() throws JsonProcessingException {
-        // Given — a non-textual (object) eventId node
-        JsonNode body = objectMapper.readTree(
-            "{\"eventId\":{\"id\":\"" + EVENT_ID + "\"},\"aggregateId\":\"" + AGGREGATE_ID + "\"}");
-
-        // When
-        Optional<String> result = EventEnvelope.eventId(body);
-
-        // Then
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void eventId_fromNode_shouldReturnEmpty_whenNodeNull() {
-        // When
-        Optional<String> result = EventEnvelope.eventId((JsonNode) null);
-
-        // Then
-        assertThat(result).isEmpty();
+        // When / Then
+        assertThat(EventEnvelope.eventId(body)).isEmpty();
     }
 }

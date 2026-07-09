@@ -2,13 +2,13 @@ package uk.gov.defra.cdp.dynamicsgateway.notification;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.TestPropertySource;
@@ -36,7 +36,7 @@ class DlqControllerSecurityTest {
 
     @Test
     void list_isOpen_withoutSecret() throws Exception {
-        Mockito.when(dlqService.list(10)).thenReturn(new DlqListResponse(List.of(), 0L));
+        when(dlqService.list(10)).thenReturn(new DlqListResponse(List.of(), 0L));
 
         mockMvc.perform(get("/dlq/notifications"))
             .andExpect(status().isOk());
