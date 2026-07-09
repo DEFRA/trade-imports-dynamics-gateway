@@ -54,7 +54,7 @@ class DlqControllerSecurityTest {
     void replayAll_passesThroughToController_withSecret() throws Exception {
         mockMvc.perform(post("/dlq/notifications/replay-all")
                 .header(HEADER, SECRET))
-            .andExpect(status().isOk());
+            .andExpect(status().isAccepted());
 
         verify(dlqService).replayAll();
     }
@@ -80,7 +80,7 @@ class DlqControllerSecurityTest {
     void deleteAll_passesThroughToController_withSecret() throws Exception {
         mockMvc.perform(post("/dlq/notifications/delete-all")
                 .header(HEADER, SECRET))
-            .andExpect(status().isOk());
+            .andExpect(status().isAccepted());
 
         verify(dlqService).deleteAll();
     }

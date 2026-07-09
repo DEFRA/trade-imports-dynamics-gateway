@@ -131,9 +131,11 @@ class NotificationSqsListenerIT extends IntegrationBase {
         // the message is left in SQS for native redelivery (→ DLQ after maxReceiveCount).
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
             verify(senderClient, times(1)).sendMessage(any(ServiceBusMessage.class)));
-        assertThat(totalMessagesInQueue())
-            .as("after a transient failure the message must remain in SQS for redelivery, not be deleted")
-            .isEqualTo(1);
+        // ApproximateNumberOfMessages(NotVisible) are eventually-consistent, so poll rather than read once.
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+            assertThat(totalMessagesInQueue())
+                .as("after a transient failure the message must remain in SQS for redelivery, not be deleted")
+                .isEqualTo(1));
     }
 
     @Test

@@ -95,7 +95,7 @@ above) for operators. JSON is snake_case.
 
 | Method & path | Purpose |
 |---|---|
-| `GET /dlq/notifications?limit={n}` | List up to `n` DLQ messages from the front, plus the queue's approximate depth (`limit` defaults to 10; assembled from successive ≤10-message SQS receives until `n` or the queue is exhausted) |
+| `GET /dlq/notifications?limit={n}` | List up to `n` DLQ messages from the front, plus the queue's approximate depth (`limit` defaults to 10 and is capped at 25 — a value above 25 returns `400 Bad Request`; assembled from successive ≤10-message SQS receives until `n` or the queue is exhausted) |
 | `POST /dlq/notifications/replay-all` | Move every DLQ message back onto the source queue via native SQS `StartMessageMoveTask` (no destination specified — defaults to the source queue via the DLQ's redrive-allow-policy). Requires the `Trade-Imports-Animals-Admin-Secret` header |
 | `POST /dlq/notifications/delete-all` | Wipe the DLQ via native SQS `PurgeQueue`. Requires the `Trade-Imports-Animals-Admin-Secret` header |
 

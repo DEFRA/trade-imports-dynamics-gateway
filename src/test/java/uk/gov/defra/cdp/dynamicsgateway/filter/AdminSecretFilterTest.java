@@ -66,18 +66,6 @@ class AdminSecretFilterTest {
     }
 
     @Test
-    void allowsDelete_whenSecretMatches() throws Exception {
-        when(request.getMethod()).thenReturn("DELETE");
-        when(request.getRequestURI()).thenReturn("/dlq/notifications");
-        when(request.getHeader(HEADER_NAME)).thenReturn(SECRET);
-
-        filter.doFilter(request, response, chain);
-
-        verify(chain).doFilter(request, response);
-        verify(response, never()).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-    }
-
-    @Test
     void rejectsReplay_whenHeaderMissing() throws Exception {
         when(request.getMethod()).thenReturn("POST");
         when(request.getRequestURI()).thenReturn("/dlq/notifications/replay");
@@ -90,9 +78,9 @@ class AdminSecretFilterTest {
     }
 
     @Test
-    void rejectsDelete_whenSecretMismatches() throws Exception {
-        when(request.getMethod()).thenReturn("DELETE");
-        when(request.getRequestURI()).thenReturn("/dlq/notifications");
+    void rejectsReplay_whenSecretMismatches() throws Exception {
+        when(request.getMethod()).thenReturn("POST");
+        when(request.getRequestURI()).thenReturn("/dlq/notifications/replay-all");
         when(request.getHeader(HEADER_NAME)).thenReturn("wrong");
 
         filter.doFilter(request, response, chain);

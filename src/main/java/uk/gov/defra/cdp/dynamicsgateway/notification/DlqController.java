@@ -10,11 +10,14 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -60,20 +63,26 @@ public class DlqController {
     @PostMapping("/replay-all")
     @Operation(summary = "Replay all DLQ messages",
         description = "Starts an SQS StartMessageMoveTask moving every DLQ message back onto the source queue")
-    @ApiResponse(responseCode = "200", description = "Replay-all task started")
+    @ApiResponse(responseCode = "202", description = "Replay-all task started")
     @ApiResponse(responseCode = "502", description = "A replay or delete-all task is already in progress on this queue", content = @Content)
     @Timed("dlq.replay_all")
-    public void replayAll() {
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void replayAll(
+            @RequestHeader(value = "User-Id", required = false, defaultValue = "unknown") String userId) {
+        log.info("DLQ replay-all requested by {}", userId);
         dlqService.replayAll();
     }
 
     @PostMapping("/delete-all")
     @Operation(summary = "Delete all DLQ messages",
         description = "Purges the DLQ via SQS PurgeQueue; asynchronous, can take up to 60 seconds to fully complete")
-    @ApiResponse(responseCode = "200", description = "Delete-all requested")
+    @ApiResponse(responseCode = "202", description = "Delete-all requested")
     @ApiResponse(responseCode = "502", description = "A purge is already in progress on this queue (60s cooldown)", content = @Content)
     @Timed("dlq.delete_all")
-    public void deleteAll() {
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void deleteAll(
+            @RequestHeader(value = "User-Id", required = false, defaultValue = "unknown") String userId) {
+        log.info("DLQ delete-all requested by {}", userId);
         dlqService.deleteAll();
     }
 }

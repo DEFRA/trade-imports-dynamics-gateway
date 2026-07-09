@@ -16,7 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Guards the privileged DLQ operations with a shared secret. The mutating endpoints under
- * {@code /dlq/notifications} (replay via {@code POST}, delete via {@code DELETE}) require the
+ * {@code /dlq/notifications} (replay-all and delete-all, both via {@code POST}) require the
  * {@value #HEADER_NAME} header to match {@code admin.secret}; the read-only list ({@code GET}) is left
  * open. The secret is the same value the admin app already holds and sends to the backend, so both
  * services must be configured with the same value per environment.
@@ -61,8 +61,7 @@ public class AdminSecretFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        boolean mutating = "POST".equalsIgnoreCase(request.getMethod())
-            || "DELETE".equalsIgnoreCase(request.getMethod());
+        boolean mutating = "POST".equalsIgnoreCase(request.getMethod());
         return !(mutating && request.getRequestURI().startsWith(GUARDED_PATH));
     }
 }

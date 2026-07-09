@@ -50,10 +50,15 @@ public class QueueMessageSender {
      * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
      * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
      * @param messageId   stable id to set as the ASB messageId (falls back to a fresh UUID when null
-     *                    or blank). Keeping it stable end-to-end is what makes ASB duplicate detection
-     *                    effective if it's ever enabled — see the workspace-local
-     *                    {@code docs/notification-pipeline-dedup.md} (untracked, not part of this
-     *                    repo) for the full write-up.
+     *                    or blank). This id is the dedup key carried end-to-end: the backend outbox
+     *                    {@code eventId} travels as the SQS {@code MessageDeduplicationId} and is set
+     *                    here as the ASB {@code MessageId}. Keeping it stable across retries is what
+     *                    would make ASB duplicate detection work unchanged if
+     *                    {@code RequiresDuplicateDetection} were ever enabled on the queue (it is off
+     *                    today, so the id currently doubles as a stable trace/correlation id). Do not
+     *                    derive it from the message body — the payload's only identifier is the
+     *                    aggregate/group key, which is shared across an aggregate's events and would
+     *                    wrongly dedupe distinct events.
      * @throws SqsRetryableException if the failure is transient and worth retrying
      * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -103,14 +105,17 @@ class DlqServiceTest {
 
     @Test
     void list_projectsMessagesToDtosWithApproximateCount() {
+        // Given
         stubReceive(batch(
             message("dedup-1", "{\"key\":\"a\"}", 3, "rh-1"),
             message("dedup-2", "{\"key\":\"b\"}", 4, "rh-2")), EMPTY);
         stubGetCount("7");
         stubChangeVisibilityBatch();
 
+        // When
         DlqListResponse response = service(DLQ_URL).list(10);
 
+        // Then
         assertThat(response.approximateCount()).isEqualTo(7L);
         assertThat(response.messages()).hasSize(2);
         DlqMessage first = response.messages().getFirst();
@@ -123,18 +128,41 @@ class DlqServiceTest {
 
     @Test
     void list_usesEventIdFromBodyAsId_whenPresent() {
+        // Given
         stubReceive(batch(message("dedup-1", "{\"eventId\":\"evt-99\"}", 3, "rh-1")), EMPTY);
         stubGetCount("1");
         stubChangeVisibilityBatch();
 
+        // When
         DlqListResponse response = service(DLQ_URL).list(10);
 
+        // Then
         assertThat(response.messages().getFirst().id()).isEqualTo("evt-99");
         assertThat(response.messages().getFirst().deduplicationId()).isEqualTo("dedup-1");
     }
 
     @Test
+    void list_fallsBackToDeduplicationId_whenBodyIsNotParseableJson() {
+        // Given
+        // A message can land on the DLQ precisely because its body is not valid JSON, so idOf() must
+        // fall back to the MessageDeduplicationId when EventEnvelope.eventId() hits its parse-failure
+        // branch rather than propagating the JsonProcessingException.
+        stubReceive(batch(message("dedup-7", "not-json", 3, "rh-1")), EMPTY);
+        stubGetCount("1");
+        stubChangeVisibilityBatch();
+
+        // When
+        DlqListResponse response = service(DLQ_URL).list(10);
+
+        // Then
+        assertThat(response.messages().getFirst().id()).isEqualTo("dedup-7");
+        assertThat(response.messages().getFirst().deduplicationId()).isEqualTo("dedup-7");
+        assertThat(response.messages().getFirst().body()).isEqualTo("not-json");
+    }
+
+    @Test
     void list_pagesAcrossReceivesUpToLimit_andReleasesBrowsedInOneBatch() {
+        // Given
         stubReceive(
             batch(message("dedup-1", "{\"key\":\"a\"}", 3, "rh-1"),
                   message("dedup-2", "{\"key\":\"b\"}", 3, "rh-2")),
@@ -143,8 +171,10 @@ class DlqServiceTest {
         stubGetCount("3");
         stubChangeVisibilityBatch();
 
+        // When
         DlqListResponse response = service(DLQ_URL).list(50);
 
+        // Then
         assertThat(response.messages())
             .extracting(DlqMessage::id)
             .containsExactly("dedup-1", "dedup-2", "dedup-3");
@@ -154,12 +184,71 @@ class DlqServiceTest {
     }
 
     @Test
+    void list_stopsAtLimit_andDoesNotDrainQueue_whenMoreMessagesRemain() {
+        // Given
+        // 15 messages sit on the DLQ but the caller asks for only 10. SQS caps a receive at 10, so a
+        // full first batch already reaches the limit and the paging loop must stop once
+        // collected.size() >= limit rather than draining the queue — the remaining five are never
+        // received. The second stubbed batch models those five and must go untouched.
+        Message[] firstTen = IntStream.rangeClosed(1, 10)
+            .mapToObj(i -> message("dedup-" + i, "{\"key\":\"" + i + "\"}", 3, "rh-" + i))
+            .toArray(Message[]::new);
+        Message[] remainingFive = IntStream.rangeClosed(11, 15)
+            .mapToObj(i -> message("dedup-" + i, "{\"key\":\"" + i + "\"}", 3, "rh-" + i))
+            .toArray(Message[]::new);
+        stubReceive(batch(firstTen), batch(remainingFive));
+        stubGetCount("15");
+        stubChangeVisibilityBatch();
+
+        // When
+        DlqListResponse response = service(DLQ_URL).list(10);
+
+        // Then
+        assertThat(response.messages()).hasSize(10);
+        assertThat(response.messages())
+            .extracting(DlqMessage::deduplicationId)
+            .containsExactly(
+                "dedup-1", "dedup-2", "dedup-3", "dedup-4", "dedup-5",
+                "dedup-6", "dedup-7", "dedup-8", "dedup-9", "dedup-10");
+        assertThat(response.approximateCount()).isEqualTo(15L);
+        // Exactly one receive: the loop stopped at the limit instead of fetching the remaining five.
+        verify(sqsAsyncClient, times(1)).receiveMessage(any(Consumer.class));
+        assertThat(captureVisibilityBatch().entries()).hasSize(10);
+    }
+
+    @Test
+    void list_stillReturnsBrowsedMessages_whenReleaseFails() {
+        // Given
+        stubReceive(batch(
+            message("dedup-1", "{\"key\":\"a\"}", 3, "rh-1"),
+            message("dedup-2", "{\"key\":\"b\"}", 4, "rh-2")), EMPTY);
+        stubGetCount("2");
+        // Release is best-effort: a failed changeMessageVisibilityBatch must be swallowed so a
+        // non-destructive browse still succeeds and returns what it saw, rather than propagating out.
+        when(sqsAsyncClient.changeMessageVisibilityBatch(any(Consumer.class)))
+            .thenReturn(CompletableFuture.failedFuture(
+                SqsException.builder().message("release boom").build()));
+
+        // When
+        DlqListResponse response = service(DLQ_URL).list(10);
+
+        // Then
+        assertThat(response.approximateCount()).isEqualTo(2L);
+        assertThat(response.messages())
+            .extracting(DlqMessage::id)
+            .containsExactly("dedup-1", "dedup-2");
+    }
+
+    @Test
     void replayAll_startsMoveTask_sourcedFromConfiguredDlqArn() {
+        // Given
         when(sqsAsyncClient.startMessageMoveTask(any(Consumer.class)))
             .thenReturn(CompletableFuture.completedFuture(StartMessageMoveTaskResponse.builder().build()));
 
+        // When
         service(DLQ_URL).replayAll();
 
+        // Then
         ArgumentCaptor<Consumer<StartMessageMoveTaskRequest.Builder>> captor = ArgumentCaptor.forClass(Consumer.class);
         verify(sqsAsyncClient).startMessageMoveTask(captor.capture());
         StartMessageMoveTaskRequest.Builder builder = StartMessageMoveTaskRequest.builder();
@@ -169,6 +258,7 @@ class DlqServiceTest {
 
     @Test
     void replayAll_throwsCompletionException_whenAnotherMoveTaskIsAlreadyRunning() {
+        // Given
         SqsException limitExceeded = (SqsException) SqsException.builder()
             .message("A message move task is already in progress")
             .awsErrorDetails(AwsErrorDetails.builder()
@@ -178,6 +268,7 @@ class DlqServiceTest {
         when(sqsAsyncClient.startMessageMoveTask(any(Consumer.class)))
             .thenReturn(CompletableFuture.failedFuture(limitExceeded));
 
+        // When / Then
         // join() wraps the SDK exception in a CompletionException; GlobalExceptionHandler unwraps it.
         DlqService service = service(DLQ_URL);
         assertThatThrownBy(service::replayAll)
@@ -187,11 +278,14 @@ class DlqServiceTest {
 
     @Test
     void deleteAll_purgesQueue() {
+        // Given
         when(sqsAsyncClient.purgeQueue(any(Consumer.class)))
             .thenReturn(CompletableFuture.completedFuture(PurgeQueueResponse.builder().build()));
 
+        // When
         service(DLQ_URL).deleteAll();
 
+        // Then
         ArgumentCaptor<Consumer<PurgeQueueRequest.Builder>> captor = ArgumentCaptor.forClass(Consumer.class);
         verify(sqsAsyncClient).purgeQueue(captor.capture());
         PurgeQueueRequest.Builder builder = PurgeQueueRequest.builder();
@@ -201,12 +295,14 @@ class DlqServiceTest {
 
     @Test
     void deleteAll_throwsCompletionException_whenPurgeAlreadyInProgress() {
+        // Given
         PurgeQueueInProgressException alreadyPurging = PurgeQueueInProgressException.builder()
             .message("Purge already in progress")
             .build();
         when(sqsAsyncClient.purgeQueue(any(Consumer.class)))
             .thenReturn(CompletableFuture.failedFuture(alreadyPurging));
 
+        // When / Then
         DlqService service = service(DLQ_URL);
         assertThatThrownBy(service::deleteAll)
             .isInstanceOf(CompletionException.class)

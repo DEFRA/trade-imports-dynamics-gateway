@@ -134,7 +134,7 @@ public class DlqService {
                         .entries(entries))
                     .join();
             } catch (RuntimeException e) {
-                log.warn("Could not release a browsed DLQ batch early: {}", e.getMessage());
+                log.warn("Could not release a browsed DLQ batch early", e);
             }
         }
     }

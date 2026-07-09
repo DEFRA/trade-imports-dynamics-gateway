@@ -87,6 +87,9 @@ class DlqServiceIT {
     @BeforeEach
     void setUp() {
         purge(dlqUrl);
+        // PurgeQueue is async (up to 60s per the AWS API reference), so await drain to 0 before
+        // seeding — otherwise a still-draining purge from the prior test can race this test's seed.
+        await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
         // queueUrl is unused by DlqService.list(); a placeholder satisfies @NotBlank without standing
         // up a source queue this IT no longer needs.
         NotificationSqsConfig config = new NotificationSqsConfig(
@@ -96,12 +99,15 @@ class DlqServiceIT {
 
     @Test
     void list_returnsSeededMessagesWithAttributesAndCount() {
+        // Given
         seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
         seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
         await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 2);
 
+        // When
         DlqListResponse response = dlqService.list(10);
 
+        // Then
         assertThat(response.approximateCount()).isGreaterThanOrEqualTo(1L);
         assertThat(response.messages())
             .hasSize(2)
@@ -114,12 +120,14 @@ class DlqServiceIT {
 
     @Test
     void list_pagesBeyondTenMessages_nonDestructively() {
+        // Given
         // 13 > the 10-per-receive SQS cap, so list must page; distinct groups avoid FIFO blocking.
         for (int i = 0; i < 13; i++) {
             seedDlq("{\"key\":\"" + i + "\"}", GROUP_A + "-" + i, "dedup-" + i);
         }
         await().atMost(Duration.ofSeconds(15)).until(() -> totalInQueue(dlqUrl) == 13);
 
+        // When / Then
         assertThat(dlqService.list(50).messages()).hasSize(13);
 
         // Non-destructive: every browsed message is released back, so the depth is unchanged.
@@ -128,33 +136,41 @@ class DlqServiceIT {
 
     @Test
     void list_honoursLimitSmallerThanQueueDepth() {
+        // Given
         for (int i = 0; i < 5; i++) {
             seedDlq("{\"key\":\"" + i + "\"}", GROUP_A + "-" + i, "dedup-" + i);
         }
         await().atMost(Duration.ofSeconds(15)).until(() -> totalInQueue(dlqUrl) == 5);
 
+        // When / Then
         assertThat(dlqService.list(3).messages()).hasSize(3);
     }
 
     @Test
     void deleteAll_purgesTheRealQueue() {
+        // Given
         seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
         seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
         await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 2);
 
+        // When
         dlqService.deleteAll();
 
+        // Then
         // PurgeQueue is async — per the AWS API reference, deletion can take up to 60s to complete.
         await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
     }
 
     @Test
     void replayAll_startsAMoveTaskAgainstTheRealQueue() {
+        // Given
         seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
         await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
 
+        // When
         dlqService.replayAll();
 
+        // Then
         try (SqsClient sqs = localSqsClient()) {
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(sqs.listMessageMoveTasks(ListMessageMoveTasksRequest.builder()

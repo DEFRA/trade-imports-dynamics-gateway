@@ -22,7 +22,7 @@ class NotificationSqsConfigTest {
     }
 
     @Test
-    void isValid_whenAllFieldsPopulated() {
+    void notificationSqsConfig_shouldHaveNoViolations_whenAllFieldsPopulated() {
         NotificationSqsConfig config = config(
             "https://sqs.eu-west-2.amazonaws.com/123456789012/notifications.fifo",
             "https://sqs.eu-west-2.amazonaws.com/123456789012/notifications-deadletter.fifo",
@@ -32,7 +32,7 @@ class NotificationSqsConfigTest {
     }
 
     @Test
-    void isInvalid_whenQueueUrlBlank() {
+    void notificationSqsConfig_shouldFlagQueueUrl_whenQueueUrlBlank() {
         Set<ConstraintViolation<NotificationSqsConfig>> violations =
             VALIDATOR.validate(config("", "https://example/dlq", "arn:aws:sqs:eu-west-2:123456789012:dlq"));
 
@@ -42,7 +42,7 @@ class NotificationSqsConfigTest {
     }
 
     @Test
-    void isInvalid_whenDlqUrlBlank() {
+    void notificationSqsConfig_shouldFlagDlqUrl_whenDlqUrlBlank() {
         Set<ConstraintViolation<NotificationSqsConfig>> violations = VALIDATOR.validate(config(
             "https://example/queue", "", "arn:aws:sqs:eu-west-2:123456789012:dlq"));
 
@@ -52,7 +52,7 @@ class NotificationSqsConfigTest {
     }
 
     @Test
-    void isInvalid_whenDlqArnBlank() {
+    void notificationSqsConfig_shouldFlagDlqArn_whenDlqArnBlank() {
         Set<ConstraintViolation<NotificationSqsConfig>> violations =
             VALIDATOR.validate(config("https://example/queue", "https://example/dlq", ""));
 

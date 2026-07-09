@@ -89,6 +89,7 @@ class NotificationSqsListenerTest {
         ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
         verify(queueMessageSender).publish(eq(VALID_BODY), eq(AGGREGATE_ID), messageIdCaptor.capture());
         assertThatCode(() -> UUID.fromString(messageIdCaptor.getValue())).doesNotThrowAnyException();
+        assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
     @Test

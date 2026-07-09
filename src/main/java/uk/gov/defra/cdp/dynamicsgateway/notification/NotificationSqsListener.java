@@ -1,6 +1,7 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 import io.awspring.cloud.sqs.listener.SqsHeaders;
@@ -63,13 +64,14 @@ public class NotificationSqsListener {
             throw new SqsNonRetryableException("Empty message body");
         }
 
+        JsonNode parsedBody;
         try {
-            objectMapper.readTree(body);
+            parsedBody = objectMapper.readTree(body);
         } catch (JsonProcessingException e) {
             throw new SqsNonRetryableException("Message body is not valid JSON", e);
         }
 
-        String asbMessageId = resolveAsbMessageId(body, deduplicationId);
+        String asbMessageId = resolveAsbMessageId(parsedBody, deduplicationId);
         queueMessageSender.publish(body, aggregateId, asbMessageId);
         forwardedCounter.increment();
     }
@@ -81,8 +83,8 @@ public class NotificationSqsListener {
      * stay equal to the original {@code eventId} across both — then the non-blank SQS dedup header,
      * then a single freshly-generated UUID if neither is present.
      */
-    private String resolveAsbMessageId(String body, String deduplicationId) {
-        return EventEnvelope.eventId(objectMapper, body)
+    private String resolveAsbMessageId(JsonNode body, String deduplicationId) {
+        return EventEnvelope.eventId(body)
             .or(() -> Optional.ofNullable(deduplicationId).filter(id -> !id.isBlank()))
             .orElseGet(() -> UUID.randomUUID().toString());
     }

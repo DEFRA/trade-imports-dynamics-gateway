@@ -32,6 +32,10 @@ import uk.gov.defra.cdp.dynamicsgateway.filter.AdminSecretFilter;
 @Import(GlobalExceptionHandler.class)
 class DlqControllerTest {
 
+    private static final String BASE_PATH = "/dlq/notifications";
+    private static final String REPLAY_ALL_PATH = BASE_PATH + "/replay-all";
+    private static final String DELETE_ALL_PATH = BASE_PATH + "/delete-all";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -43,7 +47,7 @@ class DlqControllerTest {
         when(dlqService.list(10)).thenReturn(new DlqListResponse(
             List.of(new DlqMessage("id-1", "group-1", "dedup-1", 3, "{\"key\":\"a\"}")), 5L));
 
-        mockMvc.perform(get("/dlq/notifications"))
+        mockMvc.perform(get(BASE_PATH))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.approximate_count").value(5))
             .andExpect(jsonPath("$.messages[0].id").value("id-1"))
@@ -55,7 +59,7 @@ class DlqControllerTest {
     void list_passesLimitQueryParamToService() throws Exception {
         when(dlqService.list(3)).thenReturn(new DlqListResponse(List.of(), 0L));
 
-        mockMvc.perform(get("/dlq/notifications").param("limit", "3"))
+        mockMvc.perform(get(BASE_PATH).param("limit", "3"))
             .andExpect(status().isOk());
 
         verify(dlqService).list(3);
@@ -63,7 +67,7 @@ class DlqControllerTest {
 
     @Test
     void list_returnsBadRequest_whenLimitExceedsMax() throws Exception {
-        mockMvc.perform(get("/dlq/notifications").param("limit", "100000"))
+        mockMvc.perform(get(BASE_PATH).param("limit", "100000"))
             .andExpect(status().isBadRequest());
 
         verifyNoInteractions(dlqService);
@@ -71,7 +75,7 @@ class DlqControllerTest {
 
     @Test
     void list_returnsBadRequest_whenLimitBelowMin() throws Exception {
-        mockMvc.perform(get("/dlq/notifications").param("limit", "0"))
+        mockMvc.perform(get(BASE_PATH).param("limit", "0"))
             .andExpect(status().isBadRequest());
 
         verifyNoInteractions(dlqService);
@@ -79,8 +83,16 @@ class DlqControllerTest {
 
     @Test
     void replayAll_invokesService() throws Exception {
-        mockMvc.perform(post("/dlq/notifications/replay-all"))
-            .andExpect(status().isOk());
+        mockMvc.perform(post(REPLAY_ALL_PATH))
+            .andExpect(status().isAccepted());
+
+        verify(dlqService).replayAll();
+    }
+
+    @Test
+    void replayAll_succeeds_whenUserIdHeaderSupplied() throws Exception {
+        mockMvc.perform(post(REPLAY_ALL_PATH).header("User-Id", "operator-1"))
+            .andExpect(status().isAccepted());
 
         verify(dlqService).replayAll();
     }
@@ -96,14 +108,22 @@ class DlqControllerTest {
             .build()))
             .when(dlqService).replayAll();
 
-        mockMvc.perform(post("/dlq/notifications/replay-all"))
+        mockMvc.perform(post(REPLAY_ALL_PATH))
             .andExpect(status().isBadGateway());
     }
 
     @Test
     void deleteAll_invokesService() throws Exception {
-        mockMvc.perform(post("/dlq/notifications/delete-all"))
-            .andExpect(status().isOk());
+        mockMvc.perform(post(DELETE_ALL_PATH))
+            .andExpect(status().isAccepted());
+
+        verify(dlqService).deleteAll();
+    }
+
+    @Test
+    void deleteAll_succeeds_whenUserIdHeaderSupplied() throws Exception {
+        mockMvc.perform(post(DELETE_ALL_PATH).header("User-Id", "operator-1"))
+            .andExpect(status().isAccepted());
 
         verify(dlqService).deleteAll();
     }
@@ -115,7 +135,7 @@ class DlqControllerTest {
             .build()))
             .when(dlqService).deleteAll();
 
-        mockMvc.perform(post("/dlq/notifications/delete-all"))
+        mockMvc.perform(post(DELETE_ALL_PATH))
             .andExpect(status().isBadGateway());
     }
 }
