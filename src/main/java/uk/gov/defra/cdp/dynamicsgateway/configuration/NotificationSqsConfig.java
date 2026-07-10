@@ -10,6 +10,8 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "aws.sqs.notification")
 public record NotificationSqsConfig(
     @NotBlank String queueUrl,
-    @Min(1) @Max(43200) int visibilityTimeoutSeconds,
+    @NotBlank String dlqUrl,
+    @NotBlank String dlqArn,
     @Min(0) @Max(20) int waitTimeSeconds,
-    @Min(1) @Max(10) int maxMessages) {}
+    @Min(1) @Max(10) int maxMessages) {
+}

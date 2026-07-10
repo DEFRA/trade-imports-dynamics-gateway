@@ -14,11 +14,22 @@ aws:
       type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
   sqs:
     notification:
-      # Required in non-local environments — @NotBlank on NotificationSqsConfig.queueUrl
-      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}
-      visibility-timeout-seconds: ${SQS_VISIBILITY_TIMEOUT_SECONDS:30}
-      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:20}
+      queue-url: ${NOTIFICATION_SQS_QUEUE_URL:}.fifo
+      dlq-url: ${NOTIFICATION_SQS_QUEUE_URL:}-deadletter.fifo
+      dlq-arn: ${NOTIFICATION_SQS_ARN:}-deadletter.fifo
+      wait-time-seconds: ${SQS_WAIT_TIME_SECONDS:10}
       max-messages: ${SQS_MAX_MESSAGES:10}
+
+# Shared secret guarding the DLQ replay-all/delete-all endpoints. Same value the admin app already
+# holds and sends to the backend — both services must be configured with the same value per
+# environment.
+admin:
+  secret: ${TRADE_IMPORTS_ANIMALS_ADMIN_SECRET:}
+
+# SpringDoc / Swagger UI — disabled in deployed environments (enabled in application-local.yml)
+springdoc:
+  swagger-ui:
+    enabled: false
 
 spring:
   application:
@@ -88,6 +99,9 @@ logging:
     uk.gov.defra.cdp.dynamicsgateway: ${LOG_LEVEL:DEBUG}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
     org.springframework.web: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB:INFO}
+    # Azure Service Bus SDK logs AMQP link/session lifecycle ("az.sdk.message") at INFO, which floods
+    # the logs (especially against the local ASB emulator's reconnect churn). WARN keeps real problems.
+    com.azure: ${LOGGING_LEVEL_COM_AZURE:WARN}
 
 info:
   app:

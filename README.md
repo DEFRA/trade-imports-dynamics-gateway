@@ -6,6 +6,8 @@ Centralised gateway forwarding notification events to Azure Service Bus (ASB). E
 * [Configuration](#configuration)
 * [Notification pipeline (SQS)](#notification-pipeline-sqs)
 * [Endpoint](#endpoint)
+* [DLQ API](#dlq-api)
+* [API documentation (OpenAPI)](#api-documentation-openapi)
 * [Testing](#testing)
 * [Running](#running)
 * [SonarCloud](#sonarcloud)
@@ -38,12 +40,15 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 | Variable | Description |
 |---|---|
 | `AZURE_SERVICE_BUS_CONNECTION_STRING` | SAS connection string including `EntityPath` — e.g. `Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=<queue>` |
-| `NOTIFICATION_SQS_QUEUE_URL` | URL of the SQS FIFO queue for notification events |
+| `NOTIFICATION_SQS_QUEUE_URL` | Base SQS queue URL, **without** a `.fifo`/`-deadletter.fifo` suffix — the app appends `.fifo` for the source queue and `-deadletter.fifo` for the DLQ (used by the [DLQ API](#dlq-api)), since both are the same base queue name with a different suffix |
+| `NOTIFICATION_SQS_ARN` | Base SQS queue ARN, same base name/suffix convention as `NOTIFICATION_SQS_QUEUE_URL` — the app appends `-deadletter.fifo` for the DLQ's ARN, needed by `replay-all`'s `StartMessageMoveTask` (which takes an ARN, not a URL) |
 | `AWS_REGION` | AWS region (default: `eu-west-2`) |
 | `APP_AWS_ENDPOINT_OVERRIDE` | LocalStack endpoint for local development (leave unset in deployed environments) |
-| `SQS_VISIBILITY_TIMEOUT_SECONDS` | SQS visibility timeout (default: `30`) |
-| `SQS_WAIT_TIME_SECONDS` | SQS long-poll wait time (default: `20`) |
+| `SQS_WAIT_TIME_SECONDS` | SQS long-poll wait time (default: `10`, awspring's own default) |
 | `SQS_MAX_MESSAGES` | Maximum concurrent SQS messages (default: `10`) |
+| `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` | Shared secret guarding the [DLQ API](#dlq-api)'s replay-all/delete-all operations (`Trade-Imports-Animals-Admin-Secret` header). The same value the admin app holds; must match across both services per environment |
+
+There is no in-process retry: a transient ASB publish failure propagates on the first attempt, so SQS's own redelivery (governed by the queue's visibility timeout and `maxReceiveCount`, both CDP platform defaults) handles retries and eventual DLQ routing.
 
 The service validates the ASB connection string at startup and will refuse to start if it is missing or blank. The target queue is taken from the `EntityPath` component of the connection string.
 
@@ -63,7 +68,7 @@ Error handling:
 
 | Scenario | Behaviour |
 |---|---|
-| Transient ASB failure (timeout, throttle) | Message left in SQS for retry → DLQ after max receive count |
+| Transient ASB failure (timeout, throttle) | Message left in SQS for native redelivery → DLQ after max receive count (no in-process retry) |
 | Non-transient ASB failure (unauthorized, entity not found) | Message deleted from SQS |
 | Invalid JSON body | Message deleted from SQS |
 | Missing or blank `MessageGroupId` | Message deleted from SQS |
@@ -82,6 +87,40 @@ The request body must include an `aggregateId` field, which is used as the ASB `
 | `502 Bad Gateway` | Azure Service Bus send failed |
 
 Each message is assigned a UUID `messageId` which is logged on success for correlation.
+
+### DLQ API
+
+A REST API over the notification dead-letter queue (derived from `NOTIFICATION_SQS_QUEUE_URL`, see
+above) for operators. JSON is snake_case.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /dlq/notifications?limit={n}` | List up to `n` DLQ messages from the front, plus the queue's approximate depth (`limit` defaults to 10 and is capped at 25 — a value above 25 returns `400 Bad Request`; assembled from successive ≤10-message SQS receives until `n` or the queue is exhausted) |
+| `POST /dlq/notifications/replay-all` | Move every DLQ message back onto the source queue via native SQS `StartMessageMoveTask` (no destination specified — defaults to the source queue via the DLQ's redrive-allow-policy). Requires the `Trade-Imports-Animals-Admin-Secret` header |
+| `POST /dlq/notifications/delete-all` | Wipe the DLQ via native SQS `PurgeQueue`. Requires the `Trade-Imports-Animals-Admin-Secret` header |
+
+The list is read-only and open (no auth); replay-all/delete-all are guarded by the shared-secret
+header.
+
+There is no per-message replay or delete — only the two bulk actions above. A poison-pill message
+can't be individually removed: it either keeps cycling back into the DLQ via `replay-all`, or is
+cleared (along with everything else) via `delete-all`. Both operations are **asynchronous** and allow
+only one in-flight task per queue — a second call while one is running fails with `502 Bad Gateway`
+(`AWS.SimpleQueueService.MessageMoveTask.LimitExceeded` for replay-all; SQS's 60-second purge cooldown
+for delete-all). `delete-all` in particular can take up to 60 seconds to fully complete per the
+[AWS API reference](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_PurgeQueue.html) —
+a `list` called immediately after may still show messages already slated for removal.
+
+The `id` is the message's `eventId` from the enveloped body when present, otherwise its SQS
+`MessageDeduplicationId`. Because SQS has no stable cursor and `GetQueueAttributes` counts are
+eventually consistent, a list is a **best-effort snapshot** — the set and `approximate_count` can
+drift between calls.
+
+### API documentation (OpenAPI)
+
+The REST endpoints are documented with OpenAPI via [springdoc](https://springdoc.org/). The generated
+spec is served at `/v3/api-docs`. The Swagger UI is **enabled only in the `local` profile**
+(`/swagger-ui.html`) and disabled in deployed environments (`springdoc.swagger-ui.enabled=false`).
 
 ### Testing
 

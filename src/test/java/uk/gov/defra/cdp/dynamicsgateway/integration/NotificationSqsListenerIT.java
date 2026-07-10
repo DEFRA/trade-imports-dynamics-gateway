@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import com.azure.core.amqp.AmqpRetryOptions;
 import com.azure.core.amqp.exception.AmqpErrorCondition;
@@ -71,7 +73,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
     static void setLocalStackProperties(DynamicPropertyRegistry registry) {
         registry.add("aws.sqs.notification.queue-url", () -> queueUrl);
         registry.add("aws.sqs.notification.wait-time-seconds", () -> "1");
-        registry.add("aws.sqs.notification.visibility-timeout-seconds", () -> "2");
         // 127.0.0.1:PORT is the resolvable endpoint; LocalStack returns sqs.*.localhost:4566
         // as the queue hostname which cannot be resolved outside the container.
         registry.add("app.aws.endpoint-override",
@@ -81,7 +82,10 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @BeforeEach
-    void purgeQueue() {
+    void purgeQueueAndResetSpy() {
+        // Reset before each test as well as after: the exact senderClient invocation-count assertions
+        // must start from a clean slate, independent of test ordering or any stray invocation.
+        Mockito.reset(senderClient);
         try (SqsClient sqs = localSqsClient()) {
             sqs.purgeQueue(PurgeQueueRequest.builder().queueUrl(queueUrl).build());
         } catch (Exception e) {
@@ -97,7 +101,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     @Test
     void sqsToAsb_shouldForwardMessage_whenValidEvent() {
         // Given
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(eventBody, AGGREGATE_ID, deduplicationId);
 
@@ -115,23 +119,23 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
-        // Given — ASB rejects with a transient error; QueueMessageSender wraps it as retryable.
+        // Given — ASB always rejects with a transient error; QueueMessageSender wraps it as retryable.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
-        // When / Then — listener must retry (not discard) after a transient ASB failure
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            assertThat(Mockito.mockingDetails(senderClient).getInvocations())
-                .as("transient ASB failures must be retried, not discarded after the first attempt")
-                .hasSizeGreaterThanOrEqualTo(2);
+        // When / Then — no in-process retry: a single publish attempt, then the exception propagates so
+        // the message is left in SQS for native redelivery (→ DLQ after maxReceiveCount).
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+            verify(senderClient, times(1)).sendMessage(any(ServiceBusMessage.class)));
+        // ApproximateNumberOfMessages(NotVisible) are eventually-consistent, so poll rather than read once.
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
             assertThat(totalMessagesInQueue())
-                .as("transient ASB failures must leave the SQS message in the queue")
-                .isGreaterThanOrEqualTo(1);
-        });
+                .as("after a transient failure the message must remain in SQS for redelivery, not be deleted")
+                .isEqualTo(1));
     }
 
     @Test
@@ -153,7 +157,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
         doThrow(nonTransientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
-        String eventBody = "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
         // When / Then — listener must discard (not retry) after a non-transient ASB failure
@@ -161,6 +165,11 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(totalMessagesInQueue())
                 .as("non-transient ASB failures must discard the message, not retry")
                 .isZero());
+        verify(senderClient, times(1)).sendMessage(any(ServiceBusMessage.class));
+    }
+
+    private static String notificationJson(String aggregateId) {
+        return "{\"aggregateId\":\"" + aggregateId + "\",\"eventType\":\"NotificationSubmitted\"}";
     }
 
     private int totalMessagesInQueue() {

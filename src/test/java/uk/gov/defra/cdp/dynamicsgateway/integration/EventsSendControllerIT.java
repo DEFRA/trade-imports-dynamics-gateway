@@ -81,8 +81,8 @@ class EventsSendControllerIT extends IntegrationBase {
         return Stream.of(
             Arguments.of("missing body", null, "bad-request"),
             Arguments.of("malformed JSON", "{bad json", null),
-            Arguments.of("missing aggregateId", "{\"eventType\":\"NotificationSubmitted\"}", "aggregateId is required"),
-            Arguments.of("blank aggregateId", "{\"aggregateId\":\"  \"}", "aggregateId is required")
+            Arguments.of("missing aggregateId", "{\"eventType\":\"NotificationSubmitted\"}", "Request parameter is invalid"),
+            Arguments.of("blank aggregateId", "{\"aggregateId\":\"  \"}", "Request parameter is invalid")
         );
     }
 

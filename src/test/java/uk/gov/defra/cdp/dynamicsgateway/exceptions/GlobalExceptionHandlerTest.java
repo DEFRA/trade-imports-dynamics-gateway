@@ -1,10 +1,15 @@
 package uk.gov.defra.cdp.dynamicsgateway.exceptions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonParseException;
+import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +22,11 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueInProgressException;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 
 class GlobalExceptionHandlerTest {
 
@@ -129,6 +138,94 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleSqsException_shouldReturn502_whenMoveTaskLimitExceeded() {
+        // Given
+        SqsException ex = (SqsException) SqsException.builder()
+            .message("A message move task is already in progress")
+            .awsErrorDetails(AwsErrorDetails.builder()
+                .errorCode("AWS.SimpleQueueService.MessageMoveTask.LimitExceeded")
+                .build())
+            .build();
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleSqsException(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/upstream-error"));
+    }
+
+    @Test
+    void handleSqsException_shouldReturn502_whenPurgeAlreadyInProgress() {
+        // Given
+        PurgeQueueInProgressException ex = PurgeQueueInProgressException.builder()
+            .message("Purge already in progress")
+            .build();
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleSqsException(ex);
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+    }
+
+    @Test
+    void handleSqsException_shouldReturn502_forOtherSqsErrors() {
+        // Given
+        SqsException ex = (SqsException) SqsException.builder()
+            .message("Queue does not exist")
+            .awsErrorDetails(AwsErrorDetails.builder().errorCode("AWS.SimpleQueueService.NonExistentQueue").build())
+            .build();
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleSqsException(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/upstream-error"));
+    }
+
+    @Test
+    void handleCompletionException_shouldUnwrapAndDelegate_whenCauseIsSqsException() {
+        // Given — DlqService's .join() calls wrap whatever the SDK threw in a CompletionException
+        SqsException cause = (SqsException) SqsException.builder()
+            .message("A message move task is already in progress")
+            .awsErrorDetails(AwsErrorDetails.builder()
+                .errorCode("AWS.SimpleQueueService.MessageMoveTask.LimitExceeded")
+                .build())
+            .build();
+        CompletionException ex = new CompletionException(cause);
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleCompletionException(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then — same mapping as calling handleSqsException(cause) directly
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/upstream-error"));
+    }
+
+    @Test
+    void handleCompletionException_shouldReturn500_whenCauseIsNotSqsException() {
+        // Given
+        CompletionException ex = new CompletionException(new RuntimeException("boom"));
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleCompletionException(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/internal-error"));
+    }
+
+    @Test
     void handleIllegalArgument_shouldReturn400WithProblemDetail() {
         // Given
         MDC.put("trace.id", "trace-xyz");
@@ -145,8 +242,46 @@ class GlobalExceptionHandlerTest {
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
         assertThat(problem.getTitle()).isEqualTo("Bad Request");
-        assertThat(problem.getDetail()).isEqualTo("aggregateId is required");
+        // The handler must not echo the raw exception message back to the caller (it may leak internals).
+        assertThat(problem.getDetail()).isEqualTo("Request parameter is invalid");
         assertThat(problem.getProperties()).containsEntry("traceId", "trace-xyz");
+    }
+
+    @Test
+    void handleConstraintViolation_shouldReturn400WithProblemDetail() {
+        // Given
+        ConstraintViolationException ex =
+            new ConstraintViolationException("limit: must be less than or equal to 100", Set.of());
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleConstraintViolation(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
+        assertThat(problem.getTitle()).isEqualTo("Bad Request");
+        // The handler must not echo the raw exception message back to the caller (it may leak internals).
+        assertThat(problem.getDetail()).isEqualTo("Request parameter is invalid");
+    }
+
+    @Test
+    void handleInvalidBody_shouldReturn400WithProblemDetail() {
+        // Given
+        MethodArgumentNotValidException ex = mock(MethodArgumentNotValidException.class);
+        when(ex.getMessage()).thenReturn("field error: aggregateId must not be blank");
+
+        // When
+        ResponseEntity<ProblemDetail> response = handler.handleInvalidBody(ex);
+        ProblemDetail problem = response.getBody();
+
+        // Then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(problem).isNotNull();
+        assertThat(problem.getType()).isEqualTo(URI.create("/problems/bad-request"));
+        assertThat(problem.getTitle()).isEqualTo("Bad Request");
+        assertThat(problem.getDetail()).isEqualTo("Request body failed validation");
     }
 
     @Test
