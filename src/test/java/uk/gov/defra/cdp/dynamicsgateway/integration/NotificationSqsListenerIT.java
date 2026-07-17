@@ -3,6 +3,7 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import java.time.Duration;
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,29 +43,50 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueAttributesRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
+import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 @Slf4j
 class NotificationSqsListenerIT extends IntegrationBase {
 
     private static final String QUEUE_NAME_SQS = "trade_imports_animals_eu_notifications_gateway.fifo";
+    private static final String DLQ_NAME_SQS = "trade_imports_animals_eu_notifications_gateway-deadletter.fifo";
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
+    // Mirrors the CDP-provisioned queues: after this many failed receives SQS redrives to the DLQ.
+    private static final int MAX_RECEIVE_COUNT = 3;
+    // Short visibility timeout so each redelivery cycle — and the redrive to the DLQ after
+    // exhaustion — completes in ~2s rather than the 30s SQS default, keeping the redrive IT fast.
+    private static final int VISIBILITY_TIMEOUT_SECONDS = 2;
 
     private static final LocalStackContainer LOCAL_STACK = new LocalStackContainer(
         DockerImageName.parse("localstack/localstack:3.0.2"))
         .withServices(LocalStackContainer.Service.SQS);
 
     private static String queueUrl;
+    private static String dlqUrl;
 
     static {
         LOCAL_STACK.start();
     }
 
     @BeforeAll
-    static void createQueue() {
-        queueUrl = createFifoQueueAndGetUrl();
+    static void createQueues() {
+        try (SqsClient sqs = localSqsClient()) {
+            dlqUrl = createFifoQueue(sqs, DLQ_NAME_SQS, Map.of());
+            String dlqArn = queueArn(sqs, dlqUrl);
+            // RedrivePolicy on the source queue: SQS moves a message to the DLQ once it has been
+            // received MAX_RECEIVE_COUNT times without being deleted — the native mechanism this IT
+            // exercises. A short VISIBILITY_TIMEOUT_SECONDS keeps each redelivery cycle to ~2s so
+            // exhaustion reaches the DLQ in a few seconds; the discard/transient tests ack or assert
+            // within the first cycle, so the short timeout doesn't disturb them.
+            queueUrl = createFifoQueue(sqs, QUEUE_NAME_SQS, Map.of(
+                QueueAttributeName.REDRIVE_POLICY,
+                "{\"deadLetterTargetArn\":\"" + dlqArn + "\",\"maxReceiveCount\":\"" + MAX_RECEIVE_COUNT + "\"}",
+                QueueAttributeName.VISIBILITY_TIMEOUT, String.valueOf(VISIBILITY_TIMEOUT_SECONDS)));
+        }
     }
 
     @MockitoSpyBean
@@ -82,15 +105,13 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @BeforeEach
-    void purgeQueueAndResetSpy() {
+    void purgeQueuesAndResetSpy() {
         // Reset before each test as well as after: the exact senderClient invocation-count assertions
         // must start from a clean slate, independent of test ordering or any stray invocation.
         Mockito.reset(senderClient);
-        try (SqsClient sqs = localSqsClient()) {
-            sqs.purgeQueue(PurgeQueueRequest.builder().queueUrl(queueUrl).build());
-        } catch (Exception e) {
-            log.debug("Queue purge skipped or incomplete before test: {}", e.getMessage());
-        }
+        // Purge the DLQ too so a message redriven by one test can't leak into another's assertions.
+        purgeQueue(queueUrl);
+        purgeQueue(dlqUrl);
     }
 
     @AfterEach
@@ -168,14 +189,46 @@ class NotificationSqsListenerIT extends IntegrationBase {
         verify(senderClient, times(1)).sendMessage(any(ServiceBusMessage.class));
     }
 
+    @Test
+    void sqsToAsb_shouldLandMessageOnDlq_whenAsbFailsUntilRedeliveryIsExhausted() {
+        // Given — ASB rejects every attempt transiently, so the error handler re-throws (never acks)
+        // and the message is left for native SQS redelivery on each cycle rather than deleted.
+        AmqpException transientCause = new AmqpException(true, "timeout", null, null);
+        ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
+        doThrow(transientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
+
+        String eventBody = notificationJson(AGGREGATE_ID);
+        sendToSqs(eventBody, AGGREGATE_ID);
+
+        // When / Then — after MAX_RECEIVE_COUNT failed receives the RedrivePolicy moves the message to
+        // the DLQ. With the ~2s visibility timeout, exhaustion completes in a few seconds. This proves
+        // exhaustion actually reaches the DLQ — no other test covers it; the transient test above only
+        // proves the message is *left* on the source queue.
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            assertThat(totalMessagesInQueue(dlqUrl))
+                .as("after maxReceiveCount redelivery failures the message must be redriven to the DLQ")
+                .isEqualTo(1));
+
+        // The redriven message carries the original event body, not a mutated or empty payload.
+        assertThat(receiveOneFromDlq())
+            .as("the DLQ must hold the original event body")
+            .contains(eventBody);
+        // ASB was genuinely attempted on each redelivery before exhaustion, not short-circuited.
+        verify(senderClient, atLeast(MAX_RECEIVE_COUNT)).sendMessage(any(ServiceBusMessage.class));
+    }
+
     private static String notificationJson(String aggregateId) {
         return "{\"aggregateId\":\"" + aggregateId + "\",\"eventType\":\"NotificationSubmitted\"}";
     }
 
     private int totalMessagesInQueue() {
+        return totalMessagesInQueue(queueUrl);
+    }
+
+    private int totalMessagesInQueue(String url) {
         try (SqsClient sqs = localSqsClient()) {
             var attributes = sqs.getQueueAttributes(GetQueueAttributesRequest.builder()
-                    .queueUrl(queueUrl)
+                    .queueUrl(url)
                     .attributeNames(
                         QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES,
                         QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES_NOT_VISIBLE)
@@ -188,19 +241,46 @@ class NotificationSqsListenerIT extends IntegrationBase {
         }
     }
 
-    private static String createFifoQueueAndGetUrl() {
+    private Optional<String> receiveOneFromDlq() {
         try (SqsClient sqs = localSqsClient()) {
-            sqs.createQueue(CreateQueueRequest.builder()
-                .queueName(QUEUE_NAME_SQS)
-                .attributes(Map.of(
-                    QueueAttributeName.FIFO_QUEUE, "true",
-                    QueueAttributeName.CONTENT_BASED_DEDUPLICATION, "true"))
-                .build());
-            return sqs.getQueueUrl(GetQueueUrlRequest.builder()
-                .queueName(QUEUE_NAME_SQS)
-                .build())
-                .queueUrl();
+            return sqs.receiveMessage(ReceiveMessageRequest.builder()
+                    .queueUrl(dlqUrl)
+                    .maxNumberOfMessages(1)
+                    .waitTimeSeconds(1)
+                    .build())
+                .messages().stream()
+                .findFirst()
+                .map(Message::body);
         }
+    }
+
+    private void purgeQueue(String url) {
+        try (SqsClient sqs = localSqsClient()) {
+            sqs.purgeQueue(PurgeQueueRequest.builder().queueUrl(url).build());
+        } catch (Exception e) {
+            log.debug("Queue purge skipped or incomplete before test: {}", e.getMessage());
+        }
+    }
+
+    private static String createFifoQueue(SqsClient sqs, String name, Map<QueueAttributeName, String> extraAttributes) {
+        Map<QueueAttributeName, String> attributes = new EnumMap<>(Map.of(
+            QueueAttributeName.FIFO_QUEUE, "true",
+            QueueAttributeName.CONTENT_BASED_DEDUPLICATION, "true"));
+        attributes.putAll(extraAttributes);
+        sqs.createQueue(CreateQueueRequest.builder()
+            .queueName(name)
+            .attributes(attributes)
+            .build());
+        return sqs.getQueueUrl(GetQueueUrlRequest.builder().queueName(name).build()).queueUrl();
+    }
+
+    private static String queueArn(SqsClient sqs, String queueUrl) {
+        return sqs.getQueueAttributes(GetQueueAttributesRequest.builder()
+                .queueUrl(queueUrl)
+                .attributeNames(QueueAttributeName.QUEUE_ARN)
+                .build())
+            .attributes()
+            .get(QueueAttributeName.QUEUE_ARN);
     }
 
     private void sendToSqs(String body, String messageGroupId) {
