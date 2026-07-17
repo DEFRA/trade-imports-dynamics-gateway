@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -157,6 +158,33 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(totalMessagesInQueue())
                 .as("after a transient failure the message must remain in SQS for redelivery, not be deleted")
                 .isEqualTo(1));
+    }
+
+    @Test
+    void sqsToAsb_shouldForwardMessage_whenAsbFailsTransientlyThenRecovers() {
+        // Given — ASB rejects the first attempt transiently, then succeeds. There is no in-process
+        // retry, so recovery happens via native SQS redelivery on the next visibility cycle: the first
+        // send throws, the redelivered send calls through to the real ASB emulator.
+        AmqpException transientCause = new AmqpException(true, "timeout", null, null);
+        ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
+        doThrow(transientEx).doCallRealMethod().when(senderClient).sendMessage(any(ServiceBusMessage.class));
+
+        String eventBody = notificationJson(AGGREGATE_ID);
+        sendToSqs(eventBody, AGGREGATE_ID);
+
+        // When / Then — the redelivered attempt forwards the message to ASB.
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
+            assertThat(received).isPresent();
+            assertThat(received.get().getBody()).hasToString(eventBody);
+        });
+        // It took more than one attempt — the transient failure was retried, not discarded on first failure.
+        verify(senderClient, atLeast(2)).sendMessage(any(ServiceBusMessage.class));
+        // And the message is gone from the source queue: acked once the retry forwarded it successfully.
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+            assertThat(totalMessagesInQueue())
+                .as("after a successful retry the message must be removed from the source queue")
+                .isZero());
     }
 
     @Test
