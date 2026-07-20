@@ -21,6 +21,8 @@ import com.azure.messaging.servicebus.ServiceBusReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
+import io.floci.testcontainers.FlociContainer;
+import java.net.URI;
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
@@ -35,7 +37,6 @@ import org.mockito.Mockito;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -60,15 +61,19 @@ class NotificationSqsListenerIT extends IntegrationBase {
     private static final int MAX_RECEIVE_COUNT = 3;
     private static final int VISIBILITY_TIMEOUT_SECONDS = 5;
 
-    private static final LocalStackContainer LOCAL_STACK = new LocalStackContainer(
-        DockerImageName.parse("localstack/localstack:3.0.2"))
-        .withServices(LocalStackContainer.Service.SQS);
+    // Floci scopes SQS queues per region, so the test client and the Floci container must
+    // sign for the same region as the app under test — eu-west-2, the app's default.
+    private static final String AWS_REGION = "eu-west-2";
+
+    private static final FlociContainer FLOCI = new FlociContainer(
+        DockerImageName.parse("floci/floci:latest"))
+        .withRegion(AWS_REGION);
 
     private static String queueUrl;
     private static String dlqUrl;
 
     static {
-        LOCAL_STACK.start();
+        FLOCI.start();
     }
 
     @BeforeAll
@@ -93,15 +98,12 @@ class NotificationSqsListenerIT extends IntegrationBase {
     private ServiceBusSenderClient senderClient;
 
     @DynamicPropertySource
-    static void setLocalStackProperties(DynamicPropertyRegistry registry) {
+    static void setFlociProperties(DynamicPropertyRegistry registry) {
         registry.add("aws.sqs.notification.queue-url", () -> queueUrl);
         registry.add("aws.sqs.notification.wait-time-seconds", () -> "1");
-        // 127.0.0.1:PORT is the resolvable endpoint; LocalStack returns sqs.*.localhost:4566
-        // as the queue hostname which cannot be resolved outside the container.
-        registry.add("app.aws.endpoint-override",
-            () -> LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString());
-        registry.add("app.aws.access-key-id", LOCAL_STACK::getAccessKey);
-        registry.add("app.aws.secret-access-key", LOCAL_STACK::getSecretKey);
+        registry.add("app.aws.endpoint-override", FLOCI::getEndpoint);
+        registry.add("app.aws.access-key-id", FLOCI::getAccessKey);
+        registry.add("app.aws.secret-access-key", FLOCI::getSecretKey);
     }
 
     @BeforeEach
@@ -347,10 +349,10 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     private static SqsClient localSqsClient() {
         return SqsClient.builder()
-            .endpointOverride(LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS))
-            .region(Region.of("us-east-1"))
+            .endpointOverride(URI.create(FLOCI.getEndpoint()))
+            .region(Region.of(AWS_REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(LOCAL_STACK.getAccessKey(), LOCAL_STACK.getSecretKey())))
+                AwsBasicCredentials.create(FLOCI.getAccessKey(), FLOCI.getSecretKey())))
             .build();
     }
 }

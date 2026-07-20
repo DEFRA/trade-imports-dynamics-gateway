@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.floci.testcontainers.FlociContainer;
+import java.net.URI;
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
@@ -12,7 +14,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -32,7 +33,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.DlqListResponse;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqService;
 
 /**
- * Exercises {@link DlqService} against a real SQS (LocalStack) so the DLQ list/peek plumbing — FIFO
+ * Exercises {@link DlqService} against a real SQS (Floci) so the DLQ list/peek plumbing — FIFO
  * receive semantics, receipt-handle lifecycle, system attributes, {@code GetQueueAttributes} counting
  * and the early visibility-release — runs against the actual API rather than mocks. Standalone (no
  * Spring context, no ASB emulator).
@@ -50,13 +51,11 @@ class DlqServiceIT {
     // completes in seconds rather than the 30s SQS default.
     private static final int SOURCE_VISIBILITY_TIMEOUT_SECONDS = 1;
 
-    // Newer than the listener IT's 3.0.2: that build predates LocalStack's SQS JSON protocol support
-    // and silently ignores the MessageSystemAttributeNames request param, so it returns no message
-    // group / dedup id — unlike real SQS. DlqService reads those attributes, so it needs a LocalStack
-    // that honours the param the way production AWS does.
-    private static final LocalStackContainer LOCAL_STACK = new LocalStackContainer(
-        DockerImageName.parse("localstack/localstack:3.8.1"))
-        .withServices(LocalStackContainer.Service.SQS);
+    // DlqService reads FIFO system attributes (message group / dedup id) on receive, so the emulator
+    // must honour the MessageSystemAttributeNames request param the way production SQS does — Floci does.
+    private static final FlociContainer FLOCI = new FlociContainer(
+        DockerImageName.parse("floci/floci:latest"))
+        .withRegion(REGION);
 
     private static String sourceUrl;
     private static String dlqUrl;
@@ -64,7 +63,7 @@ class DlqServiceIT {
     private static SqsAsyncClient asyncSqsClient;
 
     static {
-        LOCAL_STACK.start();
+        FLOCI.start();
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -78,7 +77,7 @@ class DlqServiceIT {
             dlqArn = queueArn(sqs, dlqUrl);
             // StartMessageMoveTask rejects a queue with "Source queue must be configured as a Dead
             // Letter Queue" unless some source queue's RedrivePolicy names it as the DLQ target —
-            // this is how AWS (and LocalStack) resolve the implicit "move back to source" destination.
+            // this is how AWS (and Floci) resolve the implicit "move back to source" destination.
             // A short visibility timeout lets a message redrive here in seconds during seeding.
             sourceUrl = createFifoQueue(sqs, SOURCE_QUEUE, Map.of(
                 QueueAttributeName.REDRIVE_POLICY,
@@ -193,7 +192,7 @@ class DlqServiceIT {
                     .isNotEmpty());
         }
         // ...and it actually finishes draining the DLQ — not merely registered. (We assert the DLQ
-        // side only: the LocalStack move task removes the message from the DLQ but doesn't re-enqueue
+        // side only: the Floci move task removes the message from the DLQ but doesn't re-enqueue
         // it onto the source in this harness, so re-arrival on the source isn't asserted here.)
         await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
     }
@@ -290,19 +289,19 @@ class DlqServiceIT {
 
     private static SqsClient localSqsClient() {
         return SqsClient.builder()
-            .endpointOverride(LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS))
+            .endpointOverride(URI.create(FLOCI.getEndpoint()))
             .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(LOCAL_STACK.getAccessKey(), LOCAL_STACK.getSecretKey())))
+                AwsBasicCredentials.create(FLOCI.getAccessKey(), FLOCI.getSecretKey())))
             .build();
     }
 
     private static SqsAsyncClient buildAsyncSqsClient() {
         return SqsAsyncClient.builder()
-            .endpointOverride(LOCAL_STACK.getEndpointOverride(LocalStackContainer.Service.SQS))
+            .endpointOverride(URI.create(FLOCI.getEndpoint()))
             .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(LOCAL_STACK.getAccessKey(), LOCAL_STACK.getSecretKey())))
+                AwsBasicCredentials.create(FLOCI.getAccessKey(), FLOCI.getSecretKey())))
             .build();
     }
 }

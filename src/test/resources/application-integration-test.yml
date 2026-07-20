@@ -14,7 +14,7 @@ aws:
   sqs:
     notification:
       # Placeholder so @NotBlank validation passes for ITs that don't use the SQS listener.
-      # LocalStack default account ID (000000000000) and port (4566) satisfy validation here;
+      # Floci default account ID (000000000000) and port (4566) satisfy validation here;
       # NotificationSqsListenerIT overrides this via @DynamicPropertySource before the listener starts.
       queue-url: http://localhost:4566/000000000000/trade_imports_animals_eu_notifications_gateway.fifo
 
