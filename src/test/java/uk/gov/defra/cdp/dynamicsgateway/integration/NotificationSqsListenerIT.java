@@ -58,9 +58,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     // Mirrors the CDP-provisioned queues: after this many failed receives SQS redrives to the DLQ.
     private static final int MAX_RECEIVE_COUNT = 3;
-    // Short visibility timeout so each redelivery cycle — and the redrive to the DLQ after
-    // exhaustion — completes in ~2s rather than the 30s SQS default, keeping the redrive IT fast.
-    private static final int VISIBILITY_TIMEOUT_SECONDS = 2;
+    private static final int VISIBILITY_TIMEOUT_SECONDS = 5;
 
     private static final LocalStackContainer LOCAL_STACK = new LocalStackContainer(
         DockerImageName.parse("localstack/localstack:3.0.2"))
@@ -80,9 +78,10 @@ class NotificationSqsListenerIT extends IntegrationBase {
             String dlqArn = queueArn(sqs, dlqUrl);
             // RedrivePolicy on the source queue: SQS moves a message to the DLQ once it has been
             // received MAX_RECEIVE_COUNT times without being deleted — the native mechanism this IT
-            // exercises. A short VISIBILITY_TIMEOUT_SECONDS keeps each redelivery cycle to ~2s so
-            // exhaustion reaches the DLQ in a few seconds; the discard/transient tests ack or assert
-            // within the first cycle, so the short timeout doesn't disturb them.
+            // exercises. VISIBILITY_TIMEOUT_SECONDS governs the redelivery cadence: long enough that
+            // the transient-leave test's single-attempt assertion settles before a 2nd redelivery,
+            // short enough that exhaustion (MAX_RECEIVE_COUNT cycles) still reaches the DLQ inside
+            // IT-1's await.
             queueUrl = createFifoQueue(sqs, QUEUE_NAME_SQS, Map.of(
                 QueueAttributeName.REDRIVE_POLICY,
                 "{\"deadLetterTargetArn\":\"" + dlqArn + "\",\"maxReceiveCount\":\"" + MAX_RECEIVE_COUNT + "\"}",
@@ -229,10 +228,11 @@ class NotificationSqsListenerIT extends IntegrationBase {
         sendToSqs(eventBody, AGGREGATE_ID);
 
         // When / Then — after MAX_RECEIVE_COUNT failed receives the RedrivePolicy moves the message to
-        // the DLQ. With the ~2s visibility timeout, exhaustion completes in a few seconds. This proves
-        // exhaustion actually reaches the DLQ — no other test covers it; the transient test above only
-        // proves the message is *left* on the source queue.
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+        // the DLQ. At the 5s visibility timeout, exhaustion (MAX_RECEIVE_COUNT redelivery cycles)
+        // completes in ~20s, so the await allows 45s. This proves exhaustion actually reaches the DLQ —
+        // no other test covers it; the transient test above only proves the message is *left* on the
+        // source queue.
+        await().atMost(Duration.ofSeconds(45)).untilAsserted(() ->
             assertThat(totalMessagesInQueue(dlqUrl))
                 .as("after maxReceiveCount redelivery failures the message must be redriven to the DLQ")
                 .isEqualTo(1));
