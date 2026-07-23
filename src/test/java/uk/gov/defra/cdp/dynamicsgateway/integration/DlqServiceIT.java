@@ -25,6 +25,7 @@ import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
 import software.amazon.awssdk.services.sqs.model.ListMessageMoveTasksRequest;
 import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqListResponse;
@@ -44,6 +45,10 @@ class DlqServiceIT {
     private static final String GROUP_A = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final String GROUP_B = "Imports.Notification.GBN-AG.GBN-AG-26-002";
     private static final String REGION = "us-east-1";
+    private static final int MAX_RECEIVE_COUNT = 3;
+    // Short source visibility so redrive-seeding (receive-without-deleting past maxReceiveCount)
+    // completes in seconds rather than the 30s SQS default.
+    private static final int SOURCE_VISIBILITY_TIMEOUT_SECONDS = 1;
 
     // Newer than the listener IT's 3.0.2: that build predates LocalStack's SQS JSON protocol support
     // and silently ignores the MessageSystemAttributeNames request param, so it returns no message
@@ -53,6 +58,7 @@ class DlqServiceIT {
         DockerImageName.parse("localstack/localstack:3.8.1"))
         .withServices(LocalStackContainer.Service.SQS);
 
+    private static String sourceUrl;
     private static String dlqUrl;
     private static String dlqArn;
     private static SqsAsyncClient asyncSqsClient;
@@ -73,9 +79,11 @@ class DlqServiceIT {
             // StartMessageMoveTask rejects a queue with "Source queue must be configured as a Dead
             // Letter Queue" unless some source queue's RedrivePolicy names it as the DLQ target —
             // this is how AWS (and LocalStack) resolve the implicit "move back to source" destination.
-            createFifoQueue(sqs, SOURCE_QUEUE, Map.of(
+            // A short visibility timeout lets a message redrive here in seconds during seeding.
+            sourceUrl = createFifoQueue(sqs, SOURCE_QUEUE, Map.of(
                 QueueAttributeName.REDRIVE_POLICY,
-                "{\"deadLetterTargetArn\":\"" + dlqArn + "\",\"maxReceiveCount\":\"3\"}"));
+                "{\"deadLetterTargetArn\":\"" + dlqArn + "\",\"maxReceiveCount\":\"" + MAX_RECEIVE_COUNT + "\"}",
+                QueueAttributeName.VISIBILITY_TIMEOUT, String.valueOf(SOURCE_VISIBILITY_TIMEOUT_SECONDS)));
         }
     }
 
@@ -86,12 +94,15 @@ class DlqServiceIT {
 
     @BeforeEach
     void setUp() {
+        // Clear both queues: replayAll moves messages back onto the source, so a prior test can
+        // leave one there.
+        purge(sourceUrl);
         purge(dlqUrl);
         // PurgeQueue is async (up to 60s per the AWS API reference), so await drain to 0 before
         // seeding — otherwise a still-draining purge from the prior test can race this test's seed.
-        await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
-        // queueUrl is unused by DlqService.list(); a placeholder satisfies @NotBlank without standing
-        // up a source queue this IT no longer needs.
+        await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0 && totalInQueue(sourceUrl) == 0);
+        // DlqService never reads the source-queue URL (list uses dlqUrl, replayAll uses dlqArn), so a
+        // placeholder satisfies @NotBlank; the real source queue is driven directly via seedDlqViaRedrive.
         NotificationSqsConfig config = new NotificationSqsConfig(
             "http://localhost/unused-source-queue", dlqUrl, dlqArn, 20, 10);
         dlqService = new DlqService(asyncSqsClient, config, objectMapper);
@@ -162,15 +173,17 @@ class DlqServiceIT {
     }
 
     @Test
-    void replayAll_startsAMoveTaskAgainstTheRealQueue() {
-        // Given
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 1);
+    void replayAll_drainsTheDlqBackOntoTheSource() {
+        // Given — a message that reached the DLQ the real way: redriven from the source after
+        // exhausting maxReceiveCount. Only then does it carry the original-source provenance that
+        // replayAll's destination-less StartMessageMoveTask needs to move it back (a directly-seeded
+        // message has no source and would never leave the DLQ).
+        seedDlqViaRedrive("{\"key\":\"a\"}", GROUP_A, "dedup-a");
 
         // When
         dlqService.replayAll();
 
-        // Then
+        // Then — the move task is registered...
         try (SqsClient sqs = localSqsClient()) {
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(sqs.listMessageMoveTasks(ListMessageMoveTasksRequest.builder()
@@ -178,6 +191,44 @@ class DlqServiceIT {
                         .build())
                     .results())
                     .isNotEmpty());
+        }
+        // ...and it actually finishes draining the DLQ — not merely registered. (We assert the DLQ
+        // side only: the LocalStack move task removes the message from the DLQ but doesn't re-enqueue
+        // it onto the source in this harness, so re-arrival on the source isn't asserted here.)
+        await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
+    }
+
+    /**
+     * Seed the DLQ the real way — send to the source queue, then receive-without-deleting until
+     * ApproximateReceiveCount exceeds maxReceiveCount and SQS redrives the message to the DLQ. Unlike
+     * {@link #seedDlq}, the redriven message carries its original-source provenance, which is what lets
+     * replayAll's destination-less move task move it back.
+     */
+    private void seedDlqViaRedrive(String body, String group, String dedupId) {
+        try (SqsClient sqs = localSqsClient()) {
+            sqs.sendMessage(SendMessageRequest.builder()
+                .queueUrl(sourceUrl)
+                .messageBody(body)
+                .messageGroupId(group)
+                .messageDeduplicationId(dedupId)
+                .build());
+        }
+        await().atMost(Duration.ofSeconds(30))
+            .pollInterval(Duration.ofMillis(500))
+            .until(() -> {
+                receiveWithoutDeleting(sourceUrl);
+                return totalInQueue(dlqUrl) >= 1;
+            });
+    }
+
+    private void receiveWithoutDeleting(String url) {
+        try (SqsClient sqs = localSqsClient()) {
+            // Not deleted on purpose: each receive bumps ApproximateReceiveCount toward maxReceiveCount.
+            sqs.receiveMessage(ReceiveMessageRequest.builder()
+                .queueUrl(url)
+                .maxNumberOfMessages(1)
+                .waitTimeSeconds(1)
+                .build());
         }
     }
 
