@@ -43,7 +43,7 @@ The service connects to Azure Service Bus using a SAS send-only connection strin
 | `NOTIFICATION_SQS_QUEUE_URL` | Base SQS queue URL, **without** a `.fifo`/`-deadletter.fifo` suffix — the app appends `.fifo` for the source queue and `-deadletter.fifo` for the DLQ (used by the [DLQ API](#dlq-api)), since both are the same base queue name with a different suffix |
 | `NOTIFICATION_SQS_ARN` | Base SQS queue ARN, same base name/suffix convention as `NOTIFICATION_SQS_QUEUE_URL` — the app appends `-deadletter.fifo` for the DLQ's ARN, needed by `replay-all`'s `StartMessageMoveTask` (which takes an ARN, not a URL) |
 | `AWS_REGION` | AWS region (default: `eu-west-2`) |
-| `APP_AWS_ENDPOINT_OVERRIDE` | LocalStack endpoint for local development (leave unset in deployed environments) |
+| `APP_AWS_ENDPOINT_OVERRIDE` | Floci endpoint for local development (leave unset in deployed environments) |
 | `SQS_WAIT_TIME_SECONDS` | SQS long-poll wait time (default: `10`, awspring's own default) |
 | `SQS_MAX_MESSAGES` | Maximum concurrent SQS messages (default: `10`) |
 | `TRADE_IMPORTS_ANIMALS_ADMIN_SECRET` | Shared secret guarding the [DLQ API](#dlq-api)'s replay-all/delete-all operations (`Trade-Imports-Animals-Admin-Secret` header). The same value the admin app holds; must match across both services per environment |
@@ -136,11 +136,11 @@ Run the full build including integration tests:
 mvn verify
 ```
 
-Integration tests use [Testcontainers](https://testcontainers.com/) to spin up a real Azure Service Bus emulator (backed by SQL Server) and LocalStack (SQS) to verify end-to-end message delivery across both ingress paths. Docker must be running.
+Integration tests use [Testcontainers](https://testcontainers.com/) to spin up a real Azure Service Bus emulator (backed by SQL Server) and Floci (SQS) to verify end-to-end message delivery across both ingress paths. Docker must be running.
 
 ### Running
 
-Run the application with the `local` Spring profile, which enables LocalStack endpoint override and additional actuator endpoints for debugging:
+Run the application with the `local` Spring profile, which enables the Floci endpoint override and additional actuator endpoints for debugging:
 
 ```bash
 mvn spring-boot:run -Dspring-boot.run.profiles=local
