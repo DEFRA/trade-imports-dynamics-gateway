@@ -247,8 +247,22 @@ class NotificationSqsListenerIT extends IntegrationBase {
         verify(senderClient, atLeast(MAX_RECEIVE_COUNT)).sendMessage(any(ServiceBusMessage.class));
     }
 
+    @Test
+    void sqsToAsb_shouldDropMessage_whenEventTypeIsNotificationEdited() {
+        String editedBody = "{\"aggregateId\":\"" + AGGREGATE_ID
+            + "\",\"eventType\":\"uk.gov.defra.trade.imports.animals.NotificationEdited\"}";
+        sendToSqs(editedBody, AGGREGATE_ID);
+
+        // Allow time for the listener to consume the message, then assert nothing reached ASB
+        await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
+            assertThat(received).isEmpty();
+        });
+    }
+
     private static String notificationJson(String aggregateId) {
-        return "{\"aggregateId\":\"" + aggregateId + "\",\"eventType\":\"NotificationSubmitted\"}";
+        return "{\"aggregateId\":\"" + aggregateId
+            + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\"}";
     }
 
     private int totalMessagesInQueue() {
