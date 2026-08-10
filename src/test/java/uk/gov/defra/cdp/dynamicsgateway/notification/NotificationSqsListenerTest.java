@@ -17,6 +17,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -184,31 +186,15 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
-    @Test
-    void receive_shouldDropEvent_whenEventTypeIsNotificationEdited() {
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "uk.gov.defra.trade.imports.animals.NotificationEdited",
+        "uk.gov.defra.unknown.SomeInternalEvent",
+        ""
+    })
+    void receive_shouldDropEvent_whenEventTypeIsNotWhitelisted(String eventType) {
         String body = "{\"aggregateId\":\"" + AGGREGATE_ID
-            + "\",\"eventType\":\"uk.gov.defra.trade.imports.animals.NotificationEdited\"}";
-
-        listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
-
-        verify(queueMessageSender, never()).publish(any(), any(), any());
-        assertThat(counterValue("forwarded")).isEqualTo(0.0);
-    }
-
-    @Test
-    void receive_shouldDropEvent_whenEventTypeIsUnknown() {
-        String body = "{\"aggregateId\":\"" + AGGREGATE_ID
-            + "\",\"eventType\":\"uk.gov.defra.unknown.SomeInternalEvent\"}";
-
-        listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
-
-        verify(queueMessageSender, never()).publish(any(), any(), any());
-        assertThat(counterValue("forwarded")).isEqualTo(0.0);
-    }
-
-    @Test
-    void receive_shouldDropEvent_whenEventTypeIsAbsent() {
-        String body = "{\"aggregateId\":\"" + AGGREGATE_ID + "\"}";
+            + "\",\"eventType\":\"" + eventType + "\"}";
 
         listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
