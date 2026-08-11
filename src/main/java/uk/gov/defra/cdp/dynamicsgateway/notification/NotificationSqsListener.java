@@ -8,6 +8,7 @@ import io.awspring.cloud.sqs.listener.SqsHeaders;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.Header;
@@ -24,6 +25,11 @@ import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 @Slf4j
 @Component
 public class NotificationSqsListener {
+
+    static final Set<String> EXTERNAL_EVENT_TYPES = Set.of(
+        "uk.gov.defra.imports.notification.NotificationSubmitted",
+        "uk.gov.defra.imports.notification.NotificationSubmissionAmended"
+    );
 
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
@@ -69,6 +75,12 @@ public class NotificationSqsListener {
             parsedBody = objectMapper.readTree(body);
         } catch (JsonProcessingException e) {
             throw new SqsNonRetryableException("Message body is not valid JSON", e);
+        }
+
+        String eventType = parsedBody.path("eventType").asText();
+        if (!EXTERNAL_EVENT_TYPES.contains(eventType)) {
+            log.info("Dropping non-external event type={} aggregateId={}", eventType, aggregateId);
+            return;
         }
 
         String asbMessageId = resolveAsbMessageId(parsedBody, deduplicationId);

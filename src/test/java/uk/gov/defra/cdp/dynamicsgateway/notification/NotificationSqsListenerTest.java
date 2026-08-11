@@ -17,6 +17,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,10 +40,11 @@ class NotificationSqsListenerTest {
     private static final String EVENT_ID = "evt-99999999-8888-7777-6666-555555555555";
     private static final String RECEIVE_COUNT = "1";
     private static final String VALID_BODY =
-        "{\"aggregateId\":\"" + AGGREGATE_ID + "\",\"eventType\":\"NotificationSubmitted\"}";
+        "{\"aggregateId\":\"" + AGGREGATE_ID
+            + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\"}";
     private static final String ENVELOPED_BODY =
         "{\"eventId\":\"" + EVENT_ID + "\",\"aggregateId\":\"" + AGGREGATE_ID
-            + "\",\"eventType\":\"NotificationSubmitted\"}";
+            + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\"}";
 
     @BeforeEach
     void setUp() {
@@ -169,6 +172,33 @@ class NotificationSqsListenerTest {
         assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class);
         verify(queueMessageSender, times(1)).publish(VALID_BODY, AGGREGATE_ID, DEDUP_ID);
+        assertThat(counterValue("forwarded")).isEqualTo(0.0);
+    }
+
+    @Test
+    void receive_shouldForwardNotificationSubmissionAmended() {
+        String body = "{\"aggregateId\":\"" + AGGREGATE_ID
+            + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmissionAmended\"}";
+
+        listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
+
+        verify(queueMessageSender).publish(body, AGGREGATE_ID, DEDUP_ID);
+        assertThat(counterValue("forwarded")).isEqualTo(1.0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "uk.gov.defra.trade.imports.animals.NotificationEdited",
+        "uk.gov.defra.unknown.SomeInternalEvent",
+        ""
+    })
+    void receive_shouldDropEvent_whenEventTypeIsNotWhitelisted(String eventType) {
+        String body = "{\"aggregateId\":\"" + AGGREGATE_ID
+            + "\",\"eventType\":\"" + eventType + "\"}";
+
+        listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
+
+        verify(queueMessageSender, never()).publish(any(), any(), any());
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
