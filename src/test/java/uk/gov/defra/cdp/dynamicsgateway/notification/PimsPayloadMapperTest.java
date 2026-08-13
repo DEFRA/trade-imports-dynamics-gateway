@@ -18,7 +18,15 @@ class PimsPayloadMapperTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        mapper = new PimsPayloadMapper(objectMapper, new PimsEventMapper());
+        PimsEventMapper pimsEventMapper = new PimsEventMapper(
+            new PimsGbnAgDataMapper(
+                new PimsConsignmentMapper(
+                    new PimsTransportMapper(),
+                    new PimsLineItemMapper()
+                )
+            )
+        );
+        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper);
     }
 
     @Test
@@ -99,9 +107,10 @@ class PimsPayloadMapperTest {
         String result = mapper.map(node);
         JsonNode pimsNode = objectMapper.readTree(result);
 
-        // Then — null fields omitted (NON_NULL)
+        // Then — null scalar fields omitted (NON_NULL); null list fields serialise as []
         assertThat(pimsNode.has("actor")).isFalse();
         assertThat(pimsNode.has("data")).isFalse();
-        assertThat(pimsNode.has("statusChanges")).isFalse();
+        assertThat(pimsNode.path("statusChanges").isArray()).isTrue();
+        assertThat(pimsNode.path("statusChanges")).isEmpty();
     }
 }

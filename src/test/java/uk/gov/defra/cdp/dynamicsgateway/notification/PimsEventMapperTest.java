@@ -18,14 +18,12 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ConsignmentIte
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LineTradeDelivery;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsLocation;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsPackage;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTransportMeans;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTransportMovement;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ProductUnitQuantity;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeCountry;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeLineItem;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeProductInstance;
@@ -34,7 +32,14 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV1;
 
 class PimsEventMapperTest {
 
-    private final PimsEventMapper mapper = new PimsEventMapper();
+    private final PimsEventMapper mapper = new PimsEventMapper(
+        new PimsGbnAgDataMapper(
+            new PimsConsignmentMapper(
+                new PimsTransportMapper(),
+                new PimsLineItemMapper()
+            )
+        )
+    );
 
     private static final Instant NOW = Instant.parse("2026-08-12T10:00:00Z");
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
@@ -63,7 +68,7 @@ class PimsEventMapperTest {
         assertThat(result.data()).isNull();
         assertThat(result.metadata()).isNull();
         assertThat(result.actor()).isNull();
-        assertThat(result.statusChanges()).isNull();
+        assertThat(result.statusChanges()).isEmpty();
     }
 
     @Test
@@ -128,7 +133,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleNullStatusChanges() {
-        assertThat(mapper.map(minimalEvent()).statusChanges()).isNull();
+        assertThat(mapper.map(minimalEvent()).statusChanges()).isEmpty();
     }
 
     @Test
@@ -363,9 +368,5 @@ class PimsEventMapperTest {
                 null, null, mainCarriageTransport, null, null, includedConsignmentItem);
         }
 
-        // Allow implicit conversion in test expressions
-        private SpecifiedConsignment asConsignment() {
-            return build();
-        }
     }
 }
