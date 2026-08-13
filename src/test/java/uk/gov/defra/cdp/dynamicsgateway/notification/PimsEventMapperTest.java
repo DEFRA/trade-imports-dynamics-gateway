@@ -396,8 +396,6 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldConstructDroppedInputTypes() {
-        // DefinedContact and ReferencedDocument are outbox-only types dropped by the mapper;
-        // constructing them here exercises their record constructors for coverage
         DefinedContact contact = new DefinedContact("Person", "+44123", "email@test.com");
         ReferencedDocument refDoc = new ReferencedDocument("T", "R", "ref-1", "2026-08-13");
         TradeParty party = new TradeParty("p-1", null, null, null, null, null, List.of(contact));
