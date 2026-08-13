@@ -9,6 +9,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxActor;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEventMetadata;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxStatusChange;
+import java.util.Collections;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.AnimalIdentifier;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ApplicableClassification;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
@@ -24,6 +25,11 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTrans
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ProductUnitQuantity;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.DefinedContact;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsLocation;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeCountry;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeCountrySubDivision;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeLineItem;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeProductInstance;
@@ -310,6 +316,99 @@ class PimsEventMapperTest {
             .identifier().getFirst();
         assertThat(pimsId.typeCode()).isEqualTo("EAR_TAG");
         assertThat(pimsId.content()).isEqualTo("UK123456");
+    }
+
+    @Test
+    void map_shouldMapOriginCountryAndUnloadingBaseportLocation() {
+        // Given — exercises mapTradeCountry and mapLogisticsLocation non-null paths,
+        // and constructs TradeCountry, TradeCountrySubDivision, LogisticsLocation records
+        TradeCountry origin = new TradeCountry(
+            new CodedValue("GB", "url", null),
+            new TradeCountrySubDivision("ENG", new CodedValue("ENG", null, null)));
+        LogisticsLocation port = new LogisticsLocation("PORT-1", null, null, null, null);
+        SpecifiedConsignment sc = new SpecifiedConsignment(
+            null, null, null, null, null, null, origin, port, null, null, null, null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
+
+        // When
+        var pimsConsignment = mapper.map(event).data().specifiedConsignment();
+
+        // Then
+        assertThat(pimsConsignment.originCountry().code().value()).isEqualTo("GB");
+        assertThat(pimsConsignment.unloadingBaseportLocation().identifier()).isEqualTo("PORT-1");
+    }
+
+    @Test
+    void map_shouldHandleNullCodeInTradeCountry() {
+        // Given — TradeCountry with null code exercises mapCodedValue null branch
+        TradeCountry origin = new TradeCountry(null, null);
+        SpecifiedConsignment sc = new SpecifiedConsignment(
+            null, null, null, null, null, null, origin, null, null, null, null, null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
+
+        // When / Then
+        assertThat(mapper.map(event).data().specifiedConsignment().originCountry().code()).isNull();
+    }
+
+    @Test
+    void map_shouldHandleNullPostalAddressOnTradeParty() {
+        // Given — TradeParty with null postalAddress exercises mapTradeAddress null branch
+        TradeParty party = new TradeParty("p-1", null, "Name", null, null, null, null);
+        SpecifiedConsignment sc = emptyConsignment().withConsignorParty(party).build();
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
+
+        // When / Then
+        assertThat(mapper.map(event).data().specifiedConsignment().consignorParty().postalAddress()).isNull();
+    }
+
+    @Test
+    void map_shouldHandleNullAuthenticationInExchangedDocument() {
+        // Given — null firstSignatoryAuthentication exercises mapAuthentication null branch
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null, null, null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
+
+        // When / Then
+        assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication()).isNull();
+    }
+
+    @Test
+    void map_shouldHandleNullIncludedClauseList() {
+        // Given — Authentication with null includedClause exercises mapList null branch in PimsGbnAgDataMapper
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+            new Authentication(null), null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
+
+        // When / Then
+        assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause()).isEmpty();
+    }
+
+    @Test
+    void map_shouldHandleNullClauseElementInAuthentication() {
+        // Given — null element in includedClause list exercises mapClause null branch
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+            new Authentication(Collections.singletonList(null)), null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
+
+        // When / Then — null clause element maps to null in output list
+        assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause()).hasSize(1);
+        assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause().getFirst()).isNull();
+    }
+
+    @Test
+    void map_shouldConstructDroppedInputTypes() {
+        // DefinedContact and ReferencedDocument are outbox-only types dropped by the mapper;
+        // constructing them here exercises their record constructors for coverage
+        DefinedContact contact = new DefinedContact("Person", "+44123", "email@test.com");
+        ReferencedDocument refDoc = new ReferencedDocument("T", "R", "ref-1", "2026-08-13");
+        TradeParty party = new TradeParty("p-1", null, null, null, null, null, List.of(contact));
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+            new Authentication(List.of(new Clause("c1", "text", null))), List.of(refDoc));
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc,
+            emptyConsignment().withConsignorParty(party).build()));
+
+        // When / Then — mapper runs without error; dropped fields absent from PIMS output
+        assertThat(mapper.map(event).data().exchangedDocument().identifier()).isEqualTo("id");
+        assertThat(mapper.map(event).data().specifiedConsignment().consignorParty().identifier()).isEqualTo("p-1");
     }
 
     // --- Helpers ---
