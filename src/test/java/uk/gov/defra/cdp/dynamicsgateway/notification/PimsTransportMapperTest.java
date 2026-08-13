@@ -2,7 +2,6 @@ package uk.gov.defra.cdp.dynamicsgateway.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Instant;
 import java.util.Collections;
 import org.junit.jupiter.api.Test;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTransportMovement;
@@ -19,8 +18,6 @@ class PimsTransportMapperTest {
 
     @Test
     void mapTransportMovement_shouldHandleNullMeansAndNullArrivalEventList() {
-        // Given — null usedLogisticsTransportMeans exercises mapTransportMeans null branch;
-        // null arrivalEvent list exercises mapList null branch
         var tm = new LogisticsTransportMovement(null, null, 1, null, null, null);
 
         // When
