@@ -8,12 +8,10 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnag.PimsAuthentication;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnag.PimsClause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnag.PimsExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnag.PimsGbnAgData;
-import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnag.PimsSpecifiedConsignment;
 
 @Component
 @RequiredArgsConstructor

@@ -62,14 +62,15 @@ class NotificationSqsListenerTest {
             )
         );
         pimsPayloadMapper = new PimsPayloadMapper(objectMapper, pimsEventMapper);
-        listener = new NotificationSqsListener(queueMessageSender, objectMapper, pimsPayloadMapper, meterRegistry);
+        listener = new NotificationSqsListener(queueMessageSender, objectMapper, pimsPayloadMapper,
+            meterRegistry);
     }
 
     @Test
     void receive_shouldForwardToAsb_whenValid() {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
-        verify(queueMessageSender).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender).publish(pims(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -80,8 +81,10 @@ class NotificationSqsListenerTest {
         listener.receive(VALID_BODY, AGGREGATE_ID, null, RECEIVE_COUNT);
 
         ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
-        verify(queueMessageSender).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID), messageIdCaptor.capture());
-        assertThatCode(() -> UUID.fromString(messageIdCaptor.getValue())).doesNotThrowAnyException();
+        verify(queueMessageSender).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID),
+            messageIdCaptor.capture());
+        assertThatCode(
+            () -> UUID.fromString(messageIdCaptor.getValue())).doesNotThrowAnyException();
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -91,7 +94,7 @@ class NotificationSqsListenerTest {
         // messageId must still track the body eventId so ASB-level dedup stays stable across the replay.
         listener.receive(ENVELOPED_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
-        verify(queueMessageSender).publish(eq(pims(ENVELOPED_BODY)), eq(AGGREGATE_ID), eq(EVENT_ID));
+        verify(queueMessageSender).publish(pims(ENVELOPED_BODY), AGGREGATE_ID, EVENT_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -101,8 +104,10 @@ class NotificationSqsListenerTest {
         listener.receive(VALID_BODY, AGGREGATE_ID, "   ", RECEIVE_COUNT);
 
         ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
-        verify(queueMessageSender).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID), messageIdCaptor.capture());
-        assertThatCode(() -> UUID.fromString(messageIdCaptor.getValue())).doesNotThrowAnyException();
+        verify(queueMessageSender).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID),
+            messageIdCaptor.capture());
+        assertThatCode(
+            () -> UUID.fromString(messageIdCaptor.getValue())).doesNotThrowAnyException();
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -110,7 +115,7 @@ class NotificationSqsListenerTest {
     void receive_shouldForward_whenReceiveCountHeaderAbsent() {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, null);
 
-        verify(queueMessageSender).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender).publish(pims(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -163,7 +168,8 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenBodyIsInvalidJson() {
-        assertThatThrownBy(() -> listener.receive("not-json", AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+        assertThatThrownBy(
+            () -> listener.receive("not-json", AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("not valid JSON");
 
@@ -179,7 +185,8 @@ class NotificationSqsListenerTest {
                 + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\""
                 + ",\"brandNewBackendField\":\"unexpected\"}";
 
-        assertThatThrownBy(() -> listener.receive(bodyWithNewField, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+        assertThatThrownBy(
+            () -> listener.receive(bodyWithNewField, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class);
 
         verify(queueMessageSender, never()).publish(any(), any(), any());
@@ -189,27 +196,33 @@ class NotificationSqsListenerTest {
     @Test
     void receive_shouldThrowRetryable_onFirstAttempt_whenAsbFailsTransiently() {
         // Given
-        doThrow(new SqsRetryableException("ASB down", new RuntimeException("Simulated transient failure")))
+        doThrow(new SqsRetryableException("ASB down",
+            new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
         // When / Then — no in-process retry: a single attempt, then the exception propagates so SQS
         // redelivers the message (and, after maxReceiveCount, routes it to the DLQ).
-        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+        assertThatThrownBy(
+            () -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsRetryableException.class);
-        verify(queueMessageSender, times(1)).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender, times(1))
+            .publish(pims(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
     @Test
     void receive_shouldNotRetryAndThrowNonRetryable_whenAsbFailsPermanently() {
         // Given
-        doThrow(new SqsNonRetryableException("entity not found", new RuntimeException("Simulated permanent failure")))
+        doThrow(new SqsNonRetryableException("entity not found",
+            new RuntimeException("Simulated permanent failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
         // When / Then — non-retryable failures are not retried: single attempt then propagate to discard.
-        assertThatThrownBy(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+        assertThatThrownBy(
+            () -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class);
-        verify(queueMessageSender, times(1)).publish(eq(pims(VALID_BODY)), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender, times(1))
+            .publish(pims(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
@@ -220,7 +233,7 @@ class NotificationSqsListenerTest {
 
         listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
-        verify(queueMessageSender).publish(eq(pims(body)), eq(AGGREGATE_ID), eq(DEDUP_ID));
+        verify(queueMessageSender).publish(pims(body), AGGREGATE_ID, DEDUP_ID);
         assertThat(counterValue("forwarded")).isEqualTo(1.0);
     }
 
@@ -240,12 +253,15 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded")).isEqualTo(0.0);
     }
 
-    /** Computes the exact PimsEventV1 payload the listener should forward for a given raw SQS body. */
+    /**
+     * Computes the exact PimsEventV1 payload the listener should forward for a given raw SQS body.
+     */
     private String pims(String rawBody) {
         try {
             return pimsPayloadMapper.map(objectMapper.readTree(rawBody));
         } catch (Exception e) {
-            throw new RuntimeException("Failed to compute expected PIMS payload for: " + rawBody, e);
+            throw new RuntimeException("Failed to compute expected PIMS payload for: " + rawBody,
+                e);
         }
     }
 
