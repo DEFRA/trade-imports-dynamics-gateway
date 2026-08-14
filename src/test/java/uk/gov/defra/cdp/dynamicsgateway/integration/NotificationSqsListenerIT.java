@@ -2,6 +2,9 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doCallRealMethod;
@@ -132,7 +135,12 @@ class NotificationSqsListenerIT extends IntegrationBase {
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isPresent();
-            assertThat(received.get().getBody()).hasToString(eventBody);
+            // The ASB body is the re-serialised PimsEventV1, not the raw SQS body.
+            String asbBody = received.get().getBody().toString();
+            JsonNode pimsNode = new ObjectMapper().readTree(asbBody);
+            assertThat(pimsNode.path("aggregateId").asText()).isEqualTo(AGGREGATE_ID);
+            assertThat(pimsNode.path("eventType").asText())
+                .isEqualTo("uk.gov.defra.imports.notification.NotificationSubmitted");
             assertThat(received.get().getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
             // The inbound SQS MessageDeduplicationId is carried through as the ASB messageId.
             assertThat(received.get().getMessageId()).isEqualTo(deduplicationId);
@@ -177,7 +185,9 @@ class NotificationSqsListenerIT extends IntegrationBase {
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isPresent();
-            assertThat(received.get().getBody()).hasToString(eventBody);
+            // The ASB body is the re-serialised PimsEventV1.
+            JsonNode pimsNode = new ObjectMapper().readTree(received.get().getBody().toString());
+            assertThat(pimsNode.path("aggregateId").asText()).isEqualTo(AGGREGATE_ID);
         });
         // It took more than one attempt — the transient failure was retried, not discarded on first failure.
         verify(senderClient, atLeast(2)).sendMessage(any(ServiceBusMessage.class));

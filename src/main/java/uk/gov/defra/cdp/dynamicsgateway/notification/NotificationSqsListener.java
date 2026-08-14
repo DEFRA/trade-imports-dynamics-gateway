@@ -33,14 +33,17 @@ public class NotificationSqsListener {
 
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
+    private final PimsPayloadMapper pimsPayloadMapper;
     private final Counter forwardedCounter;
 
     public NotificationSqsListener(
             QueueMessageSender queueMessageSender,
             ObjectMapper objectMapper,
+            PimsPayloadMapper pimsPayloadMapper,
             MeterRegistry meterRegistry) {
         this.queueMessageSender = queueMessageSender;
         this.objectMapper = objectMapper;
+        this.pimsPayloadMapper = pimsPayloadMapper;
         this.forwardedCounter = Counter.builder("notification.sqs.messages")
             .tag("outcome", "forwarded")
             .description("Messages successfully forwarded to ASB")
@@ -84,7 +87,8 @@ public class NotificationSqsListener {
         }
 
         String asbMessageId = resolveAsbMessageId(parsedBody, deduplicationId);
-        queueMessageSender.publish(body, aggregateId, asbMessageId);
+        String pimsPayload = pimsPayloadMapper.map(parsedBody);
+        queueMessageSender.publish(pimsPayload, aggregateId, asbMessageId);
         forwardedCounter.increment();
     }
 
