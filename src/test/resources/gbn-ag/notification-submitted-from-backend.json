@@ -1,0 +1,367 @@
+{
+  "eventId" : "3f2b8c1e-5d4a-4e6b-9c7d-2a1b0e9f8d7c",
+  "aggregateType" : "Notification",
+  "subType" : "GBN-AG",
+  "aggregateId" : "Imports.Notification.GBN-AG.GBN-AG-26-7K8M2P",
+  "aggregateVersion" : 1,
+  "eventType" : "uk.gov.defra.imports.notification.NotificationSubmitted",
+  "timestamp" : "2026-05-21T10:15:00Z",
+  "data" : {
+    "$model" : "defra/certificate-internal/1",
+    "$type" : "gbn-ag",
+    "exchangedDocument" : {
+      "identifier" : "GBN-AG-26-7K8M2P",
+      "traderAssignedId" : "Imports456_GB",
+      "notificationStatusCode" : "SUBMITTED",
+      "versionId" : 1,
+      "issueDateTime" : "2026-05-21T10:15:00Z",
+      "firstSignatoryAuthentication" : {
+        "includedClause" : [ {
+          "identifier" : "PURPOSE",
+          "content" : "INTERNAL_MARKET",
+          "urlId" : null
+        }, {
+          "identifier" : "INTERNAL_MARKET_PURPOSE",
+          "content" : null,
+          "urlId" : null
+        }, {
+          "identifier" : "GOODS_CERTIFIED_AS",
+          "content" : "BREEDING_AND_PRODUCTION",
+          "urlId" : null
+        } ]
+      }
+    },
+    "specifiedConsignment" : {
+      "consignorParty" : {
+        "identifier" : null,
+        "urlId" : null,
+        "name" : "Ferme Rosales",
+        "partyRoleCode" : null,
+        "partyTypeCode" : null,
+        "postalAddress" : {
+          "lineOne" : "43 Rue de la Paix",
+          "lineTwo" : null,
+          "cityName" : "Lyon",
+          "postcodeCode" : "69001",
+          "countryId" : "FR",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : [ {
+          "personName" : null,
+          "emailURIUniversalCommunication" : "contact@example.com",
+          "telephoneUniversalCommunication" : "01632 960111"
+        } ]
+      },
+      "consigneeParty" : {
+        "identifier" : null,
+        "urlId" : null,
+        "name" : "Linus George Ltd",
+        "partyRoleCode" : null,
+        "partyTypeCode" : null,
+        "postalAddress" : {
+          "lineOne" : "558 Oak Street",
+          "lineTwo" : null,
+          "cityName" : "Ashford",
+          "postcodeCode" : "TN24 8AB",
+          "countryId" : "GB",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : [ {
+          "personName" : null,
+          "emailURIUniversalCommunication" : "contact@example.com",
+          "telephoneUniversalCommunication" : "01632 960111"
+        } ]
+      },
+      "despatchParty" : {
+        "identifier" : null,
+        "urlId" : null,
+        "name" : "Ferme du Massif Central",
+        "partyRoleCode" : null,
+        "partyTypeCode" : null,
+        "postalAddress" : {
+          "lineOne" : "Route de la Vallee 12",
+          "lineTwo" : null,
+          "cityName" : "Clermont-Ferrand",
+          "postcodeCode" : "63000",
+          "countryId" : "FR",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : [ {
+          "personName" : null,
+          "emailURIUniversalCommunication" : "contact@example.com",
+          "telephoneUniversalCommunication" : "01632 960111"
+        } ]
+      },
+      "deliveryParty" : {
+        "identifier" : null,
+        "urlId" : null,
+        "name" : "Linus George Farm",
+        "partyRoleCode" : null,
+        "partyTypeCode" : null,
+        "postalAddress" : {
+          "lineOne" : "Hill Farm Lane",
+          "lineTwo" : null,
+          "cityName" : "Ashford",
+          "postcodeCode" : "TN25 4DT",
+          "countryId" : "GB",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : [ {
+          "personName" : null,
+          "emailURIUniversalCommunication" : "contact@example.com",
+          "telephoneUniversalCommunication" : "01632 960111"
+        } ]
+      },
+      "importer" : {
+        "identifier" : null,
+        "urlId" : null,
+        "name" : "GB Animal Imports",
+        "partyRoleCode" : null,
+        "partyTypeCode" : null,
+        "postalAddress" : {
+          "lineOne" : "5 Port Way",
+          "lineTwo" : null,
+          "cityName" : "Dover",
+          "postcodeCode" : "CT17 9BU",
+          "countryId" : "GB",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : [ {
+          "personName" : null,
+          "emailURIUniversalCommunication" : "contact@example.com",
+          "telephoneUniversalCommunication" : "01632 960111"
+        } ]
+      },
+      "carrier" : {
+        "identifier" : "UK/TRANS/T1/00012345",
+        "urlId" : "https://refdata.tbc.defra.gov.uk/uk_transporter_authorisation",
+        "name" : "Acme Transport Ltd",
+        "partyRoleCode" : null,
+        "partyTypeCode" : [ {
+          "value" : "COMMERCIAL",
+          "urlId" : "https://traces-codelists.ec.europa.eu/operator_activity_type",
+          "name" : null
+        } ],
+        "postalAddress" : {
+          "lineOne" : "1 Haulage Way",
+          "lineTwo" : null,
+          "cityName" : "Folkestone",
+          "postcodeCode" : "CT19 4QJ",
+          "countryId" : "GB",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : null
+      },
+      "originCountry" : {
+        "code" : {
+          "value" : "FR",
+          "urlId" : null,
+          "name" : null
+        },
+        "subordinateTradeCountrySubDivision" : {
+          "identifier" : "FR-75",
+          "urlId" : null,
+          "functionTypeCode" : {
+            "content" : "106"
+          }
+        }
+      },
+      "unloadingBaseportLocation" : {
+        "identifier" : "GBDVR",
+        "urlId" : null,
+        "name" : null,
+        "typeCode" : null,
+        "postalAddress" : null
+      },
+      "finalDestinationLocation" : {
+        "identifier" : "12/345/6789",
+        "urlId" : "https://refdata.tbc.defra.gov.uk/cph_number",
+        "name" : null,
+        "typeCode" : null,
+        "postalAddress" : null
+      },
+      "mainCarriageLogisticsTransportMovement" : [ {
+        "identifier" : null,
+        "urlId" : null,
+        "modeCode" : 3,
+        "usedLogisticsTransportMeans" : {
+          "name" : "AB12 CDE"
+        },
+        "transportContractRelatedReferencedDocument" : [ {
+          "typeCode" : "730",
+          "relationshipTypeCode" : null,
+          "identifier" : "CMR-2026-884721",
+          "issueDateTime" : null
+        } ],
+        "arrivalEvent" : [ {
+          "scheduledOccurrenceDateTime" : "2026-05-06T00:00:00Z",
+          "actualOccurrenceDateTime" : null,
+          "occurrenceLogisticsLocation" : null
+        } ]
+      } ],
+      "transitTradeCountry" : [ {
+        "code" : {
+          "value" : "BE",
+          "urlId" : null,
+          "name" : null
+        },
+        "subordinateTradeCountrySubDivision" : null
+      }, {
+        "code" : {
+          "value" : "NL",
+          "urlId" : null,
+          "name" : null
+        },
+        "subordinateTradeCountrySubDivision" : null
+      } ],
+      "isOrHasUnweanedAnimals" : true,
+      "includedConsignmentItem" : [ {
+        "includedTradeLineItem" : [ {
+          "applicableClassification" : [ {
+            "systemId" : "CN",
+            "systemName" : null,
+            "classCode" : {
+              "value" : "Domestic",
+              "urlId" : null,
+              "name" : null
+            },
+            "className" : null
+          } ],
+          "description" : [ "Cow" ],
+          "scientificName" : "Bos taurus",
+          "commonName" : "Cow",
+          "typeCode" : null,
+          "urlId" : null,
+          "specifiedLineTradeDelivery" : [ {
+            "productUnitQuantity" : {
+              "content" : 2,
+              "unitCode" : null
+            }
+          } ],
+          "physicalReferencedLogisticsPackage" : [ {
+            "levelCode" : null,
+            "typeCode" : null,
+            "itemQuantity" : 1
+          } ],
+          "individualTradeProductInstance" : [ {
+            "name" : null,
+            "identifier" : [ {
+              "typeCode" : "EAR_TAG",
+              "content" : "UK01234567890",
+              "urlId" : null
+            }, {
+              "typeCode" : "PASSPORT",
+              "content" : "UK0123456700999",
+              "urlId" : null
+            } ],
+            "permanentLocation" : null
+          }, {
+            "name" : null,
+            "identifier" : [ {
+              "typeCode" : "EAR_TAG",
+              "content" : "UK01234567891",
+              "urlId" : null
+            }, {
+              "typeCode" : "PASSPORT",
+              "content" : "UK0123456700998",
+              "urlId" : null
+            } ],
+            "permanentLocation" : null
+          } ]
+        }, {
+          "applicableClassification" : null,
+          "description" : [ "Cow" ],
+          "scientificName" : "Canis lupus familiaris",
+          "commonName" : "Cow",
+          "typeCode" : null,
+          "urlId" : null,
+          "specifiedLineTradeDelivery" : [ {
+            "productUnitQuantity" : {
+              "content" : 1,
+              "unitCode" : null
+            }
+          } ],
+          "physicalReferencedLogisticsPackage" : [ {
+            "levelCode" : null,
+            "typeCode" : null,
+            "itemQuantity" : 1
+          } ],
+          "individualTradeProductInstance" : [ {
+            "name" : null,
+            "identifier" : [ {
+              "typeCode" : "PASSPORT",
+              "content" : "GB-PET-00123",
+              "urlId" : null
+            }, {
+              "typeCode" : "MICROCHIP",
+              "content" : "900123456789012",
+              "urlId" : null
+            }, {
+              "typeCode" : "TATTOO",
+              "content" : "TT-4471",
+              "urlId" : null
+            } ],
+            "permanentLocation" : {
+              "identifier" : null,
+              "urlId" : null,
+              "name" : "Brighton home",
+              "partyRoleCode" : null,
+              "partyTypeCode" : null,
+              "postalAddress" : {
+                "lineOne" : "182 Ditchling Road",
+                "lineTwo" : null,
+                "cityName" : "Brighton",
+                "postcodeCode" : "BN1 7JE",
+                "countryId" : "GB",
+                "countryName" : null,
+                "countrySubDivisionName" : null
+              },
+              "definedContact" : [ {
+                "personName" : null,
+                "emailURIUniversalCommunication" : "contact@example.com",
+                "telephoneUniversalCommunication" : "01632 960111"
+              } ]
+            }
+          } ]
+        }, {
+          "applicableClassification" : null,
+          "description" : [ "Cow" ],
+          "scientificName" : "Equus caballus",
+          "commonName" : "Cow",
+          "typeCode" : null,
+          "urlId" : null,
+          "specifiedLineTradeDelivery" : [ {
+            "productUnitQuantity" : {
+              "content" : 1,
+              "unitCode" : null
+            }
+          } ],
+          "physicalReferencedLogisticsPackage" : [ {
+            "levelCode" : null,
+            "typeCode" : null,
+            "itemQuantity" : 1
+          } ],
+          "individualTradeProductInstance" : [ {
+            "name" : "Starlight",
+            "identifier" : [ {
+              "typeCode" : "PASSPORT",
+              "content" : "GBR-826-0012345",
+              "urlId" : null
+            }, {
+              "typeCode" : "MICROCHIP",
+              "content" : "826003200123456",
+              "urlId" : null
+            } ],
+            "permanentLocation" : null
+          } ]
+        } ]
+      } ]
+    }
+  }
+}
