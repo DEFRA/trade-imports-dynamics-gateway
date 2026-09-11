@@ -5,5 +5,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = false)
 public record TradeCountrySubDivision(
     String identifier,
-    CodedValue functionTypeCode
-) {}
+    String urlId,
+    FunctionTypeCode functionTypeCode
+) {
+
+    @JsonIgnoreProperties(ignoreUnknown = false)
+    public record FunctionTypeCode(String content) {}
+}

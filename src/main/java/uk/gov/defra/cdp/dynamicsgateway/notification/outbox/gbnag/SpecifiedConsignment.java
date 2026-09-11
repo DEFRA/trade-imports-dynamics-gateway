@@ -13,6 +13,7 @@ public record SpecifiedConsignment(
     TradeParty carrier,
     TradeCountry originCountry,
     LogisticsLocation unloadingBaseportLocation,
+    LogisticsLocation finalDestinationLocation,
     List<LogisticsTransportMovement> mainCarriageLogisticsTransportMovement,
     List<TradeCountry> transitTradeCountry,
     Boolean isOrHasUnweanedAnimals,

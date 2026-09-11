@@ -27,6 +27,7 @@ class PimsConsignmentMapper {
     PimsSpecifiedConsignment mapSpecifiedConsignment(SpecifiedConsignment sc) {
         if (sc == null) return null;
         // transitTradeCountry omitted — always null in v0.1.0 (PR #52)
+        // finalDestinationLocation omitted — not in the v0.1.0 PIMS schema
         return new PimsSpecifiedConsignment(
             mapTradeParty(sc.consignorParty()),
             mapTradeParty(sc.consigneeParty()),

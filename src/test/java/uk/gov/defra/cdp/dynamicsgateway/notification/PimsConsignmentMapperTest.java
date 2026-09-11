@@ -58,7 +58,7 @@ class PimsConsignmentMapperTest {
     void mapSpecifiedConsignment_shouldHandleAllNullPartyFields() {
         // Given — every party field null; exercises mapTradeParty null branch for each
         var sc = new SpecifiedConsignment(
-            null, null, null, null, null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null, null, null, null, null);
 
         // When
         var result = mapper.mapSpecifiedConsignment(sc);
