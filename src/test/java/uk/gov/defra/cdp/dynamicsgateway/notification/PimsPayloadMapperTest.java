@@ -82,7 +82,7 @@ class PimsPayloadMapperTest {
 
     @Test
     void map_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
-        // Captured from the backend's GbnAgEventDataMapper for a submitted cow, dog and horse
+        // Given — captured from the backend's GbnAgEventDataMapper for a submitted cow, dog and horse
         // notification, serialised the way its outbox does (nulls included). It carries the region
         // sub-division, CPH location, transit countries, transport document and per-animal
         // records, which must deserialise here even though PIMS does not receive them all yet.
@@ -91,8 +91,11 @@ class PimsPayloadMapperTest {
             body = objectMapper.readTree(in);
         }
 
-        JsonNode consignment = objectMapper.readTree(mapper.map(body)).path("data").path("specifiedConsignment");
+        // When
+        String result = mapper.map(body);
 
+        // Then
+        JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
         assertThat(consignment.path("consignorParty").path("name").asText()).isEqualTo("Ferme Rosales");
         assertThat(consignment.path("carrier").path("identifier").asText()).isEqualTo("UK/TRANS/T1/00012345");
         assertThat(consignment.path("originCountry").path("code").path("value").asText()).isEqualTo("FR");
