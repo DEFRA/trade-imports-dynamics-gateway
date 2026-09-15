@@ -180,7 +180,7 @@
         "postalAddress" : null
       },
       "finalDestinationLocation" : {
-        "identifier" : "12/345/6789",
+        "identifier" : "123456789",
         "urlId" : "https://refdata.tbc.defra.gov.uk/cph_number",
         "name" : null,
         "typeCode" : null,
@@ -214,7 +214,7 @@
         "subordinateTradeCountrySubDivision" : null
       }, {
         "code" : {
-          "value" : "NL",
+          "value" : "DE",
           "urlId" : null,
           "name" : null
         },
@@ -227,7 +227,7 @@
             "systemId" : "CN",
             "systemName" : null,
             "classCode" : {
-              "value" : "Domestic",
+              "value" : "01020000",
               "urlId" : null,
               "name" : null
             },
@@ -275,7 +275,16 @@
             "permanentLocation" : null
           } ]
         }, {
-          "applicableClassification" : null,
+          "applicableClassification" : [ {
+            "systemId" : "CN",
+            "systemName" : null,
+            "classCode" : {
+              "value" : "01020000",
+              "urlId" : null,
+              "name" : null
+            },
+            "className" : null
+          } ],
           "description" : [ "Cow" ],
           "scientificName" : "Canis lupus familiaris",
           "commonName" : "Cow",
@@ -330,7 +339,16 @@
             }
           } ]
         }, {
-          "applicableClassification" : null,
+          "applicableClassification" : [ {
+            "systemId" : "CN",
+            "systemName" : null,
+            "classCode" : {
+              "value" : "01020000",
+              "urlId" : null,
+              "name" : null
+            },
+            "className" : null
+          } ],
           "description" : [ "Cow" ],
           "scientificName" : "Equus caballus",
           "commonName" : "Cow",
