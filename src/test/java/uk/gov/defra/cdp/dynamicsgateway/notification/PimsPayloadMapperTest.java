@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.io.InputStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
@@ -77,6 +78,39 @@ class PimsPayloadMapperTest {
         assertThatThrownBy(() -> mapper.map(node))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("Failed to map body to PimsEventV1");
+    }
+
+    @Test
+    void map_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
+        // Given — captured from the backend's GbnAgEventDataMapper for a submitted cow, dog and horse
+        // notification, serialised the way its outbox does (nulls included). It carries the region
+        // sub-division, CPH location, transit countries, transport document and per-animal
+        // records, which must deserialise here even though PIMS does not receive them all yet.
+        JsonNode body;
+        try (InputStream in = getClass().getResourceAsStream("/gbn-ag/notification-submitted-from-backend.json")) {
+            body = objectMapper.readTree(in);
+        }
+
+        // When
+        String result = mapper.map(body);
+
+        // Then
+        JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
+        assertThat(consignment.path("consignorParty").path("name").asText()).isEqualTo("Ferme Rosales");
+        assertThat(consignment.path("carrier").path("identifier").asText()).isEqualTo("UK/TRANS/T1/00012345");
+        assertThat(consignment.path("originCountry").path("code").path("value").asText()).isEqualTo("FR");
+        assertThat(consignment.path("unloadingBaseportLocation").path("identifier").asText()).isEqualTo("GBDVR");
+        assertThat(consignment.has("finalDestinationLocation")).isFalse();
+
+        JsonNode lines = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
+        assertThat(lines).hasSize(3); // cow, dog, horse
+        JsonNode cows = lines.get(0).path("individualTradeProductInstance");
+        assertThat(cows).hasSize(2);
+        assertThat(cows.get(0).path("identifier").get(0).path("content").asText()).isEqualTo("UK01234567890");
+        assertThat(cows.get(1).path("identifier").get(0).path("content").asText()).isEqualTo("UK01234567891");
+        JsonNode dogIdentifiers = lines.get(1).path("individualTradeProductInstance").get(0).path("identifier");
+        assertThat(dogIdentifiers.get(2).path("typeCode").asText()).isEqualTo("TATTOO");
+        assertThat(dogIdentifiers.get(2).path("content").asText()).isEqualTo("TT-4471");
     }
 
     @Test
