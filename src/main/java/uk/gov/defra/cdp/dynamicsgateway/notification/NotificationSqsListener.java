@@ -32,6 +32,9 @@ public class NotificationSqsListener {
         "uk.gov.defra.imports.notification.NotificationSubmissionAmended"
     );
 
+    private static final String MESSAGES_METRIC = "notification.sqs.messages";
+    private static final String OUTCOME_TAG = "outcome";
+
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
     private final PimsPayloadMapper pimsPayloadMapper;
@@ -47,18 +50,18 @@ public class NotificationSqsListener {
         this.queueMessageSender = queueMessageSender;
         this.objectMapper = objectMapper;
         this.pimsPayloadMapper = pimsPayloadMapper;
-        this.forwardedCounterV1 = Counter.builder("notification.sqs.messages")
-            .tag("outcome", "forwarded")
+        this.forwardedCounterV1 = Counter.builder(MESSAGES_METRIC)
+            .tag(OUTCOME_TAG, "forwarded")
             .tag("schemaVersion", "0.1.0")
             .description("Messages successfully forwarded to ASB")
             .register(meterRegistry);
-        this.forwardedCounterV2 = Counter.builder("notification.sqs.messages")
-            .tag("outcome", "forwarded")
+        this.forwardedCounterV2 = Counter.builder(MESSAGES_METRIC)
+            .tag(OUTCOME_TAG, "forwarded")
             .tag("schemaVersion", "0.2.0")
             .description("Messages successfully forwarded to ASB")
             .register(meterRegistry);
-        this.v2FailureCounter = Counter.builder("notification.sqs.messages")
-            .tag("outcome", "v2-mapping-failed")
+        this.v2FailureCounter = Counter.builder(MESSAGES_METRIC)
+            .tag(OUTCOME_TAG, "v2-mapping-failed")
             .description("v0.2.0 PIMS payload failed to map or publish; v0.1.0 delivery is unaffected")
             .register(meterRegistry);
     }
