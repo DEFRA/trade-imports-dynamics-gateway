@@ -15,6 +15,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 
 /**
  * Consumes notification events from an SQS FIFO queue and forwards them to Azure Service Bus.
@@ -31,10 +32,15 @@ public class NotificationSqsListener {
         "uk.gov.defra.imports.notification.NotificationSubmissionAmended"
     );
 
+    private static final String MESSAGES_METRIC = "notification.sqs.messages";
+    private static final String OUTCOME_TAG = "outcome";
+
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
     private final PimsPayloadMapper pimsPayloadMapper;
-    private final Counter forwardedCounter;
+    private final Counter forwardedCounterV1;
+    private final Counter forwardedCounterV2;
+    private final Counter v2FailureCounter;
 
     public NotificationSqsListener(
             QueueMessageSender queueMessageSender,
@@ -44,9 +50,19 @@ public class NotificationSqsListener {
         this.queueMessageSender = queueMessageSender;
         this.objectMapper = objectMapper;
         this.pimsPayloadMapper = pimsPayloadMapper;
-        this.forwardedCounter = Counter.builder("notification.sqs.messages")
-            .tag("outcome", "forwarded")
+        this.forwardedCounterV1 = Counter.builder(MESSAGES_METRIC)
+            .tag(OUTCOME_TAG, "forwarded")
+            .tag("schemaVersion", "0.1.0")
             .description("Messages successfully forwarded to ASB")
+            .register(meterRegistry);
+        this.forwardedCounterV2 = Counter.builder(MESSAGES_METRIC)
+            .tag(OUTCOME_TAG, "forwarded")
+            .tag("schemaVersion", "0.2.0")
+            .description("Messages successfully forwarded to ASB")
+            .register(meterRegistry);
+        this.v2FailureCounter = Counter.builder(MESSAGES_METRIC)
+            .tag(OUTCOME_TAG, "v2-mapping-failed")
+            .description("v0.2.0 PIMS payload failed to map or publish; v0.1.0 delivery is unaffected")
             .register(meterRegistry);
     }
 
@@ -87,9 +103,27 @@ public class NotificationSqsListener {
         }
 
         String asbMessageId = resolveAsbMessageId(parsedBody, deduplicationId);
-        String pimsPayload = pimsPayloadMapper.map(parsedBody);
-        queueMessageSender.publish(pimsPayload, aggregateId, asbMessageId);
-        forwardedCounter.increment();
+        OutboxEvent outboxEvent = pimsPayloadMapper.parse(parsedBody);
+
+        String v1Payload = pimsPayloadMapper.mapToV1(outboxEvent);
+        queueMessageSender.publish(v1Payload, aggregateId, asbMessageId);
+        forwardedCounterV1.increment();
+
+        // Deliberately broad catch: v0.2.0 is a new, not-yet-fully-proven stream published
+        // alongside the stable v0.1.0 one (EUDPA-370) while PIMS transitions between them. Any
+        // failure here — mapping or ASB publish — must never fail or retry this SQS message, since
+        // v0.1.0 has already been delivered above; letting a v0.2.0 failure do so would risk SQS
+        // redelivering the whole message and re-sending a duplicate v0.1.0 payload.
+        try {
+            String v2Payload = pimsPayloadMapper.mapToV2(outboxEvent);
+            queueMessageSender.publish(v2Payload, aggregateId, asbMessageId + "-v2");
+            forwardedCounterV2.increment();
+        } catch (Exception e) {
+            log.error("Failed to map/publish v0.2.0 PIMS payload; v0.1.0 already forwarded, "
+                + "message not retried for this failure: aggregateId={}, asbMessageId={}",
+                aggregateId, asbMessageId, e);
+            v2FailureCounter.increment();
+        }
     }
 
     /**
