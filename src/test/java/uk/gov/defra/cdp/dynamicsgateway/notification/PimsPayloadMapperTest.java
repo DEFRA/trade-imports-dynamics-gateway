@@ -195,6 +195,70 @@ class PimsPayloadMapperTest {
         assertThat(pimsNode.path("statusChanges")).isEmpty();
     }
 
+    @Test
+    void mapToV1AndV2_shouldEmitMetadataSchemaUri_notSchemaUrl() throws Exception {
+        // Given — an event carrying metadata, so PimsEventMetadata is serialised at all.
+        // PimsEventMetadata is shared by both streams, so the wire name must be checked on both.
+        String body = """
+            {
+              "eventId": "evt-meta",
+              "aggregateVersion": 1,
+              "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
+              "metadata": {
+                "correlationId": "cid-1",
+                "schemaVersion": "1",
+                "schemaUrl": "https://example.invalid/generic-side.schema.json"
+              }
+            }
+            """;
+        OutboxEvent event = mapper.parse(objectMapper.readTree(body));
+
+        // When
+        JsonNode v1Metadata = objectMapper.readTree(mapper.mapToV1(event)).path("metadata");
+        JsonNode v2Metadata = objectMapper.readTree(mapper.mapToV2(event)).path("metadata");
+
+        // Then — event-envelope-v1.schema.json requires ["schemaVersion","schemaUri"] under
+        // additionalProperties:false, so "schemaUrl" must not appear on either stream
+        assertThat(v1Metadata.has("schemaUrl")).isFalse();
+        assertThat(v2Metadata.has("schemaUrl")).isFalse();
+        assertThat(v1Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.1.0.schema.json");
+        assertThat(v2Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.2.0.schema.json");
+        assertThat(v1Metadata.path("schemaVersion").asText()).isEqualTo("0.1.0");
+        assertThat(v2Metadata.path("schemaVersion").asText()).isEqualTo("0.2.0");
+        assertThat(v1Metadata.path("correlationId").asText()).isEqualTo("cid-1");
+    }
+
+    @Test
+    void mapToV2_shouldOmitApplicableClassification_whenUpstreamListIsAbsent() throws Exception {
+        // Given — a line item with no classification upstream. mapList yields an empty list
+        // (never null), so NON_NULL alone would leave "[]" on the wire.
+        String body = """
+            {
+              "eventId": "evt-class",
+              "aggregateVersion": 1,
+              "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
+              "data": {
+                "specifiedConsignment": {
+                  "includedConsignmentItem": [
+                    { "includedTradeLineItem": [ { "commonName": "Cow" } ] }
+                  ]
+                }
+              }
+            }
+            """;
+        OutboxEvent event = mapper.parse(objectMapper.readTree(body));
+
+        // When
+        String result = mapper.mapToV2(event);
+
+        // Then — the schema sets minItems:1 and tradeLineItem has no required list, so the
+        // field must be absent rather than an empty array
+        JsonNode line = objectMapper.readTree(result).path("data").path("specifiedConsignment")
+            .path("includedConsignmentItem").get(0).path("includedTradeLineItem").get(0);
+        assertThat(line.path("commonName").asText()).isEqualTo("Cow");
+        assertThat(line.has("applicableClassification")).isFalse();
+    }
+
     private OutboxEvent fixtureEvent() throws Exception {
         try (InputStream in = getClass().getResourceAsStream("/gbn-ag/notification-submitted-from-backend.json")) {
             return mapper.parse(objectMapper.readTree(in));
