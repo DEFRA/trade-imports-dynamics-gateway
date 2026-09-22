@@ -28,7 +28,8 @@ class PimsEventMapperV2Test {
                 commonMapper
             ),
             commonMapper
-        )
+        ),
+        new PimsEnvelopeMapper()
     );
 
     private static final Instant NOW = Instant.parse("2026-09-18T10:00:00Z");

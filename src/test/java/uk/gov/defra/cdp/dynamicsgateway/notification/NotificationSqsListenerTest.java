@@ -55,13 +55,15 @@ class NotificationSqsListenerTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        PimsEnvelopeMapper envelopeMapper = new PimsEnvelopeMapper();
         PimsEventMapper pimsEventMapper = new PimsEventMapper(
             new PimsGbnAgDataMapper(
                 new PimsConsignmentMapper(
                     new PimsTransportMapper(),
                     new PimsLineItemMapper()
                 )
-            )
+            ),
+            envelopeMapper
         );
         PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
         PimsEventMapperV2 pimsEventMapperV2 = new PimsEventMapperV2(
@@ -72,7 +74,8 @@ class NotificationSqsListenerTest {
                     commonMapper
                 ),
                 commonMapper
-            )
+            ),
+            envelopeMapper
         );
         pimsPayloadMapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2);
         listener = new NotificationSqsListener(queueMessageSender, objectMapper, pimsPayloadMapper,

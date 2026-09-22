@@ -20,13 +20,15 @@ class PimsPayloadMapperTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        PimsEnvelopeMapper envelopeMapper = new PimsEnvelopeMapper();
         PimsEventMapper pimsEventMapper = new PimsEventMapper(
             new PimsGbnAgDataMapper(
                 new PimsConsignmentMapper(
                     new PimsTransportMapper(),
                     new PimsLineItemMapper()
                 )
-            )
+            ),
+            envelopeMapper
         );
         PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
         PimsEventMapperV2 pimsEventMapperV2 = new PimsEventMapperV2(
@@ -37,7 +39,8 @@ class PimsPayloadMapperTest {
                     commonMapper
                 ),
                 commonMapper
-            )
+            ),
+            envelopeMapper
         );
         mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2);
     }

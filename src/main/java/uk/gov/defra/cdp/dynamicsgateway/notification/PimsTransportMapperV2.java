@@ -1,7 +1,7 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
-import java.util.List;
-import java.util.function.Function;
+import static uk.gov.defra.cdp.dynamicsgateway.notification.PimsMapperSupport.mapList;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTransportMeans;
@@ -41,10 +41,5 @@ class PimsTransportMapperV2 {
             event.actualOccurrenceDateTime(),
             commonMapper.mapLogisticsLocation(event.occurrenceLogisticsLocation())
         );
-    }
-
-    private <A, B> List<B> mapList(List<A> list, Function<A, B> fn) {
-        if (list == null) return List.of();
-        return list.stream().map(fn).toList();
     }
 }

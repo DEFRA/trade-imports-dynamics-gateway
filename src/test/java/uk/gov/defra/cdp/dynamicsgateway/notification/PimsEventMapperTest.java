@@ -44,7 +44,8 @@ class PimsEventMapperTest {
                 new PimsTransportMapper(),
                 new PimsLineItemMapper()
             )
-        )
+        ),
+        new PimsEnvelopeMapper()
     );
 
     private static final Instant NOW = Instant.parse("2026-08-12T10:00:00Z");
