@@ -10,6 +10,8 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEventMetadata;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ApplicableClassification;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.CodedValue;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ConsignmentItem;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
@@ -91,6 +93,46 @@ class PimsEventMapperV2Test {
         assertThat(pimsDoc.referenceDocument()).hasSize(1);
         assertThat(pimsDoc.referenceDocument().getFirst().identifier()).isEqualTo("GBHC1234567890");
         assertThat(pimsDoc.referenceDocument().getFirst().typeCode()).isEqualTo("853");
+    }
+
+    @Test
+    void map_shouldMapFirstSignatoryAuthenticationClauses() {
+        // Given — the v0.2.0 mapper has its own mapAuthentication/mapClause pair, separate from
+        // the v0.1.0 one. Every other test here passes firstSignatoryAuthentication=null, so only
+        // the null-safety branch was exercised and the field mapping itself was unasserted on
+        // this path.
+        Clause attestation = new Clause("II.1", "The animals described above are healthy.",
+            "https://refdata.tbc.defra.gov.uk/clause/II.1");
+        Clause transport = new Clause("II.2", "Transport conditions were met.", null);
+        ExchangedDocument doc = new ExchangedDocument(
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null,
+            new Authentication(List.of(attestation, transport)), null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
+
+        // When
+        var pimsAuth = mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication();
+
+        // Then
+        assertThat(pimsAuth.includedClause()).hasSize(2);
+        assertThat(pimsAuth.includedClause().getFirst().identifier()).isEqualTo("II.1");
+        assertThat(pimsAuth.includedClause().getFirst().content())
+            .isEqualTo("The animals described above are healthy.");
+        assertThat(pimsAuth.includedClause().getFirst().urlId())
+            .isEqualTo("https://refdata.tbc.defra.gov.uk/clause/II.1");
+        assertThat(pimsAuth.includedClause().get(1).identifier()).isEqualTo("II.2");
+        assertThat(pimsAuth.includedClause().get(1).urlId()).isNull();
+    }
+
+    @Test
+    void map_shouldHandleNullFirstSignatoryAuthentication() {
+        // Given
+        ExchangedDocument doc = new ExchangedDocument(
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, null);
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
+
+        // When / Then
+        assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication())
+            .isNull();
     }
 
     @Test
