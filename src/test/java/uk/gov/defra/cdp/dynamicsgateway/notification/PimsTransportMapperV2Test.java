@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsLocation;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTransportMeans;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsTransportMovement;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TransportEvent;
@@ -29,6 +30,27 @@ class PimsTransportMapperV2Test {
 
         assertThat(result.identifier()).isEqualTo("MV ATLANTIC STAR");
         assertThat(result.urlId()).isEqualTo("vesselUrl");
+    }
+
+    @Test
+    void mapTransportMovement_shouldMapUsedLogisticsTransportMeans() {
+        // Every other fixture in this class passes null for usedLogisticsTransportMeans, so the
+        // non-null branch of mapTransportMeans was never exercised — the vessel name could have
+        // been dropped or mis-wired without failing a test.
+        var tm = new LogisticsTransportMovement(
+            null, null, 1, new LogisticsTransportMeans("MV ATLANTIC STAR"), null, null);
+
+        var result = mapper.mapTransportMovement(tm);
+
+        assertThat(result.usedLogisticsTransportMeans()).isNotNull();
+        assertThat(result.usedLogisticsTransportMeans().name()).isEqualTo("MV ATLANTIC STAR");
+    }
+
+    @Test
+    void mapTransportMovement_shouldHandleNullUsedLogisticsTransportMeans() {
+        var tm = new LogisticsTransportMovement(null, null, 1, null, null, null);
+
+        assertThat(mapper.mapTransportMovement(tm).usedLogisticsTransportMeans()).isNull();
     }
 
     @Test
