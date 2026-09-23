@@ -3,23 +3,23 @@ package uk.gov.defra.cdp.dynamicsgateway.notification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
-import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV1;
+import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
 
 @Component
 @RequiredArgsConstructor
-class PimsEventMapper {
+class PimsEventMapperV2 {
 
     // Stamped, not read from the incoming event's own metadata — PIMS distinguishes the two
     // simultaneously-published streams by these values, confirmed with PIMS (EUDPA-370).
-    private static final String SCHEMA_VERSION = "0.1.0";
+    private static final String SCHEMA_VERSION = "0.2.0";
     private static final String SCHEMA_URL =
-        "https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.1.0.schema.json";
+        "https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.2.0.schema.json";
 
-    private final PimsGbnAgDataMapper gbnAgDataMapper;
+    private final PimsGbnAgDataMapperV2 gbnAgDataMapper;
     private final PimsEnvelopeMapper envelopeMapper;
 
-    PimsEventV1 map(OutboxEvent event) {
-        return new PimsEventV1(
+    PimsEventV2 map(OutboxEvent event) {
+        return new PimsEventV2(
             event.eventId(),
             event.aggregateType(),
             event.subType(),
