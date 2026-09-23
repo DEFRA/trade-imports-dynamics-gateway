@@ -27,7 +27,9 @@ import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import io.floci.testcontainers.FlociContainer;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -117,6 +119,11 @@ class NotificationSqsListenerIT extends IntegrationBase {
         // Purge the DLQ too so a message redriven by one test can't leak into another's assertions.
         purgeQueue(queueUrl);
         purgeQueue(dlqUrl);
+        // And drain ASB. Dual-emit puts two messages on the bus per notification, but most tests here
+        // only receive one, so the unread partner would otherwise survive into the next test and be
+        // counted there. Without this, any assertion on how many messages arrived is measuring the
+        // previous test as much as its own.
+        drainAsb();
     }
 
     @AfterEach
@@ -146,6 +153,81 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(received.get().getMessageId()).isEqualTo(deduplicationId);
             assertThat(received.get().getSessionId()).isEqualTo(AGGREGATE_ID);
         });
+    }
+
+    @Test
+    void sqsToAsb_shouldEmitBothSchemaVersions_forOneNotification() {
+        // Given — a notification carrying the fields only v0.2.0 maps: a region sub-division on the
+        // origin country, and two trade line items, one classified and one not.
+        String deduplicationId = UUID.randomUUID().toString();
+        sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
+
+        // When — collect only the messages derived from THIS notification. Both ids are built from a
+        // dedup UUID unique to this test, which is what makes the count trustworthy: a message left
+        // behind by an earlier test, or one still in flight when this test began, carries a different
+        // id and is discarded here rather than counted. Accumulate across polls, because the receiver
+        // is RECEIVE_AND_DELETE and anything seen during a failed attempt is already consumed.
+        String v1Id = deduplicationId;
+        String v2Id = deduplicationId + "-v2";
+        List<ServiceBusReceivedMessage> mine = new ArrayList<>();
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            collectMessagesFor(mine, deduplicationId);
+            assertThat(messageIds(mine))
+                .as("one inbound notification must produce exactly two ASB messages")
+                .containsExactlyInAnyOrder(v1Id, v2Id);
+        });
+
+        // Then — and no third arrives for this notification in a further settling window.
+        await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
+            collectMessagesFor(mine, deduplicationId);
+            assertThat(messageIds(mine))
+                .as("no third message may follow the v0.1.0 and v0.2.0 pair")
+                .containsExactlyInAnyOrder(v1Id, v2Id);
+        });
+
+        ServiceBusReceivedMessage v1 = messageWithId(mine, v1Id);
+        ServiceBusReceivedMessage v2 = messageWithId(mine, v2Id);
+
+        // Both are addressed to the same session, which is what makes v0.1.0-then-v0.2.0 ordering
+        // deterministic and keeps the pair correlatable.
+        assertThat(v1.getSessionId()).isEqualTo(AGGREGATE_ID);
+        assertThat(v2.getSessionId()).isEqualTo(AGGREGATE_ID);
+
+        JsonNode v1Metadata = readBody(v1).path("metadata");
+        assertThat(v1Metadata.path("schemaVersion").asText()).isEqualTo("0.1.0");
+        assertThat(v1Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.1.0.schema.json");
+
+        JsonNode v2Body = readBody(v2);
+        JsonNode v2Metadata = v2Body.path("metadata");
+        assertThat(v2Metadata.path("schemaVersion").asText()).isEqualTo("0.2.0");
+        assertThat(v2Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.2.0.schema.json");
+        // event-envelope-v1 requires ["schemaVersion","schemaUri"] under additionalProperties:false,
+        // so the legacy "schemaUrl" key must not survive real Jackson serialisation onto a real bus.
+        assertThat(v2Metadata.has("schemaUrl"))
+            .as("metadata.schemaUrl must not appear on the wire — the envelope forbids it")
+            .isFalse();
+
+        JsonNode consignment = v2Body.path("data").path("specifiedConsignment");
+        JsonNode subdivision = consignment.path("originCountry").path("subordinateTradeCountrySubDivision");
+        assertThat(subdivision.isObject())
+            .as("subordinateTradeCountrySubDivision is a single object in v0.2.0, not an array")
+            .isTrue();
+        assertThat(subdivision.isArray()).isFalse();
+        assertThat(subdivision.path("identifier").asText()).isEqualTo("FR-75");
+        assertThat(subdivision.path("functionTypeCode").path("content").asText()).isEqualTo("106");
+
+        JsonNode lineItems = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
+        assertThat(lineItems).hasSize(2);
+        // Populated where the notification carried a classification...
+        assertThat(lineItems.get(0).path("applicableClassification").isArray()).isTrue();
+        assertThat(lineItems.get(0).path("applicableClassification")).hasSize(1);
+        assertThat(lineItems.get(0).path("applicableClassification").get(0).path("systemId").asText())
+            .isEqualTo("CN");
+        // ...and absent, never "[]", where it did not. The schema sets minItems:1, so an empty array
+        // is invalid whereas an omitted field is fine.
+        assertThat(lineItems.get(1).has("applicableClassification"))
+            .as("applicableClassification must be omitted rather than emitted as an empty array")
+            .isFalse();
     }
 
     @Test
@@ -275,6 +357,87 @@ class NotificationSqsListenerIT extends IntegrationBase {
             + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\"}";
     }
 
+    /**
+     * A notification rich enough to exercise the v0.2.0-only mappings. Deliberately carries no
+     * {@code eventId}: the gateway prefers it over the SQS deduplication header when deriving the ASB
+     * messageId, and these assertions are on the header-derived id.
+     */
+    private static String dualEmitNotificationJson() {
+        return """
+            {
+              "aggregateId": "%s",
+              "aggregateType": "Notification",
+              "subType": "GBN-AG",
+              "aggregateVersion": 1,
+              "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
+              "metadata": {
+                "correlationId": "cid-dual-emit",
+                "schemaVersion": "1",
+                "schemaUrl": "https://example.invalid/generic-side.schema.json"
+              },
+              "data": {
+                "$model": "defra/certificate-internal/1",
+                "$type": "gbn-ag",
+                "specifiedConsignment": {
+                  "originCountry": {
+                    "code": { "value": "FR" },
+                    "subordinateTradeCountrySubDivision": {
+                      "identifier": "FR-75",
+                      "functionTypeCode": { "content": "106" }
+                    }
+                  },
+                  "includedConsignmentItem": [
+                    {
+                      "includedTradeLineItem": [
+                        {
+                          "commonName": "Cow",
+                          "applicableClassification": [
+                            { "systemId": "CN", "classCode": { "value": "0102" } }
+                          ]
+                        },
+                        { "commonName": "Dog" }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+            """.formatted(AGGREGATE_ID);
+    }
+
+    private static JsonNode readBody(ServiceBusReceivedMessage message) {
+        try {
+            return new ObjectMapper().readTree(message.getBody().toString());
+        } catch (Exception e) {
+            throw new IllegalStateException("ASB message body was not valid JSON", e);
+        }
+    }
+
+    /**
+     * Drains what is currently on the bus, keeping only the messages whose id derives from
+     * {@code deduplicationId} — the v0.1.0 message carries it verbatim and the v0.2.0 message carries
+     * it with a {@code -v2} suffix. Anything else is another test's message and is discarded.
+     */
+    private void collectMessagesFor(List<ServiceBusReceivedMessage> into, String deduplicationId) {
+        receiveFromAsb(10).stream()
+            .filter(m -> m.getMessageId() != null && m.getMessageId().startsWith(deduplicationId))
+            .forEach(into::add);
+    }
+
+    private static List<String> messageIds(List<ServiceBusReceivedMessage> messages) {
+        return messages.stream().map(ServiceBusReceivedMessage::getMessageId).toList();
+    }
+
+    private static ServiceBusReceivedMessage messageWithId(
+            List<ServiceBusReceivedMessage> messages, String messageId) {
+        return messages.stream()
+            .filter(m -> messageId.equals(m.getMessageId()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError(
+                "No ASB message with messageId=" + messageId + "; got "
+                    + messages.stream().map(ServiceBusReceivedMessage::getMessageId).toList()));
+    }
+
     private int totalMessagesInQueue() {
         return totalMessagesInQueue(queueUrl);
     }
@@ -353,22 +516,45 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private Optional<ServiceBusReceivedMessage> tryReceiveFromAsb() {
+        return receiveFromAsb(1).stream().findFirst();
+    }
+
+    /**
+     * Receives up to {@code maxMessages} from the next available session. The receiver is
+     * RECEIVE_AND_DELETE, so anything returned is consumed — callers polling for several messages must
+     * accumulate results across calls rather than expect a later call to see the same message again.
+     */
+    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages) {
+        return receiveFromAsb(maxMessages, Duration.ofSeconds(3));
+    }
+
+    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages, Duration timeout) {
         // sessionReceiver and receiver share a lifecycle: both close when the try block exits.
         try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
                 .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
-                .retryOptions(new AmqpRetryOptions().setTryTimeout(Duration.ofSeconds(3)).setMaxRetries(0))
+                .retryOptions(new AmqpRetryOptions().setTryTimeout(timeout).setMaxRetries(0))
                 .sessionReceiver()
                 .queueName(QUEUE_NAME)
                 .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
                 .buildClient();
              ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
-            return receiver.receiveMessages(1, Duration.ofSeconds(3))
+            return receiver.receiveMessages(maxMessages, timeout)
                 .stream()
-                .findFirst();
+                .toList();
         } catch (Exception e) {
             log.debug("No ASB message received yet: {}", e.getMessage());
-            return Optional.empty();
+            return List.of();
         }
+    }
+
+    /** Empties the ASB queue so a test's message counts reflect only its own notification. */
+    private void drainAsb() {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            if (receiveFromAsb(10, Duration.ofSeconds(1)).isEmpty()) {
+                return;
+            }
+        }
+        log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
     }
 
     private static SqsClient localSqsClient() {
