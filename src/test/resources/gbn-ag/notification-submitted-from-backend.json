@@ -29,7 +29,18 @@
           "content" : "BREEDING_AND_PRODUCTION",
           "urlId" : null
         } ]
-      }
+      },
+      "referenceDocument" : [ {
+        "typeCode" : "856",
+        "urlId" : "https://vocabulary.uncefact.org/DocumentCodeList",
+        "identifier" : "ITAHC-2026-0001",
+        "issueDateTime" : "2026-05-01"
+      }, {
+        "typeCode" : "GBN1",
+        "urlId" : "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types",
+        "identifier" : "LOA-778",
+        "issueDateTime" : "2026-04-20"
+      } ]
     },
     "specifiedConsignment" : {
       "consignorParty" : {

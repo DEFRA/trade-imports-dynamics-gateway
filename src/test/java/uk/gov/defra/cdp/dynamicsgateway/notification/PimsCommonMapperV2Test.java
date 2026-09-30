@@ -111,8 +111,9 @@ class PimsCommonMapperV2Test {
     }
 
     @Test
-    void mapReferencedDocument_shouldMapThreeFields_andDropRelationshipTypeCode() {
-        var doc = new ReferencedDocument("853", "ZZZ", "docref-1", "2026-05-05");
+    void mapReferencedDocument_shouldMapThreeFields_andDropUrlIdAndRelationshipTypeCode() {
+        var doc = new ReferencedDocument(
+            "853", "https://vocabulary.uncefact.org/DocumentCodeList", "ZZZ", "docref-1", "2026-05-05");
 
         var result = mapper.mapReferencedDocument(doc);
 

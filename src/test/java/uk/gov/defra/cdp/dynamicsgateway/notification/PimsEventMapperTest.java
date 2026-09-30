@@ -400,7 +400,7 @@ class PimsEventMapperTest {
     @Test
     void map_shouldConstructDroppedInputTypes() {
         DefinedContact contact = new DefinedContact("Person", "+44123", "email@test.com");
-        ReferencedDocument refDoc = new ReferencedDocument("T", "R", "ref-1", "2026-08-13");
+        ReferencedDocument refDoc = new ReferencedDocument("T", null, "R", "ref-1", "2026-08-13");
         TradeParty party = new TradeParty("p-1", null, null, null, null, null, List.of(contact));
         ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
             new Authentication(List.of(new Clause("c1", "text", null))), List.of(refDoc));

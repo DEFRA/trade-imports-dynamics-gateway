@@ -107,6 +107,8 @@ class PimsPayloadMapperTest {
         String result = mapper.mapToV1(event);
 
         // Then — v0.1.0 output still drops exactly what it always has
+        assertThat(objectMapper.readTree(result).path("data").path("exchangedDocument").has("referenceDocument"))
+            .isFalse();
         JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
         assertThat(consignment.path("consignorParty").path("name").asText()).isEqualTo("Ferme Rosales");
         assertThat(consignment.path("carrier").path("identifier").asText()).isEqualTo("UK/TRANS/T1/00012345");
@@ -139,7 +141,16 @@ class PimsPayloadMapperTest {
         // When
         String result = mapper.mapToV2(event);
 
-        // Then
+        // Then — accompanying documents reach PIMS as type, reference and date; the urlId the
+        // backend sends is not part of the v0.2.0 schema, so it stops here
+        JsonNode referenceDocuments = objectMapper.readTree(result).path("data").path("exchangedDocument")
+            .path("referenceDocument");
+        assertThat(referenceDocuments).hasSize(2);
+        assertThat(referenceDocuments.get(0).path("typeCode").asText()).isEqualTo("856");
+        assertThat(referenceDocuments.get(0).path("identifier").asText()).isEqualTo("ITAHC-2026-0001");
+        assertThat(referenceDocuments.get(0).path("issueDateTime").asText()).isEqualTo("2026-05-01");
+        assertThat(referenceDocuments.get(0).has("urlId")).isFalse();
+        assertThat(referenceDocuments.get(1).path("typeCode").asText()).isEqualTo("GBN1");
         JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
         assertThat(consignment.path("finalDestinationLocation").path("identifier").asText()).isEqualTo("123456789");
         assertThat(consignment.path("originCountry").path("subordinateTradeCountrySubDivision")
