@@ -32,7 +32,7 @@
       },
       "referenceDocument" : [ {
         "typeCode" : "856",
-        "urlId" : "https://vocabulary.uncefact.org/DocumentCodeList",
+        "urlId" : "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types",
         "identifier" : "ITAHC-2026-0001",
         "issueDateTime" : "2026-05-01"
       }, {
