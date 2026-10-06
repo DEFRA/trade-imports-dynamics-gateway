@@ -61,6 +61,7 @@ management:
     enable:
       all: false
       controller: true
+      notification: true
       jvm:
         memory:
           committed: true
