@@ -52,7 +52,7 @@ class ExternalCallMetricsTest {
 
   @Test
   void record_shouldEmitTheDurationInMilliseconds() {
-    metrics.record(ExternalCall.SERVICE_BUS_SEND_MESSAGE, Duration.ofMillis(250), false);
+    metrics.recordCall(ExternalCall.SERVICE_BUS_SEND_MESSAGE, Duration.ofMillis(250), false);
 
     assertThat(environment.documents().getFirst().get("ExternalCallDuration").asDouble())
         .isEqualTo(250.0);
@@ -63,10 +63,9 @@ class ExternalCallMetricsTest {
     metrics.measure(
         ExternalCall.SERVICE_BUS_SEND_MESSAGE,
         () -> {
-          try {
-            Thread.sleep(50);
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+          long until = System.nanoTime() + Duration.ofMillis(50).toNanos();
+          while (System.nanoTime() < until) {
+            Thread.onSpinWait();
           }
         });
 
@@ -100,14 +99,14 @@ class ExternalCallMetricsTest {
 
     assertThatCode(
             () ->
-                failingMetrics.record(
+                failingMetrics.recordCall(
                     ExternalCall.SERVICE_BUS_SEND_MESSAGE, Duration.ofMillis(5), false))
         .doesNotThrowAnyException();
   }
 
   @Test
   void record_shouldEmitAnInterface_whenTheCallHasOne() {
-    metrics.record(new ExternalCall("mdm", "get-countries", "SYN-19"), Duration.ofMillis(5), false);
+    metrics.recordCall(new ExternalCall("mdm", "get-countries", "SYN-19"), Duration.ofMillis(5), false);
 
     assertThat(environment.documents().getFirst().get("Interface").asText()).isEqualTo("SYN-19");
   }
@@ -124,7 +123,7 @@ class ExternalCallMetricsTest {
               return new MetricsLogger(environment);
             });
 
-    disabled.record(ExternalCall.SERVICE_BUS_SEND_MESSAGE, Duration.ofMillis(5), false);
+    disabled.recordCall(ExternalCall.SERVICE_BUS_SEND_MESSAGE, Duration.ofMillis(5), false);
 
     assertThat(environment.documents()).isEmpty();
     assertThat(suppliedLoggers).hasValue(0);

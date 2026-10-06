@@ -67,7 +67,7 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
         assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
-        verify(externalCallMetrics).record(
+        verify(externalCallMetrics).recordCall(
             eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(false));
     }
 
@@ -107,7 +107,7 @@ class EventsSendControllerIT extends IntegrationBase {
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
         assertThat(response.getBody()).contains("error");
-        verify(externalCallMetrics).record(
+        verify(externalCallMetrics).recordCall(
             eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(true));
     }
 

@@ -64,10 +64,10 @@ public class ExternalCallMetrics {
     try {
       action.run();
     } catch (RuntimeException e) {
-      record(call, Duration.ofNanos(System.nanoTime() - startedAt), true);
+      recordCall(call, Duration.ofNanos(System.nanoTime() - startedAt), true);
       throw e;
     }
-    record(call, Duration.ofNanos(System.nanoTime() - startedAt), false);
+    recordCall(call, Duration.ofNanos(System.nanoTime() - startedAt), false);
   }
 
   /**
@@ -77,7 +77,7 @@ public class ExternalCallMetrics {
    * @param elapsed how long it took
    * @param failed whether it failed
    */
-  public void record(ExternalCall call, Duration elapsed, boolean failed) {
+  public void recordCall(ExternalCall call, Duration elapsed, boolean failed) {
     if (!enabled) {
       return;
     }
