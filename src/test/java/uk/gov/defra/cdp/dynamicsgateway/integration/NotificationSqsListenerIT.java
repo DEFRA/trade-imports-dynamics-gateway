@@ -25,6 +25,7 @@ import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import io.floci.testcontainers.FlociContainer;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -101,6 +103,9 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @MockitoSpyBean
     private ServiceBusSenderClient senderClient;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     @DynamicPropertySource
     static void setFlociProperties(DynamicPropertyRegistry registry) {
@@ -231,6 +236,25 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
+    void sqsToAsb_shouldCountForwardedMessages_whenValidEvent() {
+        // Given
+        double baseV1 = forwardedCount("0.1.0");
+        double baseV2 = forwardedCount("0.2.0");
+        String deduplicationId = UUID.randomUUID().toString();
+        sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
+
+        // When / Then
+        List<ServiceBusReceivedMessage> mine = new ArrayList<>();
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            collectMessagesFor(mine, deduplicationId);
+            assertThat(forwardedCount("0.1.0")).isEqualTo(baseV1 + 1);
+            assertThat(forwardedCount("0.2.0")).isEqualTo(baseV2 + 1);
+            assertThat(messageIds(mine))
+                .containsExactlyInAnyOrder(deduplicationId, deduplicationId + "-v2");
+        });
+    }
+
+    @Test
     void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
         // Given — ASB always rejects with a transient error; QueueMessageSender wraps it as retryable.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
@@ -350,6 +374,14 @@ class NotificationSqsListenerIT extends IntegrationBase {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isEmpty();
         });
+    }
+
+    private double forwardedCount(String schemaVersion) {
+        return meterRegistry.get("notification.sqs.messages")
+            .tag("outcome", "forwarded")
+            .tag("schemaVersion", schemaVersion)
+            .counter()
+            .count();
     }
 
     private static String notificationJson(String aggregateId) {
