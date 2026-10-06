@@ -7,6 +7,7 @@ Centralised gateway forwarding notification events to Azure Service Bus (ASB). E
 * [Notification pipeline (SQS)](#notification-pipeline-sqs)
 * [Endpoint](#endpoint)
 * [DLQ API](#dlq-api)
+* [Queue API](#queue-api)
 * [API documentation (OpenAPI)](#api-documentation-openapi)
 * [Testing](#testing)
 * [Running](#running)
@@ -115,6 +116,23 @@ The `id` is the message's `eventId` from the enveloped body when present, otherw
 `MessageDeduplicationId`. Because SQS has no stable cursor and `GetQueueAttributes` counts are
 eventually consistent, a list is a **best-effort snapshot** — the set and `approximate_count` can
 drift between calls.
+
+### Queue API
+
+A read-only REST API over the notification source queue, so a load run can watch its backlog drain.
+JSON is snake_case.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /queue/notifications` | The source queue's approximate visible (`approximate_count`) and in-flight (`approximate_in_flight_count`) message counts |
+
+It is open (no auth), read-only and eventually consistent: SQS `GetQueueAttributes` counts can lag
+and drift between calls.
+
+The `notification.sqs.messages` counters (tags `outcome` and `schemaVersion`) are enabled and
+readable at `/metrics/notification.sqs.messages`, for example
+`/metrics/notification.sqs.messages?tag=outcome:forwarded&tag=schemaVersion:0.1.0`. They live in
+memory, so each gateway instance counts only what it forwarded itself.
 
 ### API documentation (OpenAPI)
 
