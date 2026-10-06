@@ -11,6 +11,8 @@ management:
     enabled: false
 
 aws:
+  emf:
+    enabled: false
   sqs:
     notification:
       # Placeholder so @NotBlank validation passes for ITs that don't use the SQS listener.
