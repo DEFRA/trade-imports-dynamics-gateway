@@ -80,7 +80,8 @@ class PimsEventMapperV2Test {
     @Test
     void map_shouldMapExchangedDocument_droppingOnlyIssuer_andMappingReferenceDocument() {
         // Given
-        ReferencedDocument refDoc = new ReferencedDocument("853", "ZZZ", "GBHC1234567890", "2026-09-10");
+        ReferencedDocument refDoc = new ReferencedDocument(
+            "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "ZZZ", "GBHC1234567890", "2026-09-10");
         ExchangedDocument doc = new ExchangedDocument(
             "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, List.of(refDoc));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
@@ -92,7 +93,7 @@ class PimsEventMapperV2Test {
         assertThat(pimsDoc.identifier()).isEqualTo("id-1");
         assertThat(pimsDoc.referenceDocument()).hasSize(1);
         assertThat(pimsDoc.referenceDocument().getFirst().identifier()).isEqualTo("GBHC1234567890");
-        assertThat(pimsDoc.referenceDocument().getFirst().typeCode()).isEqualTo("853");
+        assertThat(pimsDoc.referenceDocument().getFirst().typeCode()).isEqualTo("GBN1");
     }
 
     @Test
