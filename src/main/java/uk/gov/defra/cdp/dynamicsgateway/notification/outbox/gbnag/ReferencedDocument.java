@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = false)
 public record ReferencedDocument(
     String typeCode,
+    String urlId,
     String relationshipTypeCode,
     String identifier,
     String issueDateTime

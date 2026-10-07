@@ -55,7 +55,7 @@ class PimsTransportMapperV2Test {
 
     @Test
     void mapTransportMovement_shouldMapReferencedDocuments() {
-        var doc = new ReferencedDocument("705", null, "BOL-2026-0042", null);
+        var doc = new ReferencedDocument("705", null, null, "BOL-2026-0042", null);
         var tm = new LogisticsTransportMovement(null, null, 1, null, List.of(doc), null);
 
         var result = mapper.mapTransportMovement(tm);
