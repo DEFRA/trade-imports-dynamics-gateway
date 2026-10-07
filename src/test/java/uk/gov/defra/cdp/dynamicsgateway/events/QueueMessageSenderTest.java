@@ -19,6 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.CapturingEmfEnvironment;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
+import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
 
 @ExtendWith(MockitoExtension.class)
 class QueueMessageSenderTest {
@@ -26,11 +29,14 @@ class QueueMessageSenderTest {
     @Mock
     private ServiceBusSenderClient senderClient;
 
+    private final CapturingEmfEnvironment emf = new CapturingEmfEnvironment();
+
     private QueueMessageSender queueMessageSender;
 
     @BeforeEach
     void setUp() {
-        queueMessageSender = new QueueMessageSender(senderClient);
+        queueMessageSender = new QueueMessageSender(senderClient,
+            new ExternalCallMetrics(true, "trade-imports-dynamics-gateway", () -> new MetricsLogger(emf)));
     }
 
     @Test
@@ -141,6 +147,28 @@ class QueueMessageSenderTest {
         assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
             .isInstanceOf(SqsRetryableException.class)
             .hasCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void publish_shouldRecordASuccessfulServiceBusSend() {
+        queueMessageSender.publish("{\"key\":\"value\"}", "session-1");
+
+        assertThat(emf.documents()).hasSize(1);
+        assertThat(emf.documents().getFirst().get("Operation").asText()).isEqualTo("send-message");
+        assertThat(emf.documents().getFirst().get("ExternalCallFailure").asInt()).isZero();
+    }
+
+    @Test
+    void publish_shouldRecordAFailedSend_andStillThrowRetryable() {
+        AmqpException transientCause = new AmqpException(true, "timeout", null, null);
+        ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
+        doThrow(transientEx).when(senderClient).sendMessage(any());
+
+        assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
+            .isInstanceOf(SqsRetryableException.class);
+
+        assertThat(emf.documents()).hasSize(1);
+        assertThat(emf.documents().getFirst().get("ExternalCallFailure").asInt()).isEqualTo(1);
     }
 
     @Test
