@@ -1,0 +1,333 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: animals/e2e/pages/transited-countries.spec.ts >> Transited countries page >> renders the country search and an empty list
+- Location: tests/animals/e2e/pages/transited-countries.spec.ts:8:3
+
+# Error details
+
+```
+Test timeout of 30000ms exceeded while running "beforeEach" hook.
+```
+
+```
+Error: locator.waitFor: Test timeout of 30000ms exceeded.
+Call log:
+  - waiting for getByRole('heading', { name: 'Which countries will the consignment travel through?', level: 1 }) to be visible
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=f9e1]:
+  - link "Skip to main content" [ref=f9e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=f9e3]:
+    - link [ref=f9e7] [cursor=pointer]:
+      - /url: https://www.gov.uk/
+      - img "GOV.UK" [ref=f9e8]
+    - region "Service information" [ref=f9e21]:
+      - generic [ref=f9e23]:
+        - link "Import notification service" [ref=f9e25] [cursor=pointer]:
+          - /url: /live-animals
+        - navigation "Menu" [ref=f9e26]:
+          - list [ref=f9e27]:
+            - listitem [ref=f9e28]:
+              - link [ref=f9e29] [cursor=pointer]:
+                - /url: /live-animals
+                - strong [ref=f9e30]: Dashboard
+            - listitem [ref=f9e31]:
+              - link "Address book" [ref=f9e32] [cursor=pointer]:
+                - /url: http://localhost:3002/address-book
+            - listitem [ref=f9e33]:
+              - link "Manage account" [ref=f9e34] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f9e35]:
+              - link "Log out" [ref=f9e36] [cursor=pointer]:
+                - /url: /auth/sign-out
+  - generic [ref=f9e37]:
+    - paragraph [ref=f9e39]:
+      - strong [ref=f9e40]: Alpha
+      - generic [ref=f9e41]:
+        - text: This is a new service. Help us improve it and
+        - link "give your feedback by email" [ref=f9e42] [cursor=pointer]:
+          - /url: mailto:APHAServiceDesk@apha.gov.uk
+        - text: .
+    - link "Back" [ref=f9e43] [cursor=pointer]:
+      - /url: /live-animals/notifications/GBN-AG-26-8150V2
+    - main [ref=f9e44]:
+      - generic [ref=f9e46]:
+        - alert [ref=f9e47]:
+          - heading "There is a problem" [level=2] [ref=f9e49]
+          - paragraph [ref=f9e51]: Sorry, there is a problem with the service. Your answers on this page have been saved. Try again in a few minutes.
+        - generic [ref=f9e52]:
+          - strong [ref=f9e53]: Draft
+          - text: GBN-AG-26-8150V2
+        - generic [ref=f9e54]: Transport and arrival
+        - heading "Arrival details" [level=1] [ref=f9e55]
+        - generic [ref=f9e56]:
+          - generic [ref=f9e58]:
+            - generic [ref=f9e59]: Arrival date at port of entry
+            - generic [ref=f9e60]: The expected date of arrival at the port of entry. For example, 7/10/2026
+            - generic [ref=f9e62]:
+              - textbox "Arrival date at port of entry" [ref=f9e63]: 7/11/2026
+              - button "Choose date" [ref=f9e64] [cursor=pointer]
+          - generic [ref=f9e70]:
+            - generic [ref=f9e71]: Port of entry
+            - generic [ref=f9e72]: Choose where the transporter will enter with the consignment. Start typing to search by port or airport name or code.
+            - generic [ref=f9e74]:
+              - generic [ref=f9e75]:
+                - status
+                - status
+              - combobox "Port of entry" [ref=f9e76] [cursor=pointer]: Aberdeen Harbour (GB ABD)
+          - generic [ref=f9e80]:
+            - generic [ref=f9e81]: Means of transport to the port of entry
+            - combobox "Means of transport to the port of entry" [ref=f9e82]:
+              - option "Select one"
+              - option "Airplane"
+              - option "Railway"
+              - option "Road Vehicle" [selected]
+              - option "Vessel"
+          - generic [ref=f9e83]:
+            - generic [ref=f9e84]: Transport identification
+            - generic [ref=f9e85]:
+              - paragraph [ref=f9e86]: "To identify the means of transport, enter (one of the following):"
+              - list [ref=f9e87]:
+                - listitem [ref=f9e88]: flight number
+                - listitem [ref=f9e89]: train number
+                - listitem [ref=f9e90]: road vehicle registration number
+                - listitem [ref=f9e91]: vessel name (for ferries, also the road vehicle registration number)
+            - textbox "Transport identification" [ref=f9e92]: FR-892-LK
+          - generic [ref=f9e93]:
+            - generic [ref=f9e94]: Transport document reference
+            - generic [ref=f9e95]: Enter the reference number on the air waybill, bill of lading, sea waybill, road consignment note (CMR) or other transport document.
+            - textbox "Transport document reference" [ref=f9e96]: CMR-2026-884721
+          - generic [ref=f9e97]:
+            - button "Save and continue" [ref=f9e98] [cursor=pointer]
+            - button "Save and return to overview" [ref=f9e99] [cursor=pointer]
+            - link "Cancel and return to overview" [ref=f9e100] [cursor=pointer]:
+              - /url: /live-animals/notifications/GBN-AG-26-8150V2
+  - contentinfo [ref=f9e101]:
+    - generic [ref=f9e114]:
+      - generic [ref=f9e115]:
+        - heading "Support links" [level=2] [ref=f9e116]
+        - list [ref=f9e117]:
+          - listitem [ref=f9e118]:
+            - link "Privacy" [ref=f9e119] [cursor=pointer]:
+              - /url: https://www.gov.uk/help/privacy-notice
+          - listitem [ref=f9e120]:
+            - link "Cookies" [ref=f9e121] [cursor=pointer]:
+              - /url: https://www.gov.uk/help/cookies
+          - listitem [ref=f9e122]:
+            - link "Accessibility statement" [ref=f9e123] [cursor=pointer]:
+              - /url: https://www.gov.uk/help/accessibility-statement
+        - generic [ref=f9e126]:
+          - text: All content is available under the
+          - link "Open Government Licence v3.0" [ref=f9e127] [cursor=pointer]:
+            - /url: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+          - text: ", except where otherwise stated"
+      - link "© Crown copyright" [ref=f9e129] [cursor=pointer]:
+        - /url: https://www.nationalarchives.gov.uk/information-management/re-using-public-sector-information/uk-government-licensing-framework/crown-copyright/
+```
+
+# Test source
+
+```ts
+  181 |   // unlocked journey. The page itself saves through unfilled; it is filled
+  182 |   // because a road vehicle keeps transited countries in scope, which is
+  183 |   // answered on the way.
+  184 |   async reachTransporterFromHub(): Promise<void> {
+  185 |     await this.animalsPages.overview.task('Arrival details').click();
+  186 |     await this.animalsPages.arrivalDetails.heading.waitFor(pageLoadWait);
+  187 |     await this.fillArrivalDetails();
+  188 |     await this.animalsPages.arrivalDetails.saveAndContinue.click();
+  189 |     await this.animalsPages.transitedCountries.heading.waitFor(pageLoadWait);
+  190 |     await this.animalsPages.transitedCountries.addCountry('France');
+  191 |     await this.animalsPages.transitedCountries.saveAndContinue.click();
+  192 |     await this.animalsPages.transporter.heading.waitFor(pageLoadWait);
+  193 |   }
+  194 | 
+  195 |   async answerTransport(): Promise<void> {
+  196 |     await this.animalsPages.overview.task('Arrival details').click();
+  197 |     await this.fillArrivalDetails();
+  198 |     await this.animalsPages.arrivalDetails.saveAndContinue.click();
+  199 |     await this.animalsPages.transitedCountries.heading.waitFor(pageLoadWait);
+  200 |     await this.animalsPages.transitedCountries.addCountry('France');
+  201 |     await this.animalsPages.transitedCountries.addCountry('Belgium');
+  202 |     await this.animalsPages.transitedCountries.saveAndContinue.click();
+  203 |     await this.animalsPages.transporter.heading.waitFor(pageLoadWait);
+  204 |     await this.animalsPages.transporter.transporter('García Livestock Transport SL').check();
+  205 |     await this.animalsPages.transporter.saveAndContinue.click();
+  206 |     await this.animalsPages.overview.heading.waitFor(pageLoadWait);
+  207 |   }
+  208 | 
+  209 |   async answerContact(): Promise<void> {
+  210 |     await this.animalsPages.overview.task('Contact address for this consignment').click();
+  211 |     await this.animalsPages.contactAddress.address('Animal and Plant Health Agency').check();
+  212 |     await this.animalsPages.contactAddress.saveAndContinue.click();
+  213 |     await this.animalsPages.overview.heading.waitFor(pageLoadWait);
+  214 |   }
+  215 | 
+  216 |   async completeAnswerSections(): Promise<void> {
+  217 |     await this.answerOrigin({ requiresRegionCode: 'Yes', internalReference: 'Imports456GB' });
+  218 |     await this.answerCommodity();
+  219 |     await this.answerAnimalIdentification();
+  220 |     await this.answerReasonAndAdditionalDetails();
+  221 |     await this.answerAddresses();
+  222 |     await this.answerTransport();
+  223 |     await this.answerContact();
+  224 |   }
+  225 | 
+  226 |   // Reach helpers — land on a page UNFILLED so a per-page spec can drive it.
+  227 |   // The commodity section (and everything downstream) is gated behind origin,
+  228 |   // so any reach past origin runs unlockSections first.
+  229 |   async toCommoditySelection(): Promise<void> {
+  230 |     await this.startNotification();
+  231 |     await this.animalsPages.overview.task('What are you importing?').click();
+  232 |     await this.animalsPages.commoditySelection.heading.waitFor(pageLoadWait);
+  233 |   }
+  234 | 
+  235 |   async toConsignmentDetails(): Promise<void> {
+  236 |     await this.toCommoditySelection();
+  237 |     await this.animalsPages.commoditySelection.selectSpecies(['Bos taurus']);
+  238 |     await this.animalsPages.commoditySelection.saveAndContinue.click();
+  239 |     await this.animalsPages.consignmentDetails.heading.waitFor(pageLoadWait);
+  240 |   }
+  241 | 
+  242 |   async toAnimalIdentification(): Promise<void> {
+  243 |     await this.startNotification();
+  244 |     await this.unlockSections();
+  245 |     await this.animalsPages.overview.task('Identification details').click();
+  246 |     await this.animalsPages.animalIdentification.heading.waitFor(pageLoadWait);
+  247 |   }
+  248 | 
+  249 |   async toImportReason(): Promise<void> {
+  250 |     await this.startNotification();
+  251 |     await this.unlockSections();
+  252 |     await this.animalsPages.overview.task('Main reason for import').click();
+  253 |     await this.animalsPages.importReason.heading.waitFor(pageLoadWait);
+  254 |   }
+  255 | 
+  256 |   async toAdditionalDetails(): Promise<void> {
+  257 |     await this.toImportReason();
+  258 |     await this.animalsPages.importReason.reason('Internal market').check();
+  259 |     await this.animalsPages.importReason.purpose('Breeding').check();
+  260 |     await this.animalsPages.importReason.saveAndContinue.click();
+  261 |     await this.animalsPages.additionalDetails.heading.waitFor(pageLoadWait);
+  262 |   }
+  263 | 
+  264 |   async toCphNumber(): Promise<void> {
+  265 |     await this.startNotification();
+  266 |     await this.unlockSections();
+  267 |     await this.fillAddressesToCph();
+  268 |   }
+  269 | 
+  270 |   async toArrivalDetails(): Promise<void> {
+  271 |     await this.startNotification();
+  272 |     await this.unlockSections();
+  273 |     await this.animalsPages.overview.task('Arrival details').click();
+  274 |     await this.animalsPages.arrivalDetails.heading.waitFor(pageLoadWait);
+  275 |   }
+  276 | 
+  277 |   async toTransitedCountries(): Promise<void> {
+  278 |     await this.toArrivalDetails();
+  279 |     await this.fillArrivalDetails();
+  280 |     await this.animalsPages.arrivalDetails.saveAndContinue.click();
+> 281 |     await this.animalsPages.transitedCountries.heading.waitFor(pageLoadWait);
+      |                                                        ^ Error: locator.waitFor: Test timeout of 30000ms exceeded.
+  282 |   }
+  283 | 
+  284 |   async toTransporter(): Promise<void> {
+  285 |     await this.toTransitedCountries();
+  286 |     await this.animalsPages.transitedCountries.addCountry('France');
+  287 |     await this.animalsPages.transitedCountries.saveAndContinue.click();
+  288 |     await this.animalsPages.transporter.heading.waitFor(pageLoadWait);
+  289 |   }
+  290 | 
+  291 |   // The commercial arm of the add route: the list first, then the type
+  292 |   // question, and then the form for a commercial transporter that is not on
+  293 |   // the list.
+  294 |   async toCommercialTransporter(): Promise<void> {
+  295 |     await this.toTransporter();
+  296 |     await this.animalsPages.transporter.addTransporter.click();
+  297 |     await this.animalsPages.transporterAdd.heading.waitFor(pageLoadWait);
+  298 |     await this.animalsPages.transporterAdd.transporterType('Commercial').check();
+  299 |     await this.animalsPages.transporterAdd.saveAndContinue.click();
+  300 |     await this.animalsPages.commercialTransporter.heading.waitFor(pageLoadWait);
+  301 |   }
+  302 | 
+  303 |   // The approved commercial register, which nothing links to now that the add
+  304 |   // route's commercial arm is the add-commercial form. It is reached by its own
+  305 |   // URL, through that arm so the transporter type is answered — which is what
+  306 |   // puts the commercial answer the register writes in scope.
+  307 |   async toTransporterSelection(): Promise<void> {
+  308 |     await this.toCommercialTransporter();
+  309 |     await this.animalsPages.transporterSelection.open(this.animalsPages.commercialTransporter.journeyIdFromUrl());
+  310 |     await this.animalsPages.transporterSelection.heading.waitFor(pageLoadWait);
+  311 |   }
+  312 | 
+  313 |   async toContactAddress(): Promise<void> {
+  314 |     await this.startNotification();
+  315 |     await this.unlockSections();
+  316 |     await this.animalsPages.overview.task('Contact address for this consignment').click();
+  317 |     await this.animalsPages.contactAddress.heading.waitFor(pageLoadWait);
+  318 |   }
+  319 | 
+  320 |   async toReview(): Promise<void> {
+  321 |     if (!this.context.journeyId) await this.startNotification();
+  322 |     await this.completeAnswerSections();
+  323 |     await this.animalsPages.overview.reviewAndSubmitButton.click();
+  324 |     await this.animalsPages.notificationView.heading.waitFor(pageLoadWait);
+  325 |   }
+  326 | 
+  327 |   async toDeclaration(): Promise<void> {
+  328 |     await this.startNotification();
+  329 |     await this.completeAnswerSections();
+  330 |     await this.fromOverviewToDeclaration();
+  331 |   }
+  332 | 
+  333 |   async submitNotification(): Promise<void> {
+  334 |     await this.toDeclaration();
+  335 |     await this.confirmDeclaration();
+  336 |   }
+  337 | 
+  338 |   // The same full journey with one accompanying document added, waiting for its
+  339 |   // virus scan so the submission carries it.
+  340 |   async submitNotificationWithDocument(document: AccompanyingDocumentAnswer): Promise<void> {
+  341 |     await this.startNotification();
+  342 |     await this.completeAnswerSections();
+  343 |     await this.animalsPages.overview.task('Upload documents').click();
+  344 |     await this.animalsPages.accompanyingDocuments.heading.waitFor(pageLoadWait);
+  345 |     await this.animalsPages.accompanyingDocuments.fillDocument(document.reference, document.issueDate, document.filePath, document.type);
+  346 |     await this.animalsPages.accompanyingDocuments.saveAndAddAnother.click();
+  347 |     await this.animalsPages.accompanyingDocuments
+  348 |       .documentRow(document.reference)
+  349 |       .filter({ hasText: 'Check completed' })
+  350 |       .waitFor({ state: 'visible', timeout: fileUploadTimeouts.virusScanComplete });
+  351 |     await this.animalsPages.overview.open(this.animalsPages.accompanyingDocuments.journeyIdFromUrl());
+  352 |     await this.animalsPages.overview.heading.waitFor(pageLoadWait);
+  353 |     await this.fromOverviewToDeclaration();
+  354 |     await this.confirmDeclaration();
+  355 |   }
+  356 | 
+  357 |   private async fromOverviewToDeclaration(): Promise<void> {
+  358 |     await this.animalsPages.overview.reviewAndSubmitButton.click();
+  359 |     await this.animalsPages.notificationView.heading.waitFor(pageLoadWait);
+  360 |     await this.animalsPages.notificationView.continueButton.click();
+  361 |     await this.animalsPages.declaration.heading.waitFor(pageLoadWait);
+  362 |   }
+  363 | 
+  364 |   private async confirmDeclaration(): Promise<void> {
+  365 |     await this.animalsPages.declaration.confirmation.check();
+  366 |     await this.animalsPages.declaration.continueButton.click();
+  367 |     await this.pages.page.getByRole('heading', { name: 'Import notification submitted' }).waitFor(pageLoadWait);
+  368 |   }
+  369 | }
+  370 | 
+```
