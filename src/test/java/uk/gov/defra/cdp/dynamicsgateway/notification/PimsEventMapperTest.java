@@ -327,7 +327,9 @@ class PimsEventMapperTest {
         // and constructs TradeCountry, TradeCountrySubDivision, LogisticsLocation records
         TradeCountry origin = new TradeCountry(
             new CodedValue("GB", "url", null),
-            new TradeCountrySubDivision("ENG", null, new TradeCountrySubDivision.FunctionTypeCode("106")));
+            List.of(new TradeCountrySubDivision("GB-ENG", null, null, null,
+                new TradeCountrySubDivision.FunctionTypeCode("106", null))),
+            null);
         LogisticsLocation port = new LogisticsLocation("PORT-1", null, null, null, null);
         SpecifiedConsignment sc = new SpecifiedConsignment(
             null, null, null, null, null, null, origin, port, null, null, null, null, null);
@@ -344,7 +346,7 @@ class PimsEventMapperTest {
     @Test
     void map_shouldHandleNullCodeInTradeCountry() {
         // Given — TradeCountry with null code exercises mapCodedValue null branch
-        TradeCountry origin = new TradeCountry(null, null);
+        TradeCountry origin = new TradeCountry(null, null, null);
         SpecifiedConsignment sc = new SpecifiedConsignment(
             null, null, null, null, null, null, origin, null, null, null, null, null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));

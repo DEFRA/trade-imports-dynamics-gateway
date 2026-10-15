@@ -218,8 +218,13 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .as("subordinateTradeCountrySubDivision is a single object in v0.2.0, not an array")
             .isTrue();
         assertThat(subdivision.isArray()).isFalse();
-        assertThat(subdivision.path("identifier").asText()).isEqualTo("FR-75");
+        assertThat(subdivision.path("identifier").asText()).isEqualTo("ES-CN");
+        assertThat(subdivision.path("urlId").asText())
+            .isEqualTo("https://refdata.tbc.defra.gov.uk/country_subdivisions");
         assertThat(subdivision.path("functionTypeCode").path("content").asText()).isEqualTo("106");
+        assertThat(consignment.path("originCountry").has("regionOfOriginCode"))
+            .as("regionOfOriginCode is not sent to PIMS until EUDPA-615")
+            .isFalse();
 
         JsonNode lineItems = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
         assertThat(lineItems).hasSize(2);
@@ -412,11 +417,15 @@ class NotificationSqsListenerIT extends IntegrationBase {
                 "$type": "gbn-ag",
                 "specifiedConsignment": {
                   "originCountry": {
-                    "code": { "value": "FR" },
-                    "subordinateTradeCountrySubDivision": {
-                      "identifier": "FR-75",
-                      "functionTypeCode": { "content": "106" }
-                    }
+                    "code": { "value": "ES" },
+                    "subordinateTradeCountrySubDivision": [
+                      {
+                        "identifier": "ES-CN",
+                        "urlId": "https://refdata.tbc.defra.gov.uk/country_subdivisions",
+                        "functionTypeCode": { "content": "106" }
+                      }
+                    ],
+                    "regionOfOriginCode": "ES-12345"
                   },
                   "includedConsignmentItem": [
                     {
