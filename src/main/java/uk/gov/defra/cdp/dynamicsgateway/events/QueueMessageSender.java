@@ -87,10 +87,12 @@ public class QueueMessageSender {
         } catch (ServiceBusException e) {
             classifyAndThrow(e, resolvedMessageId, sessionId);
         } catch (IllegalStateException e) {
-            log.warn("ASB sender in illegal state ({}), retryable: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("ASB sender in illegal state, retryable (messageId={}, sessionId={})",
+                resolvedMessageId, sessionId, e);
             throw new SqsRetryableException("ASB sender disposed", e);
         } catch (Exception e) {
-            log.error("Unexpected error ({}) sending to ASB, non-retryable: {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            log.error("Unexpected error sending to ASB, non-retryable (messageId={}, sessionId={})",
+                resolvedMessageId, sessionId, e);
             throw new SqsNonRetryableException("Unexpected ASB send failure", e);
         }
     }
@@ -98,7 +100,7 @@ public class QueueMessageSender {
     private void classifyAndThrow(ServiceBusException e, String messageId, String sessionId) {
         if (e.isTransient()) {
             log.warn("Transient ASB error (reason={}, messageId={}, sessionId={}): {}",
-                e.getReason(), messageId, sessionId, e.getMessage());
+                e.getReason(), messageId, sessionId, e.getMessage(), e);
             throw new SqsRetryableException("Transient ASB send failure", e);
         }
         log.error("Non-transient ASB error (reason={}, messageId={}, sessionId={}): {}",

@@ -29,7 +29,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetail> handleUnreadableBody(HttpMessageNotReadableException ex) {
-        log.warn("Rejected request — unreadable body: {}", ex.getMessage());
+        log.warn("Rejected request — unreadable body: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_REQUEST,
             BAD_REQUEST_TITLE,
@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ProblemDetail> handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("Rejected request — invalid argument: {}", ex.getMessage());
+        log.warn("Rejected request — invalid argument: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_REQUEST,
             BAD_REQUEST_TITLE,
@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ProblemDetail> handleConstraintViolation(ConstraintViolationException ex) {
-        log.warn("Rejected request — constraint violation: {}", ex.getMessage());
+        log.warn("Rejected request — constraint violation: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_REQUEST,
             BAD_REQUEST_TITLE,
@@ -62,7 +62,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ProblemDetail> handleInvalidBody(MethodArgumentNotValidException ex) {
-        log.warn("Rejected request — invalid body: {}", ex.getMessage());
+        log.warn("Rejected request — invalid body: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.BAD_REQUEST,
             BAD_REQUEST_TITLE,
@@ -104,9 +104,6 @@ public class GlobalExceptionHandler {
         );
     }
 
-    /** {@code SqsAsyncClient} calls in {@code DlqService} are awaited via {@code .join()}, which wraps
-     * whatever the SDK threw in a {@link CompletionException} — unwrap here so the SQS-specific
-     * mapping above still applies instead of falling through to a generic 500. */
     @ExceptionHandler(CompletionException.class)
     public ResponseEntity<ProblemDetail> handleCompletionException(CompletionException ex) {
         if (ex.getCause() instanceof SqsException sqsException) {
@@ -117,7 +114,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ProblemDetail> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
-        log.warn("Unsupported media type: {}", ex.getMessage());
+        log.warn("Unsupported media type: {}", ex.getMessage(), ex);
         return problemResponse(
             HttpStatus.UNSUPPORTED_MEDIA_TYPE,
             "Unsupported Media Type",

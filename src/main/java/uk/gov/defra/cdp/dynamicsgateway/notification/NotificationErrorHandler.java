@@ -1,5 +1,6 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
+import io.awspring.cloud.sqs.listener.SqsHeaders;
 import io.awspring.cloud.sqs.listener.errorhandler.ErrorHandler;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -46,12 +47,12 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
         Throwable classified = findClassifiedCause(t);
         if (classified instanceof SqsRetryableException retryableException) {
             retryCounter.increment();
-            log.warn("Retryable error, message left for retry: {}", classified.getMessage());
+            log.warn("Retryable error, message for aggregate {} left for retry", aggregateIdOf(message), classified);
             throw retryableException;
         }
 
         discardedCounter.increment();
-        log.error("Non-retryable error, message will be deleted: {}", classified.getMessage(), t);
+        log.error("Non-retryable error, message for aggregate {} will be deleted", aggregateIdOf(message), t);
     }
 
     private Throwable findClassifiedCause(Throwable t) {
@@ -63,5 +64,9 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
             current = current.getCause();
         }
         return t;
+    }
+
+    private static Object aggregateIdOf(Message<Object> message) {
+        return message.getHeaders().get(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER);
     }
 }
