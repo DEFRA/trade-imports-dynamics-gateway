@@ -110,7 +110,7 @@ public class NotificationSqsListener {
         forwardedCounterV1.increment();
 
         // Deliberately broad catch: v0.2.0 is a new, not-yet-fully-proven stream published
-        // alongside the stable v0.1.0 one (EUDPA-370) while PIMS transitions between them. Any
+        // alongside the stable v0.1.0 one while PIMS transitions between them. Any
         // failure here — mapping or ASB publish — must never fail or retry this SQS message, since
         // v0.1.0 has already been delivered above; letting a v0.2.0 failure do so would risk SQS
         // redelivering the whole message and re-sending a duplicate v0.1.0 payload.

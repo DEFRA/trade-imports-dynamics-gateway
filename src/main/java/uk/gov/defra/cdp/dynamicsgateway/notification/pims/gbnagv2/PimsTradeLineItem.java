@@ -11,7 +11,7 @@ public record PimsTradeLineItem(
     // NON_EMPTY, not NON_NULL: the schema sets minItems:1 on this field, and mapList yields
     // an empty list (never null) when the upstream list is absent. NON_NULL would leave "[]"
     // on the wire, which the schema rejects; tradeLineItem has no required list, so omitting
-    // the field entirely is valid (EUDPA-370 review, item 14).
+    // the field entirely is valid.
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     List<PimsApplicableClassification> applicableClassification,
     List<String> description,

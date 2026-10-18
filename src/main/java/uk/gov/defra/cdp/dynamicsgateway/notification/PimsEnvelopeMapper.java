@@ -46,8 +46,8 @@ class PimsEnvelopeMapper {
      * passing through the incoming event's own values — PIMS distinguishes the two
      * simultaneously-published streams by them.
      */
-    PimsEventMetadata mapMetadata(OutboxEventMetadata metadata, String schemaVersion, String schemaUrl) {
+    PimsEventMetadata mapMetadata(OutboxEventMetadata metadata, String schemaVersion, String schemaUri) {
         if (metadata == null) return null;
-        return new PimsEventMetadata(metadata.correlationId(), schemaVersion, schemaUrl);
+        return new PimsEventMetadata(metadata.correlationId(), schemaVersion, schemaUri);
     }
 }

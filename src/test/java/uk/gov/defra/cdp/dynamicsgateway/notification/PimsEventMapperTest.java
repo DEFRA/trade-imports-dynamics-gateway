@@ -102,9 +102,9 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldStampV1SchemaVersionAndUrl_notPassThroughIncomingMetadata() {
-        // Given — schemaVersion/schemaUrl are stamped, not passed through, so PIMS can tell the
-        // v0.1.0 and v0.2.0 streams apart (EUDPA-370); correlationId still passes through.
+    void map_shouldStampV1SchemaVersionAndUri_notPassThroughIncomingMetadata() {
+        // Given — schemaVersion/schemaUri are stamped, not passed through, so PIMS can tell the
+        // v0.1.0 and v0.2.0 streams apart; correlationId still passes through.
         OutboxEventMetadata metadata = new OutboxEventMetadata("corr-1", "1.0", "https://schema.url");
         OutboxEvent event = eventWithMetadata(metadata);
 
@@ -114,7 +114,7 @@ class PimsEventMapperTest {
         // Then
         assertThat(result.metadata().correlationId()).isEqualTo("corr-1");
         assertThat(result.metadata().schemaVersion()).isEqualTo("0.1.0");
-        assertThat(result.metadata().schemaUrl()).isEqualTo(
+        assertThat(result.metadata().schemaUri()).isEqualTo(
             "https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.1.0.schema.json");
     }
 

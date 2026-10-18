@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
  * Reads the stable {@code eventId} from an enveloped notification body.
  *
  * <p>The backend outbox publishes the full event envelope (carrying {@code eventId}) in the message
- * body (EUDPA-261). Callers fall back to the SQS {@code MessageDeduplicationId} when the field is
+ * body. Callers fall back to the SQS {@code MessageDeduplicationId} when the field is
  * absent. This {@code eventId} is the dedup key carried end-to-end: it travels as the SQS
  * {@code MessageDeduplicationId} and is set downstream as the ASB {@code MessageId}. Extracting it
  * here keeps that key stable across retries, so it survives {@link DlqService} minting a fresh,
