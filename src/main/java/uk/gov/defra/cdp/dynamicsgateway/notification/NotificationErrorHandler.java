@@ -10,20 +10,8 @@ import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 
 /**
- * Routes SQS listener errors based on exception type. {@link uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender} classifies
- * ASB failures into {@link SqsRetryableException} or {@link SqsNonRetryableException}, but
- * Spring Cloud AWS wraps listener failures (e.g. {@code AsyncAdapterBlockingExecutionFailedException}
- * → {@code ListenerExecutionFailedException} → classified exception), so the full cause chain
- * is walked before deciding retry vs discard.
- *
- * <p>Spring Cloud AWS behaviour:
- * <ul>
- *   <li><strong>Normal return</strong> from this handler — message is acknowledged (deleted from SQS).
- *       Used for non-retryable errors where retrying the same message will never succeed.</li>
- *   <li><strong>Thrown exception</strong> from this handler — message is NOT acknowledged. After the
- *       visibility timeout expires, the message becomes available for retry, eventually routing to
- *       the DLQ after {@code maxReceiveCount}.</li>
- * </ul>
+ * Rethrows a failure whose cause chain holds an {@link SqsRetryableException}, so SQS redelivers the
+ * message, and returns normally for any other failure, so the message is deleted.
  */
 @Slf4j
 public class NotificationErrorHandler implements ErrorHandler<Object> {

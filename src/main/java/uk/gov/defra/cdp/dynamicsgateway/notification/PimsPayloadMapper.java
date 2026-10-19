@@ -11,13 +11,6 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV1;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
 
-/**
- * Parses an SQS body once and maps it to both the v0.1.0 and v0.2.0 PIMS wire shapes, published
- * side by side while PIMS transitions from one to the other. The two map methods are
- * deliberately independent — {@link NotificationSqsListener} treats a v0.2.0 mapping failure as
- * best-effort (log and continue) so it can never affect v0.1.0 delivery, which keeps today's exact
- * failure semantics.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j

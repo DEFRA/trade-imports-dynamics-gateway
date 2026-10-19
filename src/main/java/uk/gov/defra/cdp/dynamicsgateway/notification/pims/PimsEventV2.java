@@ -6,8 +6,7 @@ import java.util.List;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsGbnAgData;
 
 /**
- * A java pojo representation of the pims v0.2.0 event.
- * Schema found in:
+ * The PIMS v0.2.0 event, as defined by
  * <a href="https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.2.0.schema.json">trade-imports-schemas</a>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)

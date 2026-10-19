@@ -58,9 +58,7 @@ class PimsEventMapperV2Test {
     }
 
     @Test
-    void map_shouldStampV2SchemaVersionAndUri_notPassThroughIncomingMetadata() {
-        // Given — the incoming event's own metadata is irrelevant; v0.2.0 stamps its own identity
-        // so PIMS can distinguish this stream from the simultaneously-published v0.1.0 one.
+    void map_shouldStampV2SchemaVersionAndUriAndKeepTheIncomingCorrelationId() {
         OutboxEventMetadata metadata = new OutboxEventMetadata("corr-1", "1.0", "https://schema.url");
         OutboxEvent event = eventWithMetadata(metadata);
 
@@ -98,10 +96,7 @@ class PimsEventMapperV2Test {
 
     @Test
     void map_shouldMapFirstSignatoryAuthenticationClauses() {
-        // Given — the v0.2.0 mapper has its own mapAuthentication/mapClause pair, separate from
-        // the v0.1.0 one. Every other test here passes firstSignatoryAuthentication=null, so only
-        // the null-safety branch was exercised and the field mapping itself was unasserted on
-        // this path.
+        // Given
         Clause attestation = new Clause("II.1", "The animals described above are healthy.",
             "https://refdata.tbc.defra.gov.uk/clause/II.1");
         Clause transport = new Clause("II.2", "Transport conditions were met.", null);
@@ -138,7 +133,7 @@ class PimsEventMapperV2Test {
 
     @Test
     void map_shouldMapApplicableClassificationAsArray_notTakeFirst() {
-        // Given — the whole reason the v0.2.0 mapper stack exists
+        // Given
         ApplicableClassification cn = new ApplicableClassification("CN", null,
             new CodedValue("0102", null, null), null);
         ApplicableClassification species = new ApplicableClassification("SPECIES_CLASS", null,

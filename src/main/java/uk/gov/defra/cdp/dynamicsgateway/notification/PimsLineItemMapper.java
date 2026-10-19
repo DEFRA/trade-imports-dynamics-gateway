@@ -31,12 +31,10 @@ class PimsLineItemMapper {
 
     private PimsTradeLineItem mapTradeLineItem(TradeLineItem item) {
         if (item == null) return null;
-        // applicableClassification: backend always produces exactly one — take first (PR #52)
         PimsApplicableClassification classification = item.applicableClassification() == null
             || item.applicableClassification().isEmpty()
             ? null
             : mapApplicableClassification(item.applicableClassification().getFirst());
-        // description, scientificName, commonName, typeCode, urlId omitted — always null in v0.1.0 (PR #52)
         return new PimsTradeLineItem(
             classification,
             mapList(item.specifiedLineTradeDelivery(), this::mapLineTradeDelivery),
@@ -47,7 +45,6 @@ class PimsLineItemMapper {
 
     private PimsApplicableClassification mapApplicableClassification(ApplicableClassification ac) {
         if (ac == null) return null;
-        // systemName and className omitted — always null in v0.1.0 (PR #52)
         PimsCodedValue classCode = ac.classCode() == null ? null
             : new PimsCodedValue(ac.classCode().value(), ac.classCode().urlId());
         return new PimsApplicableClassification(ac.systemId(), classCode);
@@ -60,25 +57,21 @@ class PimsLineItemMapper {
 
     private PimsProductUnitQuantity mapProductUnitQuantity(ProductUnitQuantity qty) {
         if (qty == null) return null;
-        // unitCode omitted — always null in v0.1.0 (PR #52)
         return new PimsProductUnitQuantity(qty.content());
     }
 
     private PimsLogisticsPackage mapLogisticsPackage(LogisticsPackage pkg) {
         if (pkg == null) return null;
-        // levelCode and typeCode omitted — always null in v0.1.0 (PR #52)
         return new PimsLogisticsPackage(pkg.itemQuantity());
     }
 
     private PimsTradeProductInstance mapTradeProductInstance(TradeProductInstance instance) {
         if (instance == null) return null;
-        // name and permanentLocation omitted — always null in v0.1.0 (PR #52)
         return new PimsTradeProductInstance(mapList(instance.identifier(), this::mapAnimalIdentifier));
     }
 
     private PimsAnimalIdentifier mapAnimalIdentifier(AnimalIdentifier id) {
         if (id == null) return null;
-        // urlId omitted — always null in v0.1.0 (PR #52)
         return new PimsAnimalIdentifier(id.typeCode(), id.content());
     }
 

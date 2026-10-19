@@ -16,12 +16,6 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsReferenced
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsTradeAddress;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsTradeParty;
 
-/**
- * Mapping logic shared by two or more v0.2.0 mapper classes ({@link PimsConsignmentMapperV2},
- * {@link PimsTransportMapperV2}, {@link PimsLineItemMapperV2}, {@link PimsGbnAgDataMapperV2}) — kept
- * in one place rather than duplicated, and kept dependency-free so those classes can all depend on
- * it without risking a circular Spring bean dependency.
- */
 @Component
 class PimsCommonMapperV2 {
 

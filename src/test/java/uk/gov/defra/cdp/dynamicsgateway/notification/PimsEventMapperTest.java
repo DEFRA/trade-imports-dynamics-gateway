@@ -102,9 +102,8 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldStampV1SchemaVersionAndUri_notPassThroughIncomingMetadata() {
-        // Given — schemaVersion/schemaUri are stamped, not passed through, so PIMS can tell the
-        // v0.1.0 and v0.2.0 streams apart; correlationId still passes through.
+    void map_shouldStampV1SchemaVersionAndUriAndKeepTheIncomingCorrelationId() {
+        // Given
         OutboxEventMetadata metadata = new OutboxEventMetadata("corr-1", "1.0", "https://schema.url");
         OutboxEvent event = eventWithMetadata(metadata);
 
@@ -186,7 +185,7 @@ class PimsEventMapperTest {
         // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then — issuer and referenceDocument dropped; firstSignatoryAuthentication mapped
+        // Then
         var pimsDoc = result.data().exchangedDocument();
         assertThat(pimsDoc.identifier()).isEqualTo("id-1");
         assertThat(pimsDoc.traderAssignedId()).isEqualTo("trader-id");
@@ -210,7 +209,7 @@ class PimsEventMapperTest {
         // When
         var pimsParty = mapper.map(event).data().specifiedConsignment().consignorParty();
 
-        // Then — partyRoleCode dropped; postalAddress mapped with 4 fields only
+        // Then
         assertThat(pimsParty.identifier()).isEqualTo("p-1");
         assertThat(pimsParty.name()).isEqualTo("Party Name");
         assertThat(pimsParty.partyTypeCode()).hasSize(1);
@@ -223,7 +222,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapApplicableClassification_takingFirstFromList() {
-        // Given — backend produces a list; PIMS receives a singular (PR #52)
+        // Given
         CodedValue classCode = new CodedValue("0102", "url", "Bovine");
         ApplicableClassification ac = new ApplicableClassification("HS", "Harmonised System", classCode, List.of("Cattle"));
         TradeLineItem item = new TradeLineItem(List.of(ac), null, null, null, null, null, null, null, null);
@@ -231,7 +230,7 @@ class PimsEventMapperTest {
         SpecifiedConsignment sc = emptyConsignment().withIncludedConsignmentItem(List.of(ci)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then — first applicableClassification taken; systemName and className dropped
+        // When / Then
         var pimsItem = mapper.map(event).data().specifiedConsignment().includedConsignmentItem().getFirst()
             .includedTradeLineItem().getFirst();
         assertThat(pimsItem.applicableClassification().systemId()).isEqualTo("HS");
@@ -265,7 +264,7 @@ class PimsEventMapperTest {
         var pimsTm = mapper.map(event).data().specifiedConsignment()
             .mainCarriageLogisticsTransportMovement().getFirst();
 
-        // Then — identifier and urlId dropped; arrivalEvent mapped with scheduledOccurrenceDateTime only
+        // Then
         assertThat(pimsTm.modeCode()).isEqualTo(1);
         assertThat(pimsTm.usedLogisticsTransportMeans().name()).isEqualTo("vessel");
         assertThat(pimsTm.arrivalEvent()).hasSize(1);
@@ -323,8 +322,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapOriginCountryAndUnloadingBaseportLocation() {
-        // Given — exercises mapTradeCountry and mapLogisticsLocation non-null paths,
-        // and constructs TradeCountry, TradeCountrySubDivision, LogisticsLocation records
+        // Given
         TradeCountry origin = new TradeCountry(
             new CodedValue("GB", "url", null),
             new TradeCountrySubDivision("ENG", null, new TradeCountrySubDivision.FunctionTypeCode("106")));
@@ -343,7 +341,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleNullCodeInTradeCountry() {
-        // Given — TradeCountry with null code exercises mapCodedValue null branch
+        // Given
         TradeCountry origin = new TradeCountry(null, null);
         SpecifiedConsignment sc = new SpecifiedConsignment(
             null, null, null, null, null, null, origin, null, null, null, null, null, null);
@@ -355,7 +353,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleNullPostalAddressOnTradeParty() {
-        // Given — TradeParty with null postalAddress exercises mapTradeAddress null branch
+        // Given
         TradeParty party = new TradeParty("p-1", null, "Name", null, null, null, null);
         SpecifiedConsignment sc = emptyConsignment().withConsignorParty(party).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
@@ -366,7 +364,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleNullAuthenticationInExchangedDocument() {
-        // Given — null firstSignatoryAuthentication exercises mapAuthentication null branch
+        // Given
         ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null, null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
@@ -376,7 +374,7 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleNullIncludedClauseList() {
-        // Given — Authentication with null includedClause exercises mapList null branch in PimsGbnAgDataMapper
+        // Given
         ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
             new Authentication(null), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
@@ -387,12 +385,12 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleNullClauseElementInAuthentication() {
-        // Given — null element in includedClause list exercises mapClause null branch
+        // Given
         ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
             new Authentication(Collections.singletonList(null)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When / Then — null clause element maps to null in output list
+        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause()).hasSize(1);
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause().getFirst()).isNull();
     }
@@ -407,7 +405,7 @@ class PimsEventMapperTest {
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc,
             emptyConsignment().withConsignorParty(party).build()));
 
-        // When / Then — mapper runs without error; dropped fields absent from PIMS output
+        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().identifier()).isEqualTo("id");
         assertThat(mapper.map(event).data().specifiedConsignment().consignorParty().identifier()).isEqualTo("p-1");
     }

@@ -116,11 +116,7 @@ public class ExternalCallMetrics {
       metricsLogger.flush();
     } catch (RuntimeException e) {
       log.warn(
-          "Could not record external call {}/{}: {}",
-          call.dependency(),
-          call.operation(),
-          e.getMessage(),
-          e);
+          "Could not record external call {}/{}", call.dependency(), call.operation(), e);
     }
   }
 }

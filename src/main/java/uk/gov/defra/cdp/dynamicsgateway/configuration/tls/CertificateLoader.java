@@ -31,7 +31,7 @@ public class CertificateLoader {
         try {
             cf = CertificateFactory.getInstance("X.509");
         } catch (CertificateException e) {
-            log.error("Failed to get X.509 CertificateFactory: {}", e.getMessage(), e);
+            log.error("Failed to get X.509 CertificateFactory", e);
             throw new IllegalStateException("Cannot initialize certificate factory", e);
         }
 
@@ -42,7 +42,7 @@ public class CertificateLoader {
                 cert.getSubjectX500Principal().getName());
             return cert;
         } catch (CertificateException e) {
-            log.error("Failed to parse certificate: {}. Skipping.", e.getMessage(), e);
+            log.error("Failed to parse certificate, skipping it", e);
             return null;
         }
     }
