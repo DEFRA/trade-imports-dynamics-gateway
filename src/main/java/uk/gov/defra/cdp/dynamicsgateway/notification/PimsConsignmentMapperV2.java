@@ -39,24 +39,25 @@ class PimsConsignmentMapperV2 {
         );
     }
 
-    // UNCL3227 location function "Region of origin".
-    private static final String REGION_OF_ORIGIN = "106";
+    // UNCL3227 location function 106 (the code list calls it "Region of origin"): here, the country
+    // subdivision the goods came from. Not the region of origin code, which is a disease zone.
+    private static final String SUBDIVISION_OF_ORIGIN = "106";
 
     // regionOfOriginCode is not sent to PIMS until EUDPA-615.
     private PimsTradeCountry mapTradeCountry(TradeCountry tc) {
         if (tc == null) return null;
         return new PimsTradeCountry(
             commonMapper.mapCodedValue(tc.code()),
-            mapTradeCountrySubDivision(regionOfOrigin(tc.subordinateTradeCountrySubDivision()))
+            mapTradeCountrySubDivision(subdivisionOfOrigin(tc.subordinateTradeCountrySubDivision()))
         );
     }
 
-    // The event carries every sub-division of a country; PIMS v0.2.0 takes one, the region of origin.
-    private static TradeCountrySubDivision regionOfOrigin(List<TradeCountrySubDivision> subDivisions) {
+    // The event carries every sub-division of a country; PIMS v0.2.0 takes one, the '106' entry.
+    private static TradeCountrySubDivision subdivisionOfOrigin(List<TradeCountrySubDivision> subDivisions) {
         if (subDivisions == null) return null;
         return subDivisions.stream()
             .filter(sub -> sub.functionTypeCode() != null
-                && REGION_OF_ORIGIN.equals(sub.functionTypeCode().content()))
+                && SUBDIVISION_OF_ORIGIN.equals(sub.functionTypeCode().content()))
             .findFirst()
             .orElse(null);
     }

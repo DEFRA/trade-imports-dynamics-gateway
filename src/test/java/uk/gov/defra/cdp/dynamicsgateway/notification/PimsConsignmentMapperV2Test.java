@@ -72,7 +72,7 @@ class PimsConsignmentMapperV2Test {
     private static final String COUNTRY_SUBDIVISIONS = "https://refdata.tbc.defra.gov.uk/country_subdivisions";
 
     @Test
-    void mapSpecifiedConsignment_shouldMapOriginCountryWithRegionSubdivision() {
+    void mapSpecifiedConsignment_shouldMapOriginCountryWithItsSubdivision() {
         var origin = new TradeCountry(new CodedValue("ES", null, null),
             List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
@@ -89,8 +89,8 @@ class PimsConsignmentMapperV2Test {
     }
 
     @Test
-    void mapSpecifiedConsignment_shouldSendOnlyTheRegionOfOriginSubdivision() {
-        // The event carries every sub-division of a country; PIMS v0.2.0 takes the region of origin.
+    void mapSpecifiedConsignment_shouldSendOnlyTheSubdivisionOfOrigin() {
+        // The event carries every sub-division of a country; PIMS v0.2.0 takes the '106' entry.
         var origin = new TradeCountry(new CodedValue("ES", null, null),
             List.of(subDivision(null, null, "44"), subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
@@ -100,7 +100,7 @@ class PimsConsignmentMapperV2Test {
     }
 
     @Test
-    void mapSpecifiedConsignment_shouldSendNoSubdivision_whenNoneIsRegionOfOrigin() {
+    void mapSpecifiedConsignment_shouldSendNoSubdivision_whenNoneIsTheSubdivisionOfOrigin() {
         var origin = new TradeCountry(new CodedValue("ES", null, null),
             List.of(subDivision(null, null, "44"), new TradeCountrySubDivision("ES-CN", null, null, null, null)),
             null);
