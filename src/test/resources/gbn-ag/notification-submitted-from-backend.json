@@ -171,17 +171,18 @@
       },
       "originCountry" : {
         "code" : {
-          "value" : "FR",
+          "value" : "ES",
           "urlId" : null,
           "name" : null
         },
-        "subordinateTradeCountrySubDivision" : {
-          "identifier" : "FR-75",
-          "urlId" : null,
+        "subordinateTradeCountrySubDivision" : [ {
+          "identifier" : "ES-CN",
+          "urlId" : "https://refdata.tbc.defra.gov.uk/country_subdivisions",
           "functionTypeCode" : {
             "content" : "106"
           }
-        }
+        } ],
+        "regionOfOriginCode" : "ES-12345"
       },
       "unloadingBaseportLocation" : {
         "identifier" : "GBDVR",
@@ -222,14 +223,16 @@
           "urlId" : null,
           "name" : null
         },
-        "subordinateTradeCountrySubDivision" : null
+        "subordinateTradeCountrySubDivision" : null,
+        "regionOfOriginCode" : null
       }, {
         "code" : {
           "value" : "DE",
           "urlId" : null,
           "name" : null
         },
-        "subordinateTradeCountrySubDivision" : null
+        "subordinateTradeCountrySubDivision" : null,
+        "regionOfOriginCode" : null
       } ],
       "isOrHasUnweanedAnimals" : true,
       "includedConsignmentItem" : [ {

@@ -6,9 +6,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public record TradeCountrySubDivision(
     String identifier,
     String urlId,
+    String name,
+    CodedValue hierarchicalLevelCode,
     FunctionTypeCode functionTypeCode
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = false)
-    public record FunctionTypeCode(String content) {}
+    public record FunctionTypeCode(String content, String name) {}
 }

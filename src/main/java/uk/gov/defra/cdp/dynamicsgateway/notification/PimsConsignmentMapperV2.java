@@ -2,6 +2,7 @@ package uk.gov.defra.cdp.dynamicsgateway.notification;
 
 import static uk.gov.defra.cdp.dynamicsgateway.notification.PimsMapperSupport.mapList;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
@@ -38,19 +39,32 @@ class PimsConsignmentMapperV2 {
         );
     }
 
+    // UNCL3227 location function 106 (the code list calls it "Region of origin"): here, the country
+    // subdivision the goods came from. Not the region of origin code, which is a disease zone.
+    private static final String SUBDIVISION_OF_ORIGIN = "106";
+
+    // regionOfOriginCode is not sent to PIMS until EUDPA-615.
     private PimsTradeCountry mapTradeCountry(TradeCountry tc) {
         if (tc == null) return null;
         return new PimsTradeCountry(
             commonMapper.mapCodedValue(tc.code()),
-            mapTradeCountrySubDivision(tc.subordinateTradeCountrySubDivision())
+            mapTradeCountrySubDivision(subdivisionOfOrigin(tc.subordinateTradeCountrySubDivision()))
         );
+    }
+
+    // The event carries every sub-division of a country; PIMS v0.2.0 takes one, the '106' entry.
+    private static TradeCountrySubDivision subdivisionOfOrigin(List<TradeCountrySubDivision> subDivisions) {
+        if (subDivisions == null) return null;
+        return subDivisions.stream()
+            .filter(sub -> sub.functionTypeCode() != null
+                && SUBDIVISION_OF_ORIGIN.equals(sub.functionTypeCode().content()))
+            .findFirst()
+            .orElse(null);
     }
 
     private PimsTradeCountrySubDivision mapTradeCountrySubDivision(TradeCountrySubDivision sub) {
         if (sub == null) return null;
-        PimsTradeCountrySubDivision.FunctionTypeCode functionTypeCode = sub.functionTypeCode() == null
-            ? null
-            : new PimsTradeCountrySubDivision.FunctionTypeCode(sub.functionTypeCode().content());
-        return new PimsTradeCountrySubDivision(sub.identifier(), sub.urlId(), functionTypeCode);
+        return new PimsTradeCountrySubDivision(sub.identifier(), sub.urlId(),
+            new PimsTradeCountrySubDivision.FunctionTypeCode(sub.functionTypeCode().content()));
     }
 }
