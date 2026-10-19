@@ -96,6 +96,49 @@ class PimsPayloadMapperTest {
     }
 
     @Test
+    void parse_shouldAcceptEverySubDivisionPropertyTheGenericSchemaAllows() throws Exception {
+        // The backend sends identifier, urlId and functionTypeCode only, but the generic schema
+        // also allows name, hierarchicalLevelCode and functionTypeCode.name (trade-imports-schemas#64),
+        // and ignoreUnknown = false would reject any the inbound record did not model.
+        String body = """
+            {
+              "eventId": "evt-sub",
+              "aggregateVersion": 1,
+              "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
+              "data": {
+                "$model": "defra/certificate-internal/1",
+                "$type": "gbn-ag",
+                "specifiedConsignment": {
+                  "originCountry": {
+                    "code": { "value": "ES" },
+                    "subordinateTradeCountrySubDivision": [
+                      {
+                        "identifier": "ES-CN",
+                        "urlId": "https://refdata.tbc.defra.gov.uk/country_subdivisions",
+                        "name": "Canary Islands",
+                        "hierarchicalLevelCode": { "value": "1", "name": "Region" },
+                        "functionTypeCode": { "content": "106", "name": "Region of Origin" }
+                      }
+                    ],
+                    "regionOfOriginCode": "ES-12345"
+                  }
+                }
+              }
+            }
+            """;
+
+        OutboxEvent event = mapper.parse(objectMapper.readTree(body));
+
+        var origin = event.data().specifiedConsignment().originCountry();
+        assertThat(origin.regionOfOriginCode()).isEqualTo("ES-12345");
+        assertThat(origin.subordinateTradeCountrySubDivision()).singleElement().satisfies(sub -> {
+            assertThat(sub.name()).isEqualTo("Canary Islands");
+            assertThat(sub.hierarchicalLevelCode().value()).isEqualTo("1");
+            assertThat(sub.functionTypeCode().name()).isEqualTo("Region of Origin");
+        });
+    }
+
+    @Test
     void mapToV1_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
         // Given — captured from the backend's GbnAgEventDataMapper for a submitted cow, dog and horse
         // notification, serialised the way its outbox does (nulls included). It carries the region
@@ -112,7 +155,7 @@ class PimsPayloadMapperTest {
         JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
         assertThat(consignment.path("consignorParty").path("name").asText()).isEqualTo("Ferme Rosales");
         assertThat(consignment.path("carrier").path("identifier").asText()).isEqualTo("UK/TRANS/T1/00012345");
-        assertThat(consignment.path("originCountry").path("code").path("value").asText()).isEqualTo("FR");
+        assertThat(consignment.path("originCountry").path("code").path("value").asText()).isEqualTo("ES");
         assertThat(consignment.path("unloadingBaseportLocation").path("identifier").asText()).isEqualTo("GBDVR");
         assertThat(consignment.has("finalDestinationLocation")).isFalse();
         assertThat(consignment.has("transitTradeCountry")).isFalse();
@@ -154,7 +197,8 @@ class PimsPayloadMapperTest {
         JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
         assertThat(consignment.path("finalDestinationLocation").path("identifier").asText()).isEqualTo("123456789");
         assertThat(consignment.path("originCountry").path("subordinateTradeCountrySubDivision")
-            .path("identifier").asText()).isEqualTo("FR-75");
+            .path("identifier").asText()).isEqualTo("ES-CN");
+        assertThat(consignment.path("originCountry").has("regionOfOriginCode")).isFalse();
         assertThat(consignment.path("transitTradeCountry")).hasSize(2);
         assertThat(consignment.path("transitTradeCountry").get(0).path("code").path("value").asText())
             .isEqualTo("BE");

@@ -51,8 +51,8 @@ class PimsConsignmentMapperV2Test {
 
     @Test
     void mapSpecifiedConsignment_shouldMapTransitTradeCountryList() {
-        var be = new TradeCountry(new CodedValue("BE", null, null), null);
-        var de = new TradeCountry(new CodedValue("DE", null, null), null);
+        var be = new TradeCountry(new CodedValue("BE", null, null), null, null);
+        var de = new TradeCountry(new CodedValue("DE", null, null), null, null);
         var sc = emptyConsignment(null, null, List.of(be, de));
 
         var result = mapper.mapSpecifiedConsignment(sc);
@@ -69,22 +69,45 @@ class PimsConsignmentMapperV2Test {
         assertThat(mapper.mapSpecifiedConsignment(sc).transitTradeCountry()).isEmpty();
     }
 
+    private static final String COUNTRY_SUBDIVISIONS = "https://refdata.tbc.defra.gov.uk/country_subdivisions";
+
     @Test
-    void mapSpecifiedConsignment_shouldMapOriginCountryWithRegionSubdivision() {
-        var subdivision = new TradeCountrySubDivision("FR-75", "subUrl",
-            new TradeCountrySubDivision.FunctionTypeCode("106"));
-        var origin = new TradeCountry(new CodedValue("FR", null, null), subdivision);
+    void mapSpecifiedConsignment_shouldMapOriginCountryWithItsSubdivision() {
+        var origin = new TradeCountry(new CodedValue("ES", null, null),
+            List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
 
         var result = mapper.mapSpecifiedConsignment(sc);
 
-        assertThat(result.originCountry().code().value()).isEqualTo("FR");
+        assertThat(result.originCountry().code().value()).isEqualTo("ES");
         assertThat(result.originCountry().subordinateTradeCountrySubDivision().identifier())
-            .isEqualTo("FR-75");
+            .isEqualTo("ES-CN");
         assertThat(result.originCountry().subordinateTradeCountrySubDivision().urlId())
-            .isEqualTo("subUrl");
+            .isEqualTo(COUNTRY_SUBDIVISIONS);
         assertThat(result.originCountry().subordinateTradeCountrySubDivision().functionTypeCode().content())
             .isEqualTo("106");
+    }
+
+    @Test
+    void mapSpecifiedConsignment_shouldSendOnlyTheSubdivisionOfOrigin() {
+        // The event carries every sub-division of a country; PIMS v0.2.0 takes the '106' entry.
+        var origin = new TradeCountry(new CodedValue("ES", null, null),
+            List.of(subDivision(null, null, "44"), subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
+        var sc = emptyConsignment(null, origin, null);
+
+        assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
+            .subordinateTradeCountrySubDivision().identifier()).isEqualTo("ES-CN");
+    }
+
+    @Test
+    void mapSpecifiedConsignment_shouldSendNoSubdivision_whenNoneIsTheSubdivisionOfOrigin() {
+        var origin = new TradeCountry(new CodedValue("ES", null, null),
+            List.of(subDivision(null, null, "44"), new TradeCountrySubDivision("ES-CN", null, null, null, null)),
+            null);
+        var sc = emptyConsignment(null, origin, null);
+
+        assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
+            .subordinateTradeCountrySubDivision()).isNull();
     }
 
     @Test
@@ -94,9 +117,8 @@ class PimsConsignmentMapperV2Test {
         // asserted on the serialised JSON: the accessor is statically typed
         // PimsTradeCountrySubDivision, so no assertion on the Java object can tell the two
         // shapes apart.
-        var subdivision = new TradeCountrySubDivision("FR-75", "subUrl",
-            new TradeCountrySubDivision.FunctionTypeCode("106"));
-        var origin = new TradeCountry(new CodedValue("FR", null, null), subdivision);
+        var origin = new TradeCountry(new CodedValue("ES", null, null),
+            List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
 
         var json = new ObjectMapper().valueToTree(mapper.mapSpecifiedConsignment(sc));
@@ -104,12 +126,12 @@ class PimsConsignmentMapperV2Test {
         JsonNode node = json.path("originCountry").path("subordinateTradeCountrySubDivision");
         assertThat(node.isObject()).isTrue();
         assertThat(node.isArray()).isFalse();
-        assertThat(node.path("identifier").asText()).isEqualTo("FR-75");
+        assertThat(node.path("identifier").asText()).isEqualTo("ES-CN");
     }
 
     @Test
     void mapSpecifiedConsignment_shouldHandleNullSubordinateTradeCountrySubDivision() {
-        var origin = new TradeCountry(new CodedValue("FR", null, null), null);
+        var origin = new TradeCountry(new CodedValue("FR", null, null), null, null);
         var sc = emptyConsignment(null, origin, null);
 
         assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
@@ -117,13 +139,19 @@ class PimsConsignmentMapperV2Test {
     }
 
     @Test
-    void mapSpecifiedConsignment_shouldHandleNullFunctionTypeCode() {
-        var subdivision = new TradeCountrySubDivision("FR-75", null, null);
-        var origin = new TradeCountry(new CodedValue("FR", null, null), subdivision);
+    void mapSpecifiedConsignment_shouldNotSendRegionOfOriginCodeToPims() {
+        var origin = new TradeCountry(new CodedValue("ES", null, null),
+            List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), "ES-12345");
         var sc = emptyConsignment(null, origin, null);
 
-        assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
-            .subordinateTradeCountrySubDivision().functionTypeCode()).isNull();
+        var json = new ObjectMapper().valueToTree(mapper.mapSpecifiedConsignment(sc));
+
+        assertThat(json.path("originCountry").has("regionOfOriginCode")).isFalse();
+    }
+
+    private static TradeCountrySubDivision subDivision(String identifier, String urlId, String functionTypeCode) {
+        return new TradeCountrySubDivision(identifier, urlId, null, null,
+            new TradeCountrySubDivision.FunctionTypeCode(functionTypeCode, null));
     }
 
     @Test
