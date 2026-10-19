@@ -15,7 +15,6 @@ class PimsTransportMapper {
 
     PimsLogisticsTransportMovement mapTransportMovement(LogisticsTransportMovement tm) {
         if (tm == null) return null;
-        // identifier, urlId, transportContractRelatedReferencedDocument omitted — always null in v0.1.0 (PR #52)
         return new PimsLogisticsTransportMovement(
             tm.modeCode(),
             mapTransportMeans(tm.usedLogisticsTransportMeans()),
@@ -30,7 +29,6 @@ class PimsTransportMapper {
 
     private PimsTransportEvent mapTransportEvent(TransportEvent event) {
         if (event == null) return null;
-        // actualOccurrenceDateTime and occurrenceLogisticsLocation omitted — always null in v0.1.0 (PR #52)
         return new PimsTransportEvent(event.scheduledOccurrenceDateTime());
     }
 

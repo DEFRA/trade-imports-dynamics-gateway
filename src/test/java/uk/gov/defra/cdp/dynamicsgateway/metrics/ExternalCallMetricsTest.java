@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
 
@@ -60,17 +61,17 @@ class ExternalCallMetricsTest {
 
   @Test
   void measure_shouldRecordTheElapsedTimeOfTheAction() {
-    metrics.measure(
+    var clock = new AtomicLong();
+    var timedMetrics =
+        new ExternalCallMetrics(
+            true, NAMESPACE, () -> new MetricsLogger(environment), clock::get);
+
+    timedMetrics.measure(
         ExternalCall.SERVICE_BUS_SEND_MESSAGE,
-        () -> {
-          long until = System.nanoTime() + Duration.ofMillis(50).toNanos();
-          while (System.nanoTime() < until) {
-            Thread.onSpinWait();
-          }
-        });
+        () -> clock.addAndGet(Duration.ofMillis(50).toNanos()));
 
     assertThat(environment.documents().getFirst().get("ExternalCallDuration").asDouble())
-        .isGreaterThanOrEqualTo(50.0);
+        .isEqualTo(50.0);
   }
 
   @Test

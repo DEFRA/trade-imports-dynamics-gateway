@@ -13,7 +13,6 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsClause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsGbnAgData;
 
-// issuer omitted — deferred, see Responsible Person for Load follow-up ticket.
 @Component
 @RequiredArgsConstructor
 class PimsGbnAgDataMapperV2 {

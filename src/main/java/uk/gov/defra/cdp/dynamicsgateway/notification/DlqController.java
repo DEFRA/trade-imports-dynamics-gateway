@@ -32,8 +32,6 @@ import org.springframework.web.bind.annotation.RestController;
  * </ul>
  *
  * <p>There is no per-message replay/delete — only bulk "move everything back" or "wipe everything".
- *
- * @see uk.gov.defra.cdp.dynamicsgateway.filter.AdminSecretFilter
  */
 @Slf4j
 @RestController

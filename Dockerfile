@@ -14,6 +14,7 @@ COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
 COPY src ./src
+COPY config ./config
 
 RUN mvn clean package -DskipTests -B
 
@@ -53,6 +54,7 @@ COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
 COPY src ./src
+COPY config ./config
 
 EXPOSE 8088
 

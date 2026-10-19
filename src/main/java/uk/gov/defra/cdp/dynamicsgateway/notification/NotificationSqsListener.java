@@ -18,10 +18,8 @@ import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 
 /**
- * Consumes notification events from an SQS FIFO queue and forwards them to Azure Service Bus.
- *
- * <p>All exceptions are routed to {@link NotificationErrorHandler}, which classifies them as
- * retryable (left in SQS for retry → DLQ) or non-retryable (deleted from SQS).
+ * Consumes notification events from an SQS FIFO queue and forwards each external event to Azure
+ * Service Bus in both PIMS shapes.
  */
 @Slf4j
 @Component
@@ -72,9 +70,6 @@ public class NotificationSqsListener {
             @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId,
             @Header(name = SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_DEDUPLICATION_ID_HEADER,
                 required = false) String deduplicationId,
-            // SQS ApproximateReceiveCount — climbs 1, 2, 3... on each redelivery. Logged so a failing
-            // message's progress toward the DLQ is visible: once it hits the queue's maxReceiveCount and
-            // fails again, SQS (not this app) moves it to the DLQ — there is no gateway "sent to DLQ" log.
             @Header(name = SqsHeaders.MessageSystemAttributes.SQS_APPROXIMATE_RECEIVE_COUNT,
                 required = false) String receiveCount) {
 
@@ -109,11 +104,6 @@ public class NotificationSqsListener {
         queueMessageSender.publish(v1Payload, aggregateId, asbMessageId);
         forwardedCounterV1.increment();
 
-        // Deliberately broad catch: v0.2.0 is a new, not-yet-fully-proven stream published
-        // alongside the stable v0.1.0 one (EUDPA-370) while PIMS transitions between them. Any
-        // failure here — mapping or ASB publish — must never fail or retry this SQS message, since
-        // v0.1.0 has already been delivered above; letting a v0.2.0 failure do so would risk SQS
-        // redelivering the whole message and re-sending a duplicate v0.1.0 payload.
         try {
             String v2Payload = pimsPayloadMapper.mapToV2(outboxEvent);
             queueMessageSender.publish(v2Payload, aggregateId, asbMessageId + "-v2");
@@ -126,13 +116,6 @@ public class NotificationSqsListener {
         }
     }
 
-    /**
-     * Resolve the ASB messageId once per message. Precedence: body {@code eventId} — deliberately
-     * preferred over the SQS header, since a DLQ replay (via native SQS redrive) can carry a
-     * different transport dedup id than the message's original delivery, but the ASB messageId must
-     * stay equal to the original {@code eventId} across both — then the non-blank SQS dedup header,
-     * then a single freshly-generated UUID if neither is present.
-     */
     private String resolveAsbMessageId(JsonNode body, String deduplicationId) {
         return EventEnvelope.eventId(body)
             .or(() -> Optional.ofNullable(deduplicationId).filter(id -> !id.isBlank()))

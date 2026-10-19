@@ -53,6 +53,8 @@ There is no in-process retry: a transient ASB publish failure propagates on the 
 
 The service validates the ASB connection string at startup and will refuse to start if it is missing or blank. The target queue is taken from the `EntityPath` component of the connection string.
 
+A malformed `HTTP_PROXY` is logged with its user info replaced by `***`. The parse failure is logged by exception class only, because the exception message repeats the URL, credentials included.
+
 The `local` Spring profile (`application-local.yml`) provides placeholder defaults so the service can start without real Azure or AWS credentials during local development.
 
 ### Notification pipeline (SQS)
@@ -63,7 +65,9 @@ The primary production flow:
 SNS (FIFO) → SQS FIFO queue → NotificationSqsListener → QueueMessageSender → ASB session queue
 ```
 
-The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards it to Azure Service Bus. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message is assigned a UUID `messageId` and `contentType` of `application/json`.
+The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0 and v0.2.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
+
+[docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the two PIMS shapes, retries and DLQ browsing.
 
 Error handling:
 

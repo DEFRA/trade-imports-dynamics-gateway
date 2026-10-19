@@ -223,7 +223,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .isEqualTo("https://refdata.tbc.defra.gov.uk/country_subdivisions");
         assertThat(subdivision.path("functionTypeCode").path("content").asText()).isEqualTo("106");
         assertThat(consignment.path("originCountry").has("regionOfOriginCode"))
-            .as("regionOfOriginCode is not sent to PIMS until EUDPA-615")
+            .as("regionOfOriginCode is not sent to PIMS")
             .isFalse();
 
         JsonNode lineItems = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");

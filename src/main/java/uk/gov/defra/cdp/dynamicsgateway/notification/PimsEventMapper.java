@@ -9,10 +9,8 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV1;
 @RequiredArgsConstructor
 class PimsEventMapper {
 
-    // Stamped, not read from the incoming event's own metadata — PIMS distinguishes the two
-    // simultaneously-published streams by these values, confirmed with PIMS (EUDPA-370).
     private static final String SCHEMA_VERSION = "0.1.0";
-    private static final String SCHEMA_URL =
+    private static final String SCHEMA_URI =
         "https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.1.0.schema.json";
 
     private final PimsGbnAgDataMapper gbnAgDataMapper;
@@ -28,7 +26,7 @@ class PimsEventMapper {
             event.eventType(),
             event.timestamp(),
             gbnAgDataMapper.mapData(event.data()),
-            envelopeMapper.mapMetadata(event.metadata(), SCHEMA_VERSION, SCHEMA_URL),
+            envelopeMapper.mapMetadata(event.metadata(), SCHEMA_VERSION, SCHEMA_URI),
             envelopeMapper.mapActor(event.actor()),
             PimsMapperSupport.mapList(event.statusChanges(), envelopeMapper::mapStatusChange)
         );

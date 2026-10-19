@@ -10,8 +10,7 @@ import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
  * Reads the backlog of the notification source queue, so load runs can watch it drain.
  *
  * <p>{@code GetQueueAttributes} counts are eventually consistent, so a reading is a snapshot that can
- * drift between calls. A failed SQS call surfaces as a {@link java.util.concurrent.CompletionException},
- * mapped to a 502 by {@link uk.gov.defra.cdp.dynamicsgateway.exceptions.GlobalExceptionHandler}.
+ * drift between calls. A failed SQS call throws a {@link java.util.concurrent.CompletionException}.
  */
 @Service
 @RequiredArgsConstructor

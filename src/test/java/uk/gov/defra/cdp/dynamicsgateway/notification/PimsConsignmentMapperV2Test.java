@@ -140,7 +140,6 @@ class PimsConsignmentMapperV2Test {
 
     @Test
     void mapSpecifiedConsignment_shouldNotSendRegionOfOriginCodeToPims() {
-        // Sent to PIMS from EUDPA-615, not before.
         var origin = new TradeCountry(new CodedValue("ES", null, null),
             List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), "ES-12345");
         var sc = emptyConsignment(null, origin, null);

@@ -18,14 +18,8 @@ import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
  * {@link IllegalStateException}) or {@link SqsNonRetryableException} (non-transient
  * {@link ServiceBusException}, or an unexpected error).
  *
- * <p>{@link uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler} uses that
- * classification to decide whether to retry (leave in SQS) or discard (delete from SQS).
- *
- * <p>Callers are responsible for validating inputs (sessionId, body) before calling
- * {@link #publish}.
- *
- * <p>Every send is measured as {@code azure-service-bus}/{@code send-message} (see
- * {@link ExternalCallMetrics}).
+ * <p>The session id is not validated here. Every send is measured as
+ * {@code azure-service-bus}/{@code send-message}.
  */
 @Slf4j
 @Service
@@ -55,16 +49,7 @@ public class QueueMessageSender {
      *
      * @param messageBody the event payload as a JSON string (pre-validated and serialised by caller)
      * @param sessionId   ASB session ID (pre-validated by caller); must not be blank
-     * @param messageId   stable id to set as the ASB messageId (falls back to a fresh UUID when null
-     *                    or blank). This id is the dedup key carried end-to-end: the backend outbox
-     *                    {@code eventId} travels as the SQS {@code MessageDeduplicationId} and is set
-     *                    here as the ASB {@code MessageId}. Keeping it stable across retries is what
-     *                    would make ASB duplicate detection work unchanged if
-     *                    {@code RequiresDuplicateDetection} were ever enabled on the queue (it is off
-     *                    today, so the id currently doubles as a stable trace/correlation id). Do not
-     *                    derive it from the message body — the payload's only identifier is the
-     *                    aggregate/group key, which is shared across an aggregate's events and would
-     *                    wrongly dedupe distinct events.
+     * @param messageId   the ASB messageId; a fresh UUID when null or blank
      * @throws SqsRetryableException if the failure is transient and worth retrying
      * @throws SqsNonRetryableException if the failure is permanent and retrying will not help
      */
@@ -87,22 +72,24 @@ public class QueueMessageSender {
         } catch (ServiceBusException e) {
             classifyAndThrow(e, resolvedMessageId, sessionId);
         } catch (IllegalStateException e) {
-            log.warn("ASB sender in illegal state ({}), retryable: {}", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("ASB sender in illegal state, retryable (messageId={}, sessionId={})",
+                resolvedMessageId, sessionId, e);
             throw new SqsRetryableException("ASB sender disposed", e);
         } catch (Exception e) {
-            log.error("Unexpected error ({}) sending to ASB, non-retryable: {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            log.error("Unexpected error sending to ASB, non-retryable (messageId={}, sessionId={})",
+                resolvedMessageId, sessionId, e);
             throw new SqsNonRetryableException("Unexpected ASB send failure", e);
         }
     }
 
     private void classifyAndThrow(ServiceBusException e, String messageId, String sessionId) {
         if (e.isTransient()) {
-            log.warn("Transient ASB error (reason={}, messageId={}, sessionId={}): {}",
-                e.getReason(), messageId, sessionId, e.getMessage());
+            log.warn("Transient ASB error, retryable (reason={}, messageId={}, sessionId={})",
+                e.getReason(), messageId, sessionId, e);
             throw new SqsRetryableException("Transient ASB send failure", e);
         }
-        log.error("Non-transient ASB error (reason={}, messageId={}, sessionId={}): {}",
-            e.getReason(), messageId, sessionId, e.getMessage(), e);
+        log.error("Non-transient ASB error, non-retryable (reason={}, messageId={}, sessionId={})",
+            e.getReason(), messageId, sessionId, e);
         throw new SqsNonRetryableException("Non-transient ASB send failure", e);
     }
 }

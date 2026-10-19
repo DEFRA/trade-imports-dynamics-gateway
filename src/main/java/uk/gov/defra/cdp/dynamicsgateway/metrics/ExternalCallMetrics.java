@@ -1,6 +1,7 @@
 package uk.gov.defra.cdp.dynamicsgateway.metrics;
 
 import java.time.Duration;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,7 @@ public class ExternalCallMetrics {
   private final boolean enabled;
   private final String namespace;
   private final Supplier<MetricsLogger> metricsLoggers;
+  private final LongSupplier nanoTime;
 
   @Autowired
   public ExternalCallMetrics(
@@ -40,7 +42,7 @@ public class ExternalCallMetrics {
   }
 
   /**
-   * Supplies each call's {@code MetricsLogger}, so a test can capture the EMF output.
+   * Records each call through a {@code MetricsLogger} from the given supplier.
    *
    * @param enabled whether to record at all
    * @param namespace the CloudWatch namespace
@@ -48,9 +50,27 @@ public class ExternalCallMetrics {
    */
   public ExternalCallMetrics(
       boolean enabled, String namespace, Supplier<MetricsLogger> metricsLoggers) {
+    this(enabled, namespace, metricsLoggers, System::nanoTime);
+  }
+
+  /**
+   * Records each call through a {@code MetricsLogger} from the given supplier, timing calls with the
+   * given nanosecond clock.
+   *
+   * @param enabled whether to record at all
+   * @param namespace the CloudWatch namespace
+   * @param metricsLoggers supplies a fresh logger for each recorded call
+   * @param nanoTime the clock calls are timed with, in nanoseconds
+   */
+  public ExternalCallMetrics(
+      boolean enabled,
+      String namespace,
+      Supplier<MetricsLogger> metricsLoggers,
+      LongSupplier nanoTime) {
     this.enabled = enabled;
     this.namespace = namespace;
     this.metricsLoggers = metricsLoggers;
+    this.nanoTime = nanoTime;
   }
 
   /**
@@ -60,14 +80,14 @@ public class ExternalCallMetrics {
    * @param action the call to run
    */
   public void measure(ExternalCall call, Runnable action) {
-    long startedAt = System.nanoTime();
+    long startedAt = nanoTime.getAsLong();
     try {
       action.run();
     } catch (RuntimeException e) {
-      recordCall(call, Duration.ofNanos(System.nanoTime() - startedAt), true);
+      recordCall(call, Duration.ofNanos(nanoTime.getAsLong() - startedAt), true);
       throw e;
     }
-    recordCall(call, Duration.ofNanos(System.nanoTime() - startedAt), false);
+    recordCall(call, Duration.ofNanos(nanoTime.getAsLong() - startedAt), false);
   }
 
   /**
@@ -96,10 +116,7 @@ public class ExternalCallMetrics {
       metricsLogger.flush();
     } catch (RuntimeException e) {
       log.warn(
-          "Could not record external call {}/{}: {}",
-          call.dependency(),
-          call.operation(),
-          e.getMessage());
+          "Could not record external call {}/{}", call.dependency(), call.operation(), e);
     }
   }
 }

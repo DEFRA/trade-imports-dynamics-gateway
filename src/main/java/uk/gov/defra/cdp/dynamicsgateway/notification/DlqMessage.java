@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
  * API guidelines.
  *
  * @param id                       stable identifier used to select for replay/delete — the
- *                                 {@code eventId} from the body when present (EUDPA-261), otherwise
+ *                                 {@code eventId} from the body when present, otherwise
  *                                 the SQS {@code MessageDeduplicationId}
  * @param messageGroupId           the FIFO group id (the notification aggregateId)
  * @param deduplicationId          the SQS {@code MessageDeduplicationId} carried on the DLQ message

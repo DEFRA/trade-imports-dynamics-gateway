@@ -31,7 +31,6 @@ class PimsGbnAgDataMapper {
 
     private PimsExchangedDocument mapExchangedDocument(ExchangedDocument doc) {
         if (doc == null) return null;
-        // issuer and referenceDocument omitted — always null in v0.1.0 (PR #52)
         return new PimsExchangedDocument(
             doc.identifier(),
             doc.traderAssignedId(),

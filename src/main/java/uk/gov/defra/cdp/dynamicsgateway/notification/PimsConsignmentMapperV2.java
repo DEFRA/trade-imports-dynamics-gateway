@@ -43,7 +43,6 @@ class PimsConsignmentMapperV2 {
     // subdivision the goods came from. Not the region of origin code, which is a disease zone.
     private static final String SUBDIVISION_OF_ORIGIN = "106";
 
-    // regionOfOriginCode is not sent to PIMS until EUDPA-615.
     private PimsTradeCountry mapTradeCountry(TradeCountry tc) {
         if (tc == null) return null;
         return new PimsTradeCountry(

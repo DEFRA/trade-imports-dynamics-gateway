@@ -26,8 +26,6 @@ class PimsConsignmentMapper {
 
     PimsSpecifiedConsignment mapSpecifiedConsignment(SpecifiedConsignment sc) {
         if (sc == null) return null;
-        // transitTradeCountry omitted — always null in v0.1.0 (PR #52)
-        // finalDestinationLocation omitted — not in the v0.1.0 PIMS schema
         return new PimsSpecifiedConsignment(
             mapTradeParty(sc.consignorParty()),
             mapTradeParty(sc.consigneeParty()),
@@ -45,7 +43,6 @@ class PimsConsignmentMapper {
 
     PimsTradeParty mapTradeParty(TradeParty party) {
         if (party == null) return null;
-        // partyRoleCode and definedContact omitted — always null in v0.1.0 (PR #52)
         return new PimsTradeParty(
             party.identifier(),
             party.urlId(),
@@ -57,25 +54,21 @@ class PimsConsignmentMapper {
 
     private PimsTradeAddress mapTradeAddress(TradeAddress addr) {
         if (addr == null) return null;
-        // postcodeCode, countryName, countrySubDivisionName omitted — always null in v0.1.0 (PR #52)
         return new PimsTradeAddress(addr.lineOne(), addr.lineTwo(), addr.cityName(), addr.countryId());
     }
 
     private PimsCodedValue mapCodedValue(CodedValue cv) {
         if (cv == null) return null;
-        // name omitted — always null in v0.1.0 (PR #52)
         return new PimsCodedValue(cv.value(), cv.urlId());
     }
 
     private PimsTradeCountry mapTradeCountry(TradeCountry tc) {
         if (tc == null) return null;
-        // subordinateTradeCountrySubDivision omitted — always null in v0.1.0 (PR #52)
         return new PimsTradeCountry(mapCodedValue(tc.code()));
     }
 
     private PimsLogisticsLocation mapLogisticsLocation(LogisticsLocation loc) {
         if (loc == null) return null;
-        // urlId, name, typeCode, postalAddress omitted — always null in v0.1.0 (PR #52)
         return new PimsLogisticsLocation(loc.identifier());
     }
 
