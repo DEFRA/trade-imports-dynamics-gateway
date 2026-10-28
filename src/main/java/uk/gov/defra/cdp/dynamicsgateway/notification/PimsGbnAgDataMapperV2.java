@@ -20,17 +20,17 @@ class PimsGbnAgDataMapperV2 {
     private final PimsConsignmentMapperV2 consignmentMapper;
     private final PimsCommonMapperV2 commonMapper;
 
-    PimsGbnAgData mapData(GbnAgData data) {
+    PimsGbnAgData mapData(GbnAgData data, PimsSchemaVersion version) {
         if (data == null) return null;
         return new PimsGbnAgData(
             data.model(),
             data.type(),
-            mapExchangedDocument(data.exchangedDocument()),
-            consignmentMapper.mapSpecifiedConsignment(data.specifiedConsignment())
+            mapExchangedDocument(data.exchangedDocument(), version),
+            consignmentMapper.mapSpecifiedConsignment(data.specifiedConsignment(), version)
         );
     }
 
-    private PimsExchangedDocument mapExchangedDocument(ExchangedDocument doc) {
+    private PimsExchangedDocument mapExchangedDocument(ExchangedDocument doc, PimsSchemaVersion version) {
         if (doc == null) return null;
         return new PimsExchangedDocument(
             doc.identifier(),
@@ -38,8 +38,9 @@ class PimsGbnAgDataMapperV2 {
             doc.notificationStatusCode(),
             doc.versionId(),
             doc.issueDateTime(),
+            version.isAtLeast(PimsSchemaVersion.V0_3_0) ? commonMapper.mapTradeParty(doc.issuer()) : null,
             mapAuthentication(doc.firstSignatoryAuthentication()),
-            mapList(doc.referenceDocument(), commonMapper::mapReferencedDocument)
+            mapList(doc.referenceDocument(), referenceDocument -> commonMapper.mapReferencedDocument(referenceDocument, version))
         );
     }
 

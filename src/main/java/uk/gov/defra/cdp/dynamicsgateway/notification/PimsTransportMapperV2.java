@@ -17,14 +17,15 @@ class PimsTransportMapperV2 {
 
     private final PimsCommonMapperV2 commonMapper;
 
-    PimsLogisticsTransportMovement mapTransportMovement(LogisticsTransportMovement tm) {
+    PimsLogisticsTransportMovement mapTransportMovement(LogisticsTransportMovement tm, PimsSchemaVersion version) {
         if (tm == null) return null;
         return new PimsLogisticsTransportMovement(
             tm.identifier(),
             tm.urlId(),
             tm.modeCode(),
             mapTransportMeans(tm.usedLogisticsTransportMeans()),
-            mapList(tm.transportContractRelatedReferencedDocument(), commonMapper::mapReferencedDocument),
+            mapList(tm.transportContractRelatedReferencedDocument(),
+                transportDocument -> commonMapper.mapReferencedDocument(transportDocument, version)),
             mapList(tm.arrivalEvent(), this::mapTransportEvent)
         );
     }

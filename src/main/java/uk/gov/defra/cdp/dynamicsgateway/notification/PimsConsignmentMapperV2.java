@@ -20,7 +20,7 @@ class PimsConsignmentMapperV2 {
     private final PimsLineItemMapperV2 lineItemMapper;
     private final PimsCommonMapperV2 commonMapper;
 
-    PimsSpecifiedConsignment mapSpecifiedConsignment(SpecifiedConsignment sc) {
+    PimsSpecifiedConsignment mapSpecifiedConsignment(SpecifiedConsignment sc, PimsSchemaVersion version) {
         if (sc == null) return null;
         return new PimsSpecifiedConsignment(
             commonMapper.mapTradeParty(sc.consignorParty()),
@@ -29,11 +29,12 @@ class PimsConsignmentMapperV2 {
             commonMapper.mapTradeParty(sc.deliveryParty()),
             commonMapper.mapTradeParty(sc.importer()),
             commonMapper.mapTradeParty(sc.carrier()),
-            mapTradeCountry(sc.originCountry()),
+            mapTradeCountry(sc.originCountry(), version),
             commonMapper.mapLogisticsLocation(sc.unloadingBaseportLocation()),
             commonMapper.mapLogisticsLocation(sc.finalDestinationLocation()),
-            mapList(sc.mainCarriageLogisticsTransportMovement(), transportMapper::mapTransportMovement),
-            mapList(sc.transitTradeCountry(), this::mapTradeCountry),
+            mapList(sc.mainCarriageLogisticsTransportMovement(),
+                movement -> transportMapper.mapTransportMovement(movement, version)),
+            mapList(sc.transitTradeCountry(), country -> mapTradeCountry(country, version)),
             sc.isOrHasUnweanedAnimals(),
             mapList(sc.includedConsignmentItem(), lineItemMapper::mapConsignmentItem)
         );
@@ -43,15 +44,15 @@ class PimsConsignmentMapperV2 {
     // subdivision the goods came from. Not the region of origin code, which is a disease zone.
     private static final String SUBDIVISION_OF_ORIGIN = "106";
 
-    private PimsTradeCountry mapTradeCountry(TradeCountry tc) {
+    private PimsTradeCountry mapTradeCountry(TradeCountry tc, PimsSchemaVersion version) {
         if (tc == null) return null;
         return new PimsTradeCountry(
             commonMapper.mapCodedValue(tc.code()),
-            mapTradeCountrySubDivision(subdivisionOfOrigin(tc.subordinateTradeCountrySubDivision()))
+            mapTradeCountrySubDivision(subdivisionOfOrigin(tc.subordinateTradeCountrySubDivision())),
+            version.isAtLeast(PimsSchemaVersion.V0_3_0) ? tc.regionOfOriginCode() : null
         );
     }
 
-    // The event carries every sub-division of a country; PIMS v0.2.0 takes one, the '106' entry.
     private static TradeCountrySubDivision subdivisionOfOrigin(List<TradeCountrySubDivision> subDivisions) {
         if (subDivisions == null) return null;
         return subDivisions.stream()

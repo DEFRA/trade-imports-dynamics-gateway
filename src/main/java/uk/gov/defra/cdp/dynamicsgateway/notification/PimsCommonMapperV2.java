@@ -48,9 +48,13 @@ class PimsCommonMapperV2 {
         );
     }
 
-    PimsReferencedDocument mapReferencedDocument(ReferencedDocument doc) {
+    PimsReferencedDocument mapReferencedDocument(ReferencedDocument doc, PimsSchemaVersion version) {
         if (doc == null) return null;
-        return new PimsReferencedDocument(doc.typeCode(), doc.identifier(), doc.issueDateTime());
+        return new PimsReferencedDocument(
+            doc.typeCode(),
+            version.isAtLeast(PimsSchemaVersion.V0_3_0) ? doc.urlId() : null,
+            doc.identifier(),
+            doc.issueDateTime());
     }
 
     private PimsTradeAddress mapTradeAddress(TradeAddress addr) {

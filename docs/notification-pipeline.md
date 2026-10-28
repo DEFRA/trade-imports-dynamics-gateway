@@ -9,18 +9,19 @@ Why the SQS-to-ASB pipeline behaves as it does. The README covers configuration 
 - The id is never taken from the aggregate id. Every event of one aggregate shares that id, so distinct events would look like duplicates.
 - ASB duplicate detection (`RequiresDuplicateDetection`) is off on the queue, so today the id serves as a stable trace id. A stable id means duplicate detection would work unchanged if it were switched on.
 
-## Two PIMS shapes
+## PIMS versions
 
-- Each external event is published twice, as PIMS v0.1.0 and as v0.2.0, while PIMS moves from one shape to the other. The v0.2.0 copy's ASB `MessageId` is the same id with `-v2` appended.
-- v0.1.0 is published first. A v0.2.0 mapping or publish failure is logged, counted (`notification.sqs.messages`, `outcome=v2-mapping-failed`) and never fails or retries the SQS message, because a redelivery would send v0.1.0 a second time.
-- Each shape stamps its own `schemaVersion` and `schemaUri` instead of passing on the incoming event's values. PIMS tells the two streams apart by these values.
-- The envelope records (actor, status change, metadata) are the same in both shapes, so `PimsEnvelopeMapper` maps them once. `PimsCommonMapperV2` does the same for the v0.2.0 records that several v0.2.0 mappers share. Neither has dependencies, so every mapper can inject them without a bean cycle. `PimsMapperSupport` holds static helpers with no domain meaning.
+- Each external event is published three times, as PIMS v0.1.0, v0.2.0 and v0.3.0, so PIMS can move to a newer version when it is ready. The v0.2.0 and v0.3.0 copies' ASB `MessageId` is the same id with `-v2` or `-v3` appended. All three go to the same session, in that order.
+- v0.1.0 is published first. A v0.2.0 or v0.3.0 mapping or publish failure is logged with the schema version, counted on its own counter (`notification.sqs.messages`, `outcome=v2-mapping-failed` or `outcome=v3-mapping-failed`) and never fails or retries the SQS message, because a redelivery would send v0.1.0 a second time. One failing does not stop the other.
+- Each version stamps its own `schemaVersion` and `schemaUri` instead of passing on the incoming event's values. PIMS tells the streams apart by these values.
+- Every v0.3.0 change is an addition to v0.2.0, so both are built from the same records and mappers, and `PimsSchemaVersion` decides which fields a version carries. The records leave out null fields, so a v0.2.0 payload carries none of the v0.3.0 fields. v0.1.0 and v0.2.0 shapes conflict, which is why v0.1.0 has records of its own.
+- The envelope records (actor, status change, metadata) are the same in every version, so `PimsEnvelopeMapper` maps them once. `PimsCommonMapperV2` does the same for the records that several v0.2.0 and v0.3.0 mappers share. Neither has dependencies, so every mapper can inject them without a bean cycle. `PimsMapperSupport` holds static helpers with no domain meaning.
 
 ## Fields
 
 - The v0.1.0 records leave out every field the backend outbox never fills. `finalDestinationLocation` is left out because the v0.1.0 schema has no such field.
 - In v0.1.0, `applicableClassification` on a trade line item is a single object: the backend sends exactly one, and the mapper takes the first.
-- In v0.2.0, a trade line item has no `typeCode` or `urlId`: they are resolved downstream from CN-code reference data. An exchanged document has no `issuer` yet: the Responsible Person for Load and contact address mapping is still to be built. A referenced document carries only type code, identifier and issue date, the fields confirmed for accompanying documents. See `schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.2.0-changes.md` in `trade-imports-schemas`.
+- In v0.2.0 and v0.3.0, a trade line item has no `typeCode` or `urlId`: they are resolved downstream from CN-code reference data. In v0.2.0 an exchanged document has no `issuer`, a referenced document carries only type code, identifier and issue date, and the origin country has no `regionOfOriginCode`. v0.3.0 adds all three: the issuer is the consignment contact, the referenced document's `urlId` names the document-type list, and the region of origin code is passed through. See `schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.2.0-changes.md` and `gbn-ag-pims-v0.3.0-changes.md` in `trade-imports-schemas`.
 - Where the schema requires a list to have at least one item (`minItems: 1`), the record component uses `@JsonInclude(NON_EMPTY)`, so an empty list is left out rather than sent as `[]`. Mappers always return an empty list, never null.
 
 ## Errors and retries

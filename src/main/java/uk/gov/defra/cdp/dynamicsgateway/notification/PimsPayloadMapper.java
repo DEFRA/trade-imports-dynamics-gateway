@@ -37,12 +37,13 @@ class PimsPayloadMapper {
         }
     }
 
-    String mapToV2(OutboxEvent event) {
+    String mapTo(OutboxEvent event, PimsSchemaVersion version) {
         try {
-            PimsEventV2 pimsEvent = pimsEventMapperV2.map(event);
+            PimsEventV2 pimsEvent = pimsEventMapperV2.map(event, version);
             return objectMapper.writeValueAsString(pimsEvent);
         } catch (JsonProcessingException e) {
-            throw new SqsNonRetryableException("Failed to map body to PimsEventV2: " + e.getMessage(), e);
+            throw new SqsNonRetryableException(
+                "Failed to map body to PIMS v" + version.number() + ": " + e.getMessage(), e);
         }
     }
 }

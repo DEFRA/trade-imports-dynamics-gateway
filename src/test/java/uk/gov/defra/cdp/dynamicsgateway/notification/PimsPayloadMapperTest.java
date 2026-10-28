@@ -177,15 +177,43 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV2_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
-        // Given — same real fixture as the v0.1.0 test above; v0.2.0 now carries the fields it drops
+    void mapToV020_shouldProduceTheCommittedV020PayloadForTheBackendFixture() throws Exception {
+        String result = mapper.mapTo(fixtureEvent(), PimsSchemaVersion.V0_2_0);
+
+        try (InputStream in = getClass().getResourceAsStream("/gbn-ag/pims-v0.2.0-from-backend.json")) {
+            assertThat(objectMapper.readTree(result)).isEqualTo(objectMapper.readTree(in));
+        }
+    }
+
+    @Test
+    void mapToV030_shouldAddIssuerDocumentTypeListUrlAndRegionOfOriginCodeToTheBackendFixture() throws Exception {
+        JsonNode result = objectMapper.readTree(mapper.mapTo(fixtureEvent(), PimsSchemaVersion.V0_3_0));
+
+        JsonNode exchangedDocument = result.path("data").path("exchangedDocument");
+        assertThat(exchangedDocument.path("issuer").path("name").asText()).isEqualTo("Animal and Plant Health Agency");
+        assertThat(exchangedDocument.path("issuer").path("postalAddress").path("postcodeCode").asText())
+            .isEqualTo("KT15 3NB");
+        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0)
+            .path("emailURIUniversalCommunication").asText()).isEqualTo("imports@apha.example.gov.uk");
+        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0).has("personName")).isFalse();
+        assertThat(exchangedDocument.path("referenceDocument").findValuesAsText("urlId"))
+            .containsOnly("https://refdata.tbc.defra.gov.uk/gbn-ag-document-types")
+            .hasSize(2);
+        assertThat(exchangedDocument.path("firstSignatoryAuthentication").path("includedClause")
+            .findValuesAsText("content")).containsExactly("INTERNAL_MARKET", "BREEDING", "FURTHER_KEEPING");
+        assertThat(result.path("data").path("specifiedConsignment").path("originCountry")
+            .path("regionOfOriginCode").asText()).isEqualTo("ES-12345");
+    }
+
+    @Test
+    void mapToV020_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
+        // Given
         OutboxEvent event = fixtureEvent();
 
         // When
-        String result = mapper.mapToV2(event);
+        String result = mapper.mapTo(event, PimsSchemaVersion.V0_2_0);
 
-        // Then — accompanying documents reach PIMS as type, reference and date; the urlId the
-        // backend sends is not part of the v0.2.0 schema, so it stops here
+        // Then
         JsonNode referenceDocuments = objectMapper.readTree(result).path("data").path("exchangedDocument")
             .path("referenceDocument");
         assertThat(referenceDocuments).hasSize(2);
@@ -273,7 +301,7 @@ class PimsPayloadMapperTest {
 
         // When
         JsonNode v1Metadata = objectMapper.readTree(mapper.mapToV1(event)).path("metadata");
-        JsonNode v2Metadata = objectMapper.readTree(mapper.mapToV2(event)).path("metadata");
+        JsonNode v2Metadata = objectMapper.readTree(mapper.mapTo(event, PimsSchemaVersion.V0_2_0)).path("metadata");
 
         // Then — event-envelope-v1.schema.json requires ["schemaVersion","schemaUri"] under
         // additionalProperties:false, so "schemaUrl" must not appear on either stream
@@ -287,7 +315,7 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV2_shouldOmitApplicableClassification_whenUpstreamListIsAbsent() throws Exception {
+    void mapToV020_shouldOmitApplicableClassification_whenUpstreamListIsAbsent() throws Exception {
         // Given — a line item with no classification upstream. mapList yields an empty list
         // (never null), so NON_NULL alone would leave "[]" on the wire.
         String body = """
@@ -307,7 +335,7 @@ class PimsPayloadMapperTest {
         OutboxEvent event = mapper.parse(objectMapper.readTree(body));
 
         // When
-        String result = mapper.mapToV2(event);
+        String result = mapper.mapTo(event, PimsSchemaVersion.V0_2_0);
 
         // Then — the schema sets minItems:1 and tradeLineItem has no required list, so the
         // field must be absent rather than an empty array
