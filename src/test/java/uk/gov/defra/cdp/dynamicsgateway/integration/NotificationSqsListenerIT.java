@@ -190,9 +190,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         ServiceBusReceivedMessage v2 = messageWithId(mine, v2Id);
         ServiceBusReceivedMessage v3 = messageWithId(mine, v3Id);
 
-        assertThat(v1.getSessionId()).isEqualTo(AGGREGATE_ID);
-        assertThat(v2.getSessionId()).isEqualTo(AGGREGATE_ID);
-        assertThat(v3.getSessionId()).isEqualTo(AGGREGATE_ID);
+        assertThat(List.of(v1, v2, v3)).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
 
         JsonNode v3Body = readBody(v3);
         assertThat(v3Body.path("metadata").path("schemaVersion").asText()).isEqualTo("0.3.0");
