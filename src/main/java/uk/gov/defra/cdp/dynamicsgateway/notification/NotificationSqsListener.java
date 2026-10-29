@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,11 @@ public class NotificationSqsListener {
     private final List<BestEffortStream> bestEffortStreams;
 
     private record BestEffortStream(
-        PimsSchemaVersion version, String messageIdSuffix, Counter forwardedCounter, Counter failureCounter) {}
+        String schemaVersion,
+        Function<OutboxEvent, String> mapToPayload,
+        String messageIdSuffix,
+        Counter forwardedCounter,
+        Counter failureCounter) {}
 
     public NotificationSqsListener(
             QueueMessageSender queueMessageSender,
@@ -53,19 +58,23 @@ public class NotificationSqsListener {
         this.pimsPayloadMapper = pimsPayloadMapper;
         this.forwardedCounterV1 = forwardedCounter(meterRegistry, "0.1.0");
         this.bestEffortStreams = List.of(
-            bestEffortStream(meterRegistry, PimsSchemaVersion.V0_2_0, "-v2", "v2-mapping-failed"),
-            bestEffortStream(meterRegistry, PimsSchemaVersion.V0_3_0, "-v3", "v3-mapping-failed"));
+            bestEffortStream(meterRegistry, "0.2.0", pimsPayloadMapper::mapToV2, "-v2", "v2-mapping-failed"),
+            bestEffortStream(meterRegistry, "0.3.0", pimsPayloadMapper::mapToV3, "-v3", "v3-mapping-failed"));
     }
 
     private static BestEffortStream bestEffortStream(
-            MeterRegistry meterRegistry, PimsSchemaVersion version, String messageIdSuffix, String failureOutcome) {
+            MeterRegistry meterRegistry,
+            String schemaVersion,
+            Function<OutboxEvent, String> mapToPayload,
+            String messageIdSuffix,
+            String failureOutcome) {
         Counter failureCounter = Counter.builder(MESSAGES_METRIC)
             .tag(OUTCOME_TAG, failureOutcome)
-            .description("v" + version.number()
+            .description("v" + schemaVersion
                 + " PIMS payload failed to map or publish; v0.1.0 delivery is unaffected")
             .register(meterRegistry);
-        return new BestEffortStream(
-            version, messageIdSuffix, forwardedCounter(meterRegistry, version.number()), failureCounter);
+        return new BestEffortStream(schemaVersion, mapToPayload, messageIdSuffix,
+            forwardedCounter(meterRegistry, schemaVersion), failureCounter);
     }
 
     private static Counter forwardedCounter(MeterRegistry meterRegistry, String schemaVersion) {
@@ -122,13 +131,13 @@ public class NotificationSqsListener {
     private void publishBestEffort(
             BestEffortStream stream, OutboxEvent outboxEvent, String aggregateId, String asbMessageId) {
         try {
-            String payload = pimsPayloadMapper.mapTo(outboxEvent, stream.version());
+            String payload = stream.mapToPayload().apply(outboxEvent);
             queueMessageSender.publish(payload, aggregateId, asbMessageId + stream.messageIdSuffix());
             stream.forwardedCounter().increment();
         } catch (Exception e) {
             log.error("Failed to map/publish v{} PIMS payload; v0.1.0 already forwarded, "
                 + "message not retried for this failure: aggregateId={}, asbMessageId={}",
-                stream.version().number(), aggregateId, asbMessageId, e);
+                stream.schemaVersion(), aggregateId, asbMessageId, e);
             stream.failureCounter().increment();
         }
     }

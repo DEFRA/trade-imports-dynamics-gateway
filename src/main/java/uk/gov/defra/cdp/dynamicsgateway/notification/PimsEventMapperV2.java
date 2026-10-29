@@ -9,10 +9,14 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
 @RequiredArgsConstructor
 class PimsEventMapperV2 {
 
+    private static final String SCHEMA_VERSION = "0.2.0";
+    private static final String SCHEMA_URI =
+        "https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.2.0.schema.json";
+
     private final PimsGbnAgDataMapperV2 gbnAgDataMapper;
     private final PimsEnvelopeMapper envelopeMapper;
 
-    PimsEventV2 map(OutboxEvent event, PimsSchemaVersion version) {
+    PimsEventV2 map(OutboxEvent event) {
         return new PimsEventV2(
             event.eventId(),
             event.aggregateType(),
@@ -21,8 +25,8 @@ class PimsEventMapperV2 {
             event.aggregateVersion(),
             event.eventType(),
             event.timestamp(),
-            gbnAgDataMapper.mapData(event.data(), version),
-            envelopeMapper.mapMetadata(event.metadata(), version.number(), version.schemaUri()),
+            gbnAgDataMapper.mapData(event.data()),
+            envelopeMapper.mapMetadata(event.metadata(), SCHEMA_VERSION, SCHEMA_URI),
             envelopeMapper.mapActor(event.actor()),
             PimsMapperSupport.mapList(event.statusChanges(), envelopeMapper::mapStatusChange)
         );

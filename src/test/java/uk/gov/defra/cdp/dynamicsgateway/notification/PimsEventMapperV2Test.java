@@ -12,16 +12,12 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.CodedValue;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ConsignmentItem;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.DefinedContact;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeLineItem;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
-import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsReferencedDocument;
 
 class PimsEventMapperV2Test {
 
@@ -50,7 +46,7 @@ class PimsEventMapperV2Test {
             AGGREGATE_ID, 1L, EVENT_TYPE,
             NOW, null, null, null, null);
 
-        PimsEventV2 result = mapper.map(event, PimsSchemaVersion.V0_2_0);
+        PimsEventV2 result = mapper.map(event);
 
         assertThat(result.eventId()).isEqualTo(EVENT_ID);
         assertThat(result.aggregateType()).isEqualTo("Notification");
@@ -66,7 +62,7 @@ class PimsEventMapperV2Test {
         OutboxEventMetadata metadata = new OutboxEventMetadata("corr-1", "1.0", "https://schema.url");
         OutboxEvent event = eventWithMetadata(metadata);
 
-        PimsEventV2 result = mapper.map(event, PimsSchemaVersion.V0_2_0);
+        PimsEventV2 result = mapper.map(event);
 
         assertThat(result.metadata().correlationId()).isEqualTo("corr-1");
         assertThat(result.metadata().schemaVersion()).isEqualTo("0.2.0");
@@ -76,53 +72,26 @@ class PimsEventMapperV2Test {
 
     @Test
     void map_shouldHandleNullMetadata() {
-        assertThat(mapper.map(minimalEvent(), PimsSchemaVersion.V0_2_0).metadata()).isNull();
+        assertThat(mapper.map(minimalEvent()).metadata()).isNull();
     }
 
     @Test
-    void map_shouldLeaveIssuerAndDocumentTypeListUrlOutOfV020() {
-        var pimsDoc = mapper.map(eventWithIssuerAndDocument(), PimsSchemaVersion.V0_2_0).data().exchangedDocument();
-
-        assertThat(pimsDoc.identifier()).isEqualTo("id-1");
-        assertThat(pimsDoc.issuer()).isNull();
-        assertThat(pimsDoc.referenceDocument()).containsExactly(
-            new PimsReferencedDocument("GBN1", null, "GBHC1234567890", "2026-09-10"));
-    }
-
-    @Test
-    void map_shouldSendIssuerAndDocumentTypeListUrlInV030() {
-        var pimsDoc = mapper.map(eventWithIssuerAndDocument(), PimsSchemaVersion.V0_3_0).data().exchangedDocument();
-
-        assertThat(pimsDoc.issuer().name()).isEqualTo("Animal and Plant Health Agency");
-        assertThat(pimsDoc.issuer().postalAddress().lineOne()).isEqualTo("Woodham Lane");
-        assertThat(pimsDoc.issuer().definedContact()).singleElement().satisfies(contact -> {
-            assertThat(contact.emailURIUniversalCommunication()).isEqualTo("imports@apha.example.gov.uk");
-            assertThat(contact.telephoneUniversalCommunication()).isEqualTo("03000 200301");
-        });
-        assertThat(pimsDoc.referenceDocument()).containsExactly(new PimsReferencedDocument(
-            "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "GBHC1234567890", "2026-09-10"));
-    }
-
-    @Test
-    void map_shouldStampV030SchemaVersionAndUri() {
-        OutboxEvent event = eventWithMetadata(new OutboxEventMetadata("corr-1", "1.0", "https://schema.url"));
-
-        PimsEventV2 result = mapper.map(event, PimsSchemaVersion.V0_3_0);
-
-        assertThat(result.metadata().schemaVersion()).isEqualTo("0.3.0");
-        assertThat(result.metadata().schemaUri()).isEqualTo(
-            "https://github.com/DEFRA/trade-imports-schemas/blob/main/schemas/profiles/imports/gb/pims/gbn-ag-pims-v0.3.0.schema.json");
-    }
-
-    private OutboxEvent eventWithIssuerAndDocument() {
-        TradeParty issuer = new TradeParty(null, null, "Animal and Plant Health Agency", null, null,
-            new TradeAddress("Woodham Lane", null, null, null, "GB", null, null),
-            List.of(new DefinedContact(null, "03000 200301", "imports@apha.example.gov.uk")));
+    void map_shouldMapExchangedDocument_droppingOnlyIssuer_andMappingReferenceDocument() {
+        // Given
         ReferencedDocument refDoc = new ReferencedDocument(
             "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "ZZZ", "GBHC1234567890", "2026-09-10");
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", issuer, null, List.of(refDoc));
-        return eventWithData(new GbnAgData("m", "t", doc, null));
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, List.of(refDoc));
+        OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
+
+        // When
+        var pimsDoc = mapper.map(event).data().exchangedDocument();
+
+        // Then
+        assertThat(pimsDoc.identifier()).isEqualTo("id-1");
+        assertThat(pimsDoc.referenceDocument()).hasSize(1);
+        assertThat(pimsDoc.referenceDocument().getFirst().identifier()).isEqualTo("GBHC1234567890");
+        assertThat(pimsDoc.referenceDocument().getFirst().typeCode()).isEqualTo("GBN1");
     }
 
     @Test
@@ -137,7 +106,7 @@ class PimsEventMapperV2Test {
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When
-        var pimsAuth = mapper.map(event, PimsSchemaVersion.V0_2_0).data().exchangedDocument().firstSignatoryAuthentication();
+        var pimsAuth = mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication();
 
         // Then
         assertThat(pimsAuth.includedClause()).hasSize(2);
@@ -158,7 +127,7 @@ class PimsEventMapperV2Test {
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When / Then
-        assertThat(mapper.map(event, PimsSchemaVersion.V0_2_0).data().exchangedDocument().firstSignatoryAuthentication())
+        assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication())
             .isNull();
     }
 
@@ -176,7 +145,7 @@ class PimsEventMapperV2Test {
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
         // When / Then
-        var pimsItem = mapper.map(event, PimsSchemaVersion.V0_2_0).data().specifiedConsignment()
+        var pimsItem = mapper.map(event).data().specifiedConsignment()
             .includedConsignmentItem().getFirst().includedTradeLineItem().getFirst();
         assertThat(pimsItem.applicableClassification()).hasSize(2);
         assertThat(pimsItem.applicableClassification().get(1).systemId()).isEqualTo("SPECIES_CLASS");
@@ -184,7 +153,7 @@ class PimsEventMapperV2Test {
 
     @Test
     void map_shouldHandleNullData() {
-        assertThat(mapper.map(minimalEvent(), PimsSchemaVersion.V0_2_0).data()).isNull();
+        assertThat(mapper.map(minimalEvent()).data()).isNull();
     }
 
     // --- Helpers ---

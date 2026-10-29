@@ -10,7 +10,6 @@ public record PimsExchangedDocument(
     String notificationStatusCode,
     Integer versionId,
     String issueDateTime,
-    PimsTradeParty issuer,
     PimsAuthentication firstSignatoryAuthentication,
     List<PimsReferencedDocument> referenceDocument
 ) {}

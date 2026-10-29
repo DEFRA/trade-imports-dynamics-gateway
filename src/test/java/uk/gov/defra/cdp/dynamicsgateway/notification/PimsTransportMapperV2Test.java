@@ -19,14 +19,14 @@ class PimsTransportMapperV2Test {
 
     @Test
     void mapTransportMovement_shouldReturnNull_whenInputIsNull() {
-        assertThat(mapper.mapTransportMovement(null, PimsSchemaVersion.V0_2_0)).isNull();
+        assertThat(mapper.mapTransportMovement(null)).isNull();
     }
 
     @Test
     void mapTransportMovement_shouldMapIdentifierAndUrlId() {
         var tm = new LogisticsTransportMovement("MV ATLANTIC STAR", "vesselUrl", 1, null, null, null);
 
-        var result = mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapTransportMovement(tm);
 
         assertThat(result.identifier()).isEqualTo("MV ATLANTIC STAR");
         assertThat(result.urlId()).isEqualTo("vesselUrl");
@@ -40,7 +40,7 @@ class PimsTransportMapperV2Test {
         var tm = new LogisticsTransportMovement(
             null, null, 1, new LogisticsTransportMeans("MV ATLANTIC STAR"), null, null);
 
-        var result = mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapTransportMovement(tm);
 
         assertThat(result.usedLogisticsTransportMeans()).isNotNull();
         assertThat(result.usedLogisticsTransportMeans().name()).isEqualTo("MV ATLANTIC STAR");
@@ -50,7 +50,7 @@ class PimsTransportMapperV2Test {
     void mapTransportMovement_shouldHandleNullUsedLogisticsTransportMeans() {
         var tm = new LogisticsTransportMovement(null, null, 1, null, null, null);
 
-        assertThat(mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0).usedLogisticsTransportMeans()).isNull();
+        assertThat(mapper.mapTransportMovement(tm).usedLogisticsTransportMeans()).isNull();
     }
 
     @Test
@@ -58,7 +58,7 @@ class PimsTransportMapperV2Test {
         var doc = new ReferencedDocument("705", null, null, "BOL-2026-0042", null);
         var tm = new LogisticsTransportMovement(null, null, 1, null, List.of(doc), null);
 
-        var result = mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapTransportMovement(tm);
 
         assertThat(result.transportContractRelatedReferencedDocument()).hasSize(1);
         assertThat(result.transportContractRelatedReferencedDocument().getFirst().identifier())
@@ -69,7 +69,7 @@ class PimsTransportMapperV2Test {
     void mapTransportMovement_shouldHandleNullReferencedDocumentList() {
         var tm = new LogisticsTransportMovement(null, null, 1, null, null, null);
 
-        assertThat(mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0).transportContractRelatedReferencedDocument()).isEmpty();
+        assertThat(mapper.mapTransportMovement(tm).transportContractRelatedReferencedDocument()).isEmpty();
     }
 
     @Test
@@ -77,7 +77,7 @@ class PimsTransportMapperV2Test {
         var tm = new LogisticsTransportMovement(null, null, 1, null, null,
             Collections.singletonList(null));
 
-        var result = mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapTransportMovement(tm);
 
         assertThat(result.arrivalEvent()).hasSize(1);
         assertThat(result.arrivalEvent().getFirst()).isNull();
@@ -90,7 +90,7 @@ class PimsTransportMapperV2Test {
         var event = new TransportEvent(null, actual, port);
         var tm = new LogisticsTransportMovement(null, null, 1, null, null, List.of(event));
 
-        var result = mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapTransportMovement(tm);
 
         assertThat(result.arrivalEvent().getFirst().actualOccurrenceDateTime()).isEqualTo(actual);
         assertThat(result.arrivalEvent().getFirst().occurrenceLogisticsLocation().identifier())
@@ -102,7 +102,7 @@ class PimsTransportMapperV2Test {
         var event = new TransportEvent(null, null, null);
         var tm = new LogisticsTransportMovement(null, null, 1, null, null, List.of(event));
 
-        assertThat(mapper.mapTransportMovement(tm, PimsSchemaVersion.V0_2_0).arrivalEvent().getFirst()
+        assertThat(mapper.mapTransportMovement(tm).arrivalEvent().getFirst()
             .occurrenceLogisticsLocation()).isNull();
     }
 }

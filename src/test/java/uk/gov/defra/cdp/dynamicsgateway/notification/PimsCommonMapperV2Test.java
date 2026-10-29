@@ -11,7 +11,6 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsLocat
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
-import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv2.PimsReferencedDocument;
 
 class PimsCommonMapperV2Test {
 
@@ -108,26 +107,18 @@ class PimsCommonMapperV2Test {
 
     @Test
     void mapReferencedDocument_shouldReturnNull_whenInputIsNull() {
-        assertThat(mapper.mapReferencedDocument(null, PimsSchemaVersion.V0_3_0)).isNull();
+        assertThat(mapper.mapReferencedDocument(null)).isNull();
     }
 
     @Test
-    void mapReferencedDocument_shouldMapThreeFields_andDropUrlIdAndRelationshipTypeCode_forV020() {
-        var result = mapper.mapReferencedDocument(veterinaryHealthCertificate(), PimsSchemaVersion.V0_2_0);
-
-        assertThat(result).isEqualTo(new PimsReferencedDocument("853", null, "docref-1", "2026-05-05"));
-    }
-
-    @Test
-    void mapReferencedDocument_shouldKeepTheDocumentTypeListUrl_andDropRelationshipTypeCode_forV030() {
-        var result = mapper.mapReferencedDocument(veterinaryHealthCertificate(), PimsSchemaVersion.V0_3_0);
-
-        assertThat(result).isEqualTo(new PimsReferencedDocument(
-            "853", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "docref-1", "2026-05-05"));
-    }
-
-    private static ReferencedDocument veterinaryHealthCertificate() {
-        return new ReferencedDocument(
+    void mapReferencedDocument_shouldMapThreeFields_andDropUrlIdAndRelationshipTypeCode() {
+        var doc = new ReferencedDocument(
             "853", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "ZZZ", "docref-1", "2026-05-05");
+
+        var result = mapper.mapReferencedDocument(doc);
+
+        assertThat(result.typeCode()).isEqualTo("853");
+        assertThat(result.identifier()).isEqualTo("docref-1");
+        assertThat(result.issueDateTime()).isEqualTo("2026-05-05");
     }
 }

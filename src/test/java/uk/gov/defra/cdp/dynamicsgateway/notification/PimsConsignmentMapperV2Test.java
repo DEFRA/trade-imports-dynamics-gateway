@@ -26,7 +26,7 @@ class PimsConsignmentMapperV2Test {
 
     @Test
     void mapSpecifiedConsignment_shouldReturnNull_whenInputIsNull() {
-        assertThat(mapper.mapSpecifiedConsignment(null, PimsSchemaVersion.V0_2_0)).isNull();
+        assertThat(mapper.mapSpecifiedConsignment(null)).isNull();
     }
 
     @Test
@@ -35,7 +35,7 @@ class PimsConsignmentMapperV2Test {
             null, null, null);
         var sc = emptyConsignment(loc, null, null);
 
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapSpecifiedConsignment(sc);
 
         assertThat(result.finalDestinationLocation().identifier()).isEqualTo("123456789");
         assertThat(result.finalDestinationLocation().urlId())
@@ -46,7 +46,7 @@ class PimsConsignmentMapperV2Test {
     void mapSpecifiedConsignment_shouldHandleNullFinalDestinationLocation() {
         var sc = emptyConsignment(null, null, null);
 
-        assertThat(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0).finalDestinationLocation()).isNull();
+        assertThat(mapper.mapSpecifiedConsignment(sc).finalDestinationLocation()).isNull();
     }
 
     @Test
@@ -55,7 +55,7 @@ class PimsConsignmentMapperV2Test {
         var de = new TradeCountry(new CodedValue("DE", null, null), null, null);
         var sc = emptyConsignment(null, null, List.of(be, de));
 
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapSpecifiedConsignment(sc);
 
         assertThat(result.transitTradeCountry()).hasSize(2);
         assertThat(result.transitTradeCountry().get(0).code().value()).isEqualTo("BE");
@@ -66,7 +66,7 @@ class PimsConsignmentMapperV2Test {
     void mapSpecifiedConsignment_shouldHandleNullTransitTradeCountryList() {
         var sc = emptyConsignment(null, null, null);
 
-        assertThat(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0).transitTradeCountry()).isEmpty();
+        assertThat(mapper.mapSpecifiedConsignment(sc).transitTradeCountry()).isEmpty();
     }
 
     private static final String COUNTRY_SUBDIVISIONS = "https://refdata.tbc.defra.gov.uk/country_subdivisions";
@@ -77,7 +77,7 @@ class PimsConsignmentMapperV2Test {
             List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
 
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapSpecifiedConsignment(sc);
 
         assertThat(result.originCountry().code().value()).isEqualTo("ES");
         assertThat(result.originCountry().subordinateTradeCountrySubDivision().identifier())
@@ -95,7 +95,7 @@ class PimsConsignmentMapperV2Test {
             List.of(subDivision(null, null, "44"), subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
 
-        assertThat(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0).originCountry()
+        assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
             .subordinateTradeCountrySubDivision().identifier()).isEqualTo("ES-CN");
     }
 
@@ -106,7 +106,7 @@ class PimsConsignmentMapperV2Test {
             null);
         var sc = emptyConsignment(null, origin, null);
 
-        assertThat(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0).originCountry()
+        assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
             .subordinateTradeCountrySubDivision()).isNull();
     }
 
@@ -121,7 +121,7 @@ class PimsConsignmentMapperV2Test {
             List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), null);
         var sc = emptyConsignment(null, origin, null);
 
-        var json = new ObjectMapper().valueToTree(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0));
+        var json = new ObjectMapper().valueToTree(mapper.mapSpecifiedConsignment(sc));
 
         JsonNode node = json.path("originCountry").path("subordinateTradeCountrySubDivision");
         assertThat(node.isObject()).isTrue();
@@ -134,31 +134,19 @@ class PimsConsignmentMapperV2Test {
         var origin = new TradeCountry(new CodedValue("FR", null, null), null, null);
         var sc = emptyConsignment(null, origin, null);
 
-        assertThat(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0).originCountry()
+        assertThat(mapper.mapSpecifiedConsignment(sc).originCountry()
             .subordinateTradeCountrySubDivision()).isNull();
     }
 
     @Test
-    void mapSpecifiedConsignment_shouldLeaveRegionOfOriginCodeOutOfV020() {
-        var sc = emptyConsignment(null, originWithRegionOfOriginCode(), null);
+    void mapSpecifiedConsignment_shouldNotSendRegionOfOriginCodeToPims() {
+        var origin = new TradeCountry(new CodedValue("ES", null, null),
+            List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), "ES-12345");
+        var sc = emptyConsignment(null, origin, null);
 
-        var json = new ObjectMapper().valueToTree(mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0));
+        var json = new ObjectMapper().valueToTree(mapper.mapSpecifiedConsignment(sc));
 
         assertThat(json.path("originCountry").has("regionOfOriginCode")).isFalse();
-    }
-
-    @Test
-    void mapSpecifiedConsignment_shouldSendRegionOfOriginCodeInV030() {
-        var sc = emptyConsignment(null, originWithRegionOfOriginCode(), null);
-
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_3_0);
-
-        assertThat(result.originCountry().regionOfOriginCode()).isEqualTo("ES-12345");
-    }
-
-    private static TradeCountry originWithRegionOfOriginCode() {
-        return new TradeCountry(new CodedValue("ES", null, null),
-            List.of(subDivision("ES-CN", COUNTRY_SUBDIVISIONS, "106")), "ES-12345");
     }
 
     private static TradeCountrySubDivision subDivision(String identifier, String urlId, String functionTypeCode) {
@@ -168,14 +156,14 @@ class PimsConsignmentMapperV2Test {
 
     @Test
     void mapSpecifiedConsignment_shouldMapPartyRoleCodeAndDefinedContact_viaCommonMapper() {
-        // Given
+        // Given — confirms delegation to the shared mapper, not a re-implementation here
         var contact = new DefinedContact("Marie Rosales", "+33 1 23 45 67 89", "marie@example.invalid");
         var party = new TradeParty("p-1", null, "Consignor",
             new CodedValue("SZ", null, null), null, null, List.of(contact));
         var sc = new SpecifiedConsignment(
             party, null, null, null, null, null, null, null, null, null, null, null, null);
 
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapSpecifiedConsignment(sc);
 
         assertThat(result.consignorParty().partyRoleCode().value()).isEqualTo("SZ");
         assertThat(result.consignorParty().definedContact()).hasSize(1);
@@ -192,7 +180,7 @@ class PimsConsignmentMapperV2Test {
         var sc = new SpecifiedConsignment(
             null, null, null, null, null, null, null, null, null, null, null, null, null);
 
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapSpecifiedConsignment(sc);
 
         assertThat(result.consignorParty()).isNull();
         assertThat(result.originCountry()).isNull();
@@ -217,7 +205,7 @@ class PimsConsignmentMapperV2Test {
             null, null, null, null, null, null, null, null, null,
             List.of(movement), null, null, List.of(new ConsignmentItem(List.of(lineItem))));
 
-        var result = mapper.mapSpecifiedConsignment(sc, PimsSchemaVersion.V0_2_0);
+        var result = mapper.mapSpecifiedConsignment(sc);
 
         assertThat(result.mainCarriageLogisticsTransportMovement()).hasSize(1);
         assertThat(result.mainCarriageLogisticsTransportMovement().get(0).identifier())

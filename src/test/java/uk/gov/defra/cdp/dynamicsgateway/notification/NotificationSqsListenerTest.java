@@ -17,6 +17,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.defra.cdp.dynamicsgateway.events.QueueMessageSender;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationSqsListenerTest {
@@ -77,7 +79,19 @@ class NotificationSqsListenerTest {
             ),
             envelopeMapper
         );
-        pimsPayloadMapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2);
+        PimsCommonMapperV3 commonMapperV3 = new PimsCommonMapperV3();
+        PimsEventMapperV3 pimsEventMapperV3 = new PimsEventMapperV3(
+            new PimsGbnAgDataMapperV3(
+                new PimsConsignmentMapperV3(
+                    new PimsTransportMapperV3(commonMapperV3),
+                    new PimsLineItemMapperV3(commonMapperV3),
+                    commonMapperV3
+                ),
+                commonMapperV3
+            ),
+            envelopeMapper
+        );
+        pimsPayloadMapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3);
         listener = new NotificationSqsListener(queueMessageSender, objectMapper, pimsPayloadMapper,
             meterRegistry);
     }
@@ -87,8 +101,8 @@ class NotificationSqsListenerTest {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, PimsSchemaVersion.V0_2_0), AGGREGATE_ID, DEDUP_ID + "-v2");
-        verify(queueMessageSender).publish(pims(VALID_BODY, PimsSchemaVersion.V0_3_0), AGGREGATE_ID, DEDUP_ID + "-v3");
+        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
+        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
@@ -116,8 +130,8 @@ class NotificationSqsListenerTest {
         listener.receive(ENVELOPED_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(pimsV1(ENVELOPED_BODY), AGGREGATE_ID, EVENT_ID);
-        verify(queueMessageSender).publish(pims(ENVELOPED_BODY, PimsSchemaVersion.V0_2_0), AGGREGATE_ID, EVENT_ID + "-v2");
-        verify(queueMessageSender).publish(pims(ENVELOPED_BODY, PimsSchemaVersion.V0_3_0), AGGREGATE_ID, EVENT_ID + "-v3");
+        verify(queueMessageSender).publish(pims(ENVELOPED_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, EVENT_ID + "-v2");
+        verify(queueMessageSender).publish(pims(ENVELOPED_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, EVENT_ID + "-v3");
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
@@ -143,8 +157,8 @@ class NotificationSqsListenerTest {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, null);
 
         verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, PimsSchemaVersion.V0_2_0), AGGREGATE_ID, DEDUP_ID + "-v2");
-        verify(queueMessageSender).publish(pims(VALID_BODY, PimsSchemaVersion.V0_3_0), AGGREGATE_ID, DEDUP_ID + "-v3");
+        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
+        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
@@ -275,7 +289,7 @@ class NotificationSqsListenerTest {
             .doesNotThrowAnyException();
 
         verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, PimsSchemaVersion.V0_3_0), AGGREGATE_ID, DEDUP_ID + "-v3");
+        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
@@ -293,7 +307,7 @@ class NotificationSqsListenerTest {
             .doesNotThrowAnyException();
 
         verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, PimsSchemaVersion.V0_2_0), AGGREGATE_ID, DEDUP_ID + "-v2");
+        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
@@ -309,8 +323,8 @@ class NotificationSqsListenerTest {
         listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(pimsV1(body), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(body, PimsSchemaVersion.V0_2_0), AGGREGATE_ID, DEDUP_ID + "-v2");
-        verify(queueMessageSender).publish(pims(body, PimsSchemaVersion.V0_3_0), AGGREGATE_ID, DEDUP_ID + "-v3");
+        verify(queueMessageSender).publish(pims(body, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
+        verify(queueMessageSender).publish(pims(body, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
@@ -343,12 +357,11 @@ class NotificationSqsListenerTest {
         }
     }
 
-    private String pims(String rawBody, PimsSchemaVersion version) {
+    private String pims(String rawBody, Function<OutboxEvent, String> mapToPayload) {
         try {
-            return pimsPayloadMapper.mapTo(pimsPayloadMapper.parse(objectMapper.readTree(rawBody)), version);
+            return mapToPayload.apply(pimsPayloadMapper.parse(objectMapper.readTree(rawBody)));
         } catch (Exception e) {
-            throw new RuntimeException(
-                "Failed to compute expected v" + version.number() + " PIMS payload for: " + rawBody, e);
+            throw new RuntimeException("Failed to compute expected PIMS payload for: " + rawBody, e);
         }
     }
 

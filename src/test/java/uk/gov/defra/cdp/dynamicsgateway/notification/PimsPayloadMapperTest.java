@@ -42,7 +42,19 @@ class PimsPayloadMapperTest {
             ),
             envelopeMapper
         );
-        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2);
+        PimsCommonMapperV3 commonMapperV3 = new PimsCommonMapperV3();
+        PimsEventMapperV3 pimsEventMapperV3 = new PimsEventMapperV3(
+            new PimsGbnAgDataMapperV3(
+                new PimsConsignmentMapperV3(
+                    new PimsTransportMapperV3(commonMapperV3),
+                    new PimsLineItemMapperV3(commonMapperV3),
+                    commonMapperV3
+                ),
+                commonMapperV3
+            ),
+            envelopeMapper
+        );
+        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3);
     }
 
     @Test
@@ -177,8 +189,8 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV020_shouldProduceTheCommittedV020PayloadForTheBackendFixture() throws Exception {
-        String result = mapper.mapTo(fixtureEvent(), PimsSchemaVersion.V0_2_0);
+    void mapToV2_shouldProduceTheCommittedV020PayloadForTheBackendFixture() throws Exception {
+        String result = mapper.mapToV2(fixtureEvent());
 
         try (InputStream in = getClass().getResourceAsStream("/gbn-ag/pims-v0.2.0-from-backend.json")) {
             assertThat(objectMapper.readTree(result)).isEqualTo(objectMapper.readTree(in));
@@ -186,8 +198,8 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV030_shouldAddIssuerDocumentTypeListUrlAndRegionOfOriginCodeToTheBackendFixture() throws Exception {
-        JsonNode result = objectMapper.readTree(mapper.mapTo(fixtureEvent(), PimsSchemaVersion.V0_3_0));
+    void mapToV3_shouldAddIssuerDocumentTypeListUrlAndRegionOfOriginCodeToTheBackendFixture() throws Exception {
+        JsonNode result = objectMapper.readTree(mapper.mapToV3(fixtureEvent()));
 
         JsonNode exchangedDocument = result.path("data").path("exchangedDocument");
         assertThat(exchangedDocument.path("issuer").path("name").asText()).isEqualTo("Animal and Plant Health Agency");
@@ -206,12 +218,12 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV020_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
+    void mapToV2_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
         // Given
         OutboxEvent event = fixtureEvent();
 
         // When
-        String result = mapper.mapTo(event, PimsSchemaVersion.V0_2_0);
+        String result = mapper.mapToV2(event);
 
         // Then
         JsonNode referenceDocuments = objectMapper.readTree(result).path("data").path("exchangedDocument")
@@ -301,7 +313,7 @@ class PimsPayloadMapperTest {
 
         // When
         JsonNode v1Metadata = objectMapper.readTree(mapper.mapToV1(event)).path("metadata");
-        JsonNode v2Metadata = objectMapper.readTree(mapper.mapTo(event, PimsSchemaVersion.V0_2_0)).path("metadata");
+        JsonNode v2Metadata = objectMapper.readTree(mapper.mapToV2(event)).path("metadata");
 
         // Then — event-envelope-v1.schema.json requires ["schemaVersion","schemaUri"] under
         // additionalProperties:false, so "schemaUrl" must not appear on either stream
@@ -315,7 +327,7 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV020_shouldOmitApplicableClassification_whenUpstreamListIsAbsent() throws Exception {
+    void mapToV2_shouldOmitApplicableClassification_whenUpstreamListIsAbsent() throws Exception {
         // Given — a line item with no classification upstream. mapList yields an empty list
         // (never null), so NON_NULL alone would leave "[]" on the wire.
         String body = """
@@ -335,7 +347,7 @@ class PimsPayloadMapperTest {
         OutboxEvent event = mapper.parse(objectMapper.readTree(body));
 
         // When
-        String result = mapper.mapTo(event, PimsSchemaVersion.V0_2_0);
+        String result = mapper.mapToV2(event);
 
         // Then — the schema sets minItems:1 and tradeLineItem has no required list, so the
         // field must be absent rather than an empty array
