@@ -10,6 +10,7 @@ import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV1;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
+import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV3;
 
 @Component
 @RequiredArgsConstructor
@@ -19,6 +20,7 @@ class PimsPayloadMapper {
     private final ObjectMapper objectMapper;
     private final PimsEventMapper pimsEventMapper;
     private final PimsEventMapperV2 pimsEventMapperV2;
+    private final PimsEventMapperV3 pimsEventMapperV3;
 
     OutboxEvent parse(JsonNode body) {
         try {
@@ -43,6 +45,15 @@ class PimsPayloadMapper {
             return objectMapper.writeValueAsString(pimsEvent);
         } catch (JsonProcessingException e) {
             throw new SqsNonRetryableException("Failed to map body to PimsEventV2: " + e.getMessage(), e);
+        }
+    }
+
+    String mapToV3(OutboxEvent event) {
+        try {
+            PimsEventV3 pimsEvent = pimsEventMapperV3.map(event);
+            return objectMapper.writeValueAsString(pimsEvent);
+        } catch (JsonProcessingException e) {
+            throw new SqsNonRetryableException("Failed to map body to PimsEventV3: " + e.getMessage(), e);
         }
     }
 }

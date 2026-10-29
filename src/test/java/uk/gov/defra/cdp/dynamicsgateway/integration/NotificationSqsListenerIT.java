@@ -161,42 +161,42 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
-    void sqsToAsb_shouldEmitBothSchemaVersions_forOneNotification() {
-        // Given — a notification carrying the fields only v0.2.0 maps: a region sub-division on the
-        // origin country, and two trade line items, one classified and one not.
+    void sqsToAsb_shouldEmitEverySchemaVersionInOrderOnOneSession_forOneNotification() {
+        // Given
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
 
-        // When — collect only the messages derived from THIS notification. Both ids are built from a
-        // dedup UUID unique to this test, which is what makes the count trustworthy: a message left
-        // behind by an earlier test, or one still in flight when this test began, carries a different
-        // id and is discarded here rather than counted. Accumulate across polls, because the receiver
-        // is RECEIVE_AND_DELETE and anything seen during a failed attempt is already consumed.
+        // When — accumulate across polls: the receiver is RECEIVE_AND_DELETE
         String v1Id = deduplicationId;
         String v2Id = deduplicationId + "-v2";
+        String v3Id = deduplicationId + "-v3";
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
-                .as("one inbound notification must produce exactly two ASB messages")
-                .containsExactlyInAnyOrder(v1Id, v2Id);
+                .as("one inbound notification must produce exactly three ASB messages")
+                .containsExactlyInAnyOrder(v1Id, v2Id, v3Id);
         });
 
-        // Then — and no third arrives for this notification in a further settling window.
+        // Then
         await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
-                .as("no third message may follow the v0.1.0 and v0.2.0 pair")
-                .containsExactlyInAnyOrder(v1Id, v2Id);
+                .as("no fourth message may follow the v0.1.0, v0.2.0 and v0.3.0 messages, which arrive in order")
+                .containsExactly(v1Id, v2Id, v3Id);
         });
 
         ServiceBusReceivedMessage v1 = messageWithId(mine, v1Id);
         ServiceBusReceivedMessage v2 = messageWithId(mine, v2Id);
+        ServiceBusReceivedMessage v3 = messageWithId(mine, v3Id);
 
-        // Both are addressed to the same session, which is what makes v0.1.0-then-v0.2.0 ordering
-        // deterministic and keeps the pair correlatable.
-        assertThat(v1.getSessionId()).isEqualTo(AGGREGATE_ID);
-        assertThat(v2.getSessionId()).isEqualTo(AGGREGATE_ID);
+        assertThat(List.of(v1, v2, v3)).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
+
+        JsonNode v3Body = readBody(v3);
+        assertThat(v3Body.path("metadata").path("schemaVersion").asText()).isEqualTo("0.3.0");
+        assertThat(v3Body.path("metadata").path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.3.0.schema.json");
+        assertThat(v3Body.path("data").path("specifiedConsignment").path("originCountry")
+            .path("regionOfOriginCode").asText()).isEqualTo("ES-12345");
 
         JsonNode v1Metadata = readBody(v1).path("metadata");
         assertThat(v1Metadata.path("schemaVersion").asText()).isEqualTo("0.1.0");
@@ -223,7 +223,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .isEqualTo("https://refdata.tbc.defra.gov.uk/country_subdivisions");
         assertThat(subdivision.path("functionTypeCode").path("content").asText()).isEqualTo("106");
         assertThat(consignment.path("originCountry").has("regionOfOriginCode"))
-            .as("regionOfOriginCode is not sent to PIMS")
+            .as("regionOfOriginCode is not part of v0.2.0")
             .isFalse();
 
         JsonNode lineItems = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
@@ -245,6 +245,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         // Given
         double baseV1 = forwardedCount("0.1.0");
         double baseV2 = forwardedCount("0.2.0");
+        double baseV3 = forwardedCount("0.3.0");
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
 
@@ -254,8 +255,9 @@ class NotificationSqsListenerIT extends IntegrationBase {
             collectMessagesFor(mine, deduplicationId);
             assertThat(forwardedCount("0.1.0")).isEqualTo(baseV1 + 1);
             assertThat(forwardedCount("0.2.0")).isEqualTo(baseV2 + 1);
+            assertThat(forwardedCount("0.3.0")).isEqualTo(baseV3 + 1);
             assertThat(messageIds(mine))
-                .containsExactlyInAnyOrder(deduplicationId, deduplicationId + "-v2");
+                .containsExactlyInAnyOrder(deduplicationId, deduplicationId + "-v2", deduplicationId + "-v3");
         });
     }
 
@@ -454,11 +456,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         }
     }
 
-    /**
-     * Drains what is currently on the bus, keeping only the messages whose id derives from
-     * {@code deduplicationId} — the v0.1.0 message carries it verbatim and the v0.2.0 message carries
-     * it with a {@code -v2} suffix. Anything else is another test's message and is discarded.
-     */
     private void collectMessagesFor(List<ServiceBusReceivedMessage> into, String deduplicationId) {
         receiveFromAsb(10).stream()
             .filter(m -> m.getMessageId() != null && m.getMessageId().startsWith(deduplicationId))

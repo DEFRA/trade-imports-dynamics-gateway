@@ -24,6 +24,7 @@
     <maven.compiler.target>25</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <sonar.organization>defra</sonar.organization>
+    <sonar.cpd.exclusions>**/notification/pims/gbnag*/**,**/notification/pims/PimsEventV*.java,**/notification/Pims*MapperV*.java</sonar.cpd.exclusions>
     <aws-sdk.version>2.46.11</aws-sdk.version>
     <azure-sdk-bom.version>1.2.35</azure-sdk-bom.version>
     <azure-core-amqp.version>2.11.4</azure-core-amqp.version>
