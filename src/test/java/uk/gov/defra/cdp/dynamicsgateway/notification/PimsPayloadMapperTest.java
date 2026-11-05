@@ -42,7 +42,19 @@ class PimsPayloadMapperTest {
             ),
             envelopeMapper
         );
-        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2);
+        PimsCommonMapperV3 commonMapperV3 = new PimsCommonMapperV3();
+        PimsEventMapperV3 pimsEventMapperV3 = new PimsEventMapperV3(
+            new PimsGbnAgDataMapperV3(
+                new PimsConsignmentMapperV3(
+                    new PimsTransportMapperV3(commonMapperV3),
+                    new PimsLineItemMapperV3(commonMapperV3),
+                    commonMapperV3
+                ),
+                commonMapperV3
+            ),
+            envelopeMapper
+        );
+        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3);
     }
 
     @Test
@@ -177,15 +189,43 @@ class PimsPayloadMapperTest {
     }
 
     @Test
+    void mapToV2_shouldProduceTheCommittedV020PayloadForTheBackendFixture() throws Exception {
+        String result = mapper.mapToV2(fixtureEvent());
+
+        try (InputStream in = getClass().getResourceAsStream("/gbn-ag/pims-v0.2.0-from-backend.json")) {
+            assertThat(objectMapper.readTree(result)).isEqualTo(objectMapper.readTree(in));
+        }
+    }
+
+    @Test
+    void mapToV3_shouldAddIssuerDocumentTypeListUrlAndRegionOfOriginCodeToTheBackendFixture() throws Exception {
+        JsonNode result = objectMapper.readTree(mapper.mapToV3(fixtureEvent()));
+
+        JsonNode exchangedDocument = result.path("data").path("exchangedDocument");
+        assertThat(exchangedDocument.path("issuer").path("name").asText()).isEqualTo("Animal and Plant Health Agency");
+        assertThat(exchangedDocument.path("issuer").path("postalAddress").path("postcodeCode").asText())
+            .isEqualTo("KT15 3NB");
+        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0)
+            .path("emailURIUniversalCommunication").asText()).isEqualTo("imports@apha.example.gov.uk");
+        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0).has("personName")).isFalse();
+        assertThat(exchangedDocument.path("referenceDocument").findValuesAsText("urlId"))
+            .containsOnly("https://refdata.tbc.defra.gov.uk/gbn-ag-document-types")
+            .hasSize(2);
+        assertThat(exchangedDocument.path("firstSignatoryAuthentication").path("includedClause")
+            .findValuesAsText("content")).containsExactly("INTERNAL_MARKET", "BREEDING", "FURTHER_KEEPING");
+        assertThat(result.path("data").path("specifiedConsignment").path("originCountry")
+            .path("regionOfOriginCode").asText()).isEqualTo("ES-12345");
+    }
+
+    @Test
     void mapToV2_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
-        // Given — same real fixture as the v0.1.0 test above; v0.2.0 now carries the fields it drops
+        // Given
         OutboxEvent event = fixtureEvent();
 
         // When
         String result = mapper.mapToV2(event);
 
-        // Then — accompanying documents reach PIMS as type, reference and date; the urlId the
-        // backend sends is not part of the v0.2.0 schema, so it stops here
+        // Then
         JsonNode referenceDocuments = objectMapper.readTree(result).path("data").path("exchangedDocument")
             .path("referenceDocument");
         assertThat(referenceDocuments).hasSize(2);

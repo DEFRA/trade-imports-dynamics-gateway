@@ -15,19 +15,40 @@
       "notificationStatusCode" : "SUBMITTED",
       "versionId" : 1,
       "issueDateTime" : "2026-05-21T10:15:00Z",
+      "issuer" : {
+        "identifier" : null,
+        "urlId" : null,
+        "name" : "Animal and Plant Health Agency",
+        "partyRoleCode" : null,
+        "partyTypeCode" : null,
+        "postalAddress" : {
+          "lineOne" : "Woodham Lane",
+          "lineTwo" : null,
+          "cityName" : "Addlestone",
+          "postcodeCode" : "KT15 3NB",
+          "countryId" : "GB",
+          "countryName" : null,
+          "countrySubDivisionName" : null
+        },
+        "definedContact" : [ {
+          "personName" : null,
+          "emailURIUniversalCommunication" : "imports@apha.example.gov.uk",
+          "telephoneUniversalCommunication" : "03000 200301"
+        } ]
+      },
       "firstSignatoryAuthentication" : {
         "includedClause" : [ {
           "identifier" : "PURPOSE",
           "content" : "INTERNAL_MARKET",
-          "urlId" : null
+          "urlId" : "https://refdata.tbc.defra.gov.uk/gbn-ag-purposes"
         }, {
           "identifier" : "INTERNAL_MARKET_PURPOSE",
-          "content" : null,
-          "urlId" : null
+          "content" : "BREEDING",
+          "urlId" : "https://refdata.tbc.defra.gov.uk/gbn-ag-internal-market-purposes"
         }, {
           "identifier" : "GOODS_CERTIFIED_AS",
-          "content" : "BREEDING_AND_PRODUCTION",
-          "urlId" : null
+          "content" : "FURTHER_KEEPING",
+          "urlId" : "https://refdata.tbc.defra.gov.uk/gbn-ag-goods-certified-as"
         } ]
       },
       "referenceDocument" : [ {
@@ -268,11 +289,11 @@
             "identifier" : [ {
               "typeCode" : "EAR_TAG",
               "content" : "UK01234567890",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             }, {
               "typeCode" : "PASSPORT",
               "content" : "UK0123456700999",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             } ],
             "permanentLocation" : null
           }, {
@@ -280,11 +301,11 @@
             "identifier" : [ {
               "typeCode" : "EAR_TAG",
               "content" : "UK01234567891",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             }, {
               "typeCode" : "PASSPORT",
               "content" : "UK0123456700998",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             } ],
             "permanentLocation" : null
           } ]
@@ -320,15 +341,15 @@
             "identifier" : [ {
               "typeCode" : "PASSPORT",
               "content" : "GB-PET-00123",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             }, {
               "typeCode" : "MICROCHIP",
               "content" : "900123456789012",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             }, {
               "typeCode" : "TATTOO",
               "content" : "TT-4471",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             } ],
             "permanentLocation" : {
               "identifier" : null,
@@ -384,11 +405,11 @@
             "identifier" : [ {
               "typeCode" : "PASSPORT",
               "content" : "GBR-826-0012345",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             }, {
               "typeCode" : "MICROCHIP",
               "content" : "826003200123456",
-              "urlId" : null
+              "urlId" : "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
             } ],
             "permanentLocation" : null
           } ]

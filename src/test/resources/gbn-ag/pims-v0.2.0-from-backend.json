@@ -1,0 +1,374 @@
+{
+  "eventId": "3f2b8c1e-5d4a-4e6b-9c7d-2a1b0e9f8d7c",
+  "aggregateType": "Notification",
+  "subType": "GBN-AG",
+  "aggregateId": "Imports.Notification.GBN-AG.GBN-AG-26-7K8M2P",
+  "aggregateVersion": 1,
+  "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
+  "timestamp": 1779358500.000000000,
+  "data": {
+    "$model": "defra/certificate-internal/1",
+    "$type": "gbn-ag",
+    "exchangedDocument": {
+      "identifier": "GBN-AG-26-7K8M2P",
+      "traderAssignedId": "Imports456_GB",
+      "notificationStatusCode": "SUBMITTED",
+      "versionId": 1,
+      "issueDateTime": "2026-05-21T10:15:00Z",
+      "firstSignatoryAuthentication": {
+        "includedClause": [
+          {
+            "identifier": "PURPOSE",
+            "content": "INTERNAL_MARKET",
+            "urlId": "https://refdata.tbc.defra.gov.uk/gbn-ag-purposes"
+          },
+          {
+            "identifier": "INTERNAL_MARKET_PURPOSE",
+            "content": "BREEDING",
+            "urlId": "https://refdata.tbc.defra.gov.uk/gbn-ag-internal-market-purposes"
+          },
+          {
+            "identifier": "GOODS_CERTIFIED_AS",
+            "content": "FURTHER_KEEPING",
+            "urlId": "https://refdata.tbc.defra.gov.uk/gbn-ag-goods-certified-as"
+          }
+        ]
+      },
+      "referenceDocument": [
+        {
+          "typeCode": "856",
+          "identifier": "ITAHC-2026-0001",
+          "issueDateTime": "2026-05-01"
+        },
+        {
+          "typeCode": "GBN1",
+          "identifier": "LOA-778",
+          "issueDateTime": "2026-04-20"
+        }
+      ]
+    },
+    "specifiedConsignment": {
+      "consignorParty": {
+        "name": "Ferme Rosales",
+        "partyTypeCode": [],
+        "postalAddress": {
+          "lineOne": "43 Rue de la Paix",
+          "cityName": "Lyon",
+          "countryId": "FR",
+          "postcodeCode": "69001"
+        },
+        "definedContact": [
+          {
+            "telephoneUniversalCommunication": "01632 960111",
+            "emailURIUniversalCommunication": "contact@example.com"
+          }
+        ]
+      },
+      "consigneeParty": {
+        "name": "Linus George Ltd",
+        "partyTypeCode": [],
+        "postalAddress": {
+          "lineOne": "558 Oak Street",
+          "cityName": "Ashford",
+          "countryId": "GB",
+          "postcodeCode": "TN24 8AB"
+        },
+        "definedContact": [
+          {
+            "telephoneUniversalCommunication": "01632 960111",
+            "emailURIUniversalCommunication": "contact@example.com"
+          }
+        ]
+      },
+      "despatchParty": {
+        "name": "Ferme du Massif Central",
+        "partyTypeCode": [],
+        "postalAddress": {
+          "lineOne": "Route de la Vallee 12",
+          "cityName": "Clermont-Ferrand",
+          "countryId": "FR",
+          "postcodeCode": "63000"
+        },
+        "definedContact": [
+          {
+            "telephoneUniversalCommunication": "01632 960111",
+            "emailURIUniversalCommunication": "contact@example.com"
+          }
+        ]
+      },
+      "deliveryParty": {
+        "name": "Linus George Farm",
+        "partyTypeCode": [],
+        "postalAddress": {
+          "lineOne": "Hill Farm Lane",
+          "cityName": "Ashford",
+          "countryId": "GB",
+          "postcodeCode": "TN25 4DT"
+        },
+        "definedContact": [
+          {
+            "telephoneUniversalCommunication": "01632 960111",
+            "emailURIUniversalCommunication": "contact@example.com"
+          }
+        ]
+      },
+      "importer": {
+        "name": "GB Animal Imports",
+        "partyTypeCode": [],
+        "postalAddress": {
+          "lineOne": "5 Port Way",
+          "cityName": "Dover",
+          "countryId": "GB",
+          "postcodeCode": "CT17 9BU"
+        },
+        "definedContact": [
+          {
+            "telephoneUniversalCommunication": "01632 960111",
+            "emailURIUniversalCommunication": "contact@example.com"
+          }
+        ]
+      },
+      "carrier": {
+        "identifier": "UK/TRANS/T1/00012345",
+        "urlId": "https://refdata.tbc.defra.gov.uk/uk_transporter_authorisation",
+        "name": "Acme Transport Ltd",
+        "partyTypeCode": [
+          {
+            "value": "COMMERCIAL",
+            "urlId": "https://traces-codelists.ec.europa.eu/operator_activity_type"
+          }
+        ],
+        "postalAddress": {
+          "lineOne": "1 Haulage Way",
+          "cityName": "Folkestone",
+          "countryId": "GB",
+          "postcodeCode": "CT19 4QJ"
+        },
+        "definedContact": []
+      },
+      "originCountry": {
+        "code": {
+          "value": "ES"
+        },
+        "subordinateTradeCountrySubDivision": {
+          "identifier": "ES-CN",
+          "urlId": "https://refdata.tbc.defra.gov.uk/country_subdivisions",
+          "functionTypeCode": {
+            "content": "106"
+          }
+        }
+      },
+      "unloadingBaseportLocation": {
+        "identifier": "GBDVR"
+      },
+      "finalDestinationLocation": {
+        "identifier": "123456789",
+        "urlId": "https://refdata.tbc.defra.gov.uk/cph_number"
+      },
+      "mainCarriageLogisticsTransportMovement": [
+        {
+          "modeCode": 3,
+          "usedLogisticsTransportMeans": {
+            "name": "AB12 CDE"
+          },
+          "transportContractRelatedReferencedDocument": [
+            {
+              "typeCode": "730",
+              "identifier": "CMR-2026-884721"
+            }
+          ],
+          "arrivalEvent": [
+            {
+              "scheduledOccurrenceDateTime": 1778025600.000000000
+            }
+          ]
+        }
+      ],
+      "transitTradeCountry": [
+        {
+          "code": {
+            "value": "BE"
+          }
+        },
+        {
+          "code": {
+            "value": "DE"
+          }
+        }
+      ],
+      "isOrHasUnweanedAnimals": true,
+      "includedConsignmentItem": [
+        {
+          "includedTradeLineItem": [
+            {
+              "applicableClassification": [
+                {
+                  "systemId": "CN",
+                  "classCode": {
+                    "value": "01020000"
+                  }
+                }
+              ],
+              "description": [
+                "Cow"
+              ],
+              "scientificName": "Bos taurus",
+              "commonName": "Cow",
+              "specifiedLineTradeDelivery": [
+                {
+                  "productUnitQuantity": {
+                    "content": 2
+                  }
+                }
+              ],
+              "physicalReferencedLogisticsPackage": [
+                {
+                  "itemQuantity": 1
+                }
+              ],
+              "individualTradeProductInstance": [
+                {
+                  "identifier": [
+                    {
+                      "typeCode": "EAR_TAG",
+                      "content": "UK01234567890",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    },
+                    {
+                      "typeCode": "PASSPORT",
+                      "content": "UK0123456700999",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    }
+                  ]
+                },
+                {
+                  "identifier": [
+                    {
+                      "typeCode": "EAR_TAG",
+                      "content": "UK01234567891",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    },
+                    {
+                      "typeCode": "PASSPORT",
+                      "content": "UK0123456700998",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "applicableClassification": [
+                {
+                  "systemId": "CN",
+                  "classCode": {
+                    "value": "01020000"
+                  }
+                }
+              ],
+              "description": [
+                "Cow"
+              ],
+              "scientificName": "Canis lupus familiaris",
+              "commonName": "Cow",
+              "specifiedLineTradeDelivery": [
+                {
+                  "productUnitQuantity": {
+                    "content": 1
+                  }
+                }
+              ],
+              "physicalReferencedLogisticsPackage": [
+                {
+                  "itemQuantity": 1
+                }
+              ],
+              "individualTradeProductInstance": [
+                {
+                  "identifier": [
+                    {
+                      "typeCode": "PASSPORT",
+                      "content": "GB-PET-00123",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    },
+                    {
+                      "typeCode": "MICROCHIP",
+                      "content": "900123456789012",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    },
+                    {
+                      "typeCode": "TATTOO",
+                      "content": "TT-4471",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    }
+                  ],
+                  "permanentLocation": {
+                    "name": "Brighton home",
+                    "partyTypeCode": [],
+                    "postalAddress": {
+                      "lineOne": "182 Ditchling Road",
+                      "cityName": "Brighton",
+                      "countryId": "GB",
+                      "postcodeCode": "BN1 7JE"
+                    },
+                    "definedContact": [
+                      {
+                        "telephoneUniversalCommunication": "01632 960111",
+                        "emailURIUniversalCommunication": "contact@example.com"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "applicableClassification": [
+                {
+                  "systemId": "CN",
+                  "classCode": {
+                    "value": "01020000"
+                  }
+                }
+              ],
+              "description": [
+                "Cow"
+              ],
+              "scientificName": "Equus caballus",
+              "commonName": "Cow",
+              "specifiedLineTradeDelivery": [
+                {
+                  "productUnitQuantity": {
+                    "content": 1
+                  }
+                }
+              ],
+              "physicalReferencedLogisticsPackage": [
+                {
+                  "itemQuantity": 1
+                }
+              ],
+              "individualTradeProductInstance": [
+                {
+                  "name": "Starlight",
+                  "identifier": [
+                    {
+                      "typeCode": "PASSPORT",
+                      "content": "GBR-826-0012345",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    },
+                    {
+                      "typeCode": "MICROCHIP",
+                      "content": "826003200123456",
+                      "urlId": "https://codelists.tbc.defra.gov.uk/animal_identifier_types"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "statusChanges": []
+}
