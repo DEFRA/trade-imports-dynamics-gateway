@@ -89,6 +89,20 @@ class PimsPayloadMapperTest {
     }
 
     @Test
+    void parse_shouldReadOwningOrganisationId() throws Exception {
+        assertThat(owningOrganisationEvent().organisationId()).isEqualTo("5900001");
+    }
+
+    @Test
+    void map_shouldLeaveOwningOrganisationOffEveryPayload() throws Exception {
+        OutboxEvent event = owningOrganisationEvent();
+
+        assertThat(objectMapper.readTree(mapper.mapToV1(event)).has("organisationId")).isFalse();
+        assertThat(objectMapper.readTree(mapper.mapToV2(event)).has("organisationId")).isFalse();
+        assertThat(objectMapper.readTree(mapper.mapToV3(event)).has("organisationId")).isFalse();
+    }
+
+    @Test
     void parse_shouldThrowNonRetryable_whenBodyHasUnknownField() throws Exception {
         // Simulates a new field added to the backend's outbox event not yet in OutboxEvent
         String body = """
@@ -355,6 +369,18 @@ class PimsPayloadMapperTest {
             .path("includedConsignmentItem").get(0).path("includedTradeLineItem").get(0);
         assertThat(line.path("commonName").asText()).isEqualTo("Cow");
         assertThat(line.has("applicableClassification")).isFalse();
+    }
+
+    private OutboxEvent owningOrganisationEvent() throws Exception {
+        String body = """
+            {
+              "eventId": "evt-org",
+              "aggregateVersion": 1,
+              "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
+              "organisationId": "5900001"
+            }
+            """;
+        return mapper.parse(objectMapper.readTree(body));
     }
 
     private OutboxEvent fixtureEvent() throws Exception {
