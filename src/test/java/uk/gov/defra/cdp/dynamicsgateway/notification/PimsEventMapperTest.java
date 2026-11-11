@@ -59,7 +59,7 @@ class PimsEventMapperTest {
         OutboxEvent event = new OutboxEvent(
             EVENT_ID, "Notification", "GBN-AG",
             AGGREGATE_ID, 1L, EVENT_TYPE,
-            NOW, null, null, null, null);
+            NOW, null, null, null, null, null);
 
         // When
         PimsEventV1 result = mapper.map(event);
@@ -416,27 +416,27 @@ class PimsEventMapperTest {
 
     private OutboxEvent minimalEvent() {
         return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, null);
+            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, null, null);
     }
 
     private OutboxEvent eventWithData(GbnAgData data) {
         return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, data, null, null, null);
+            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, data, null, null, null, null);
     }
 
     private OutboxEvent eventWithActor(OutboxActor actor) {
         return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, actor, null);
+            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, actor, null, null);
     }
 
     private OutboxEvent eventWithMetadata(OutboxEventMetadata metadata) {
         return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, metadata, null, null);
+            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, metadata, null, null, null);
     }
 
     private OutboxEvent eventWithStatusChanges(List<OutboxStatusChange> changes) {
         return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, changes);
+            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, changes, null);
     }
 
     private SpecifiedConsignmentBuilder emptyConsignment() {
