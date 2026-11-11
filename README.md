@@ -65,7 +65,7 @@ The primary production flow:
 SNS (FIFO) → SQS FIFO queue → NotificationSqsListener → QueueMessageSender → ASB session queue
 ```
 
-The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0 and v0.2.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
+The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0, v0.2.0 and v0.3.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
 
 [docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the two PIMS shapes, retries and DLQ browsing.
 
@@ -135,7 +135,9 @@ and drift between calls.
 
 The `notification.sqs.messages` counters (tags `outcome` and `schemaVersion`) are enabled and
 readable at `/metrics/notification.sqs.messages`, for example
-`/metrics/notification.sqs.messages?tag=outcome:forwarded&tag=schemaVersion:0.1.0`. They live in
+`/metrics/notification.sqs.messages?tag=outcome:forwarded&tag=schemaVersion:0.1.0`. `outcome=forwarded` is tagged with each
+schema version (`0.1.0`, `0.2.0`, `0.3.0`); a failed v0.2.0 or v0.3.0 copy counts under
+`outcome=v2-mapping-failed` or `outcome=v3-mapping-failed`. They live in
 memory, so each gateway instance counts only what it forwarded itself.
 
 ### API documentation (OpenAPI)
