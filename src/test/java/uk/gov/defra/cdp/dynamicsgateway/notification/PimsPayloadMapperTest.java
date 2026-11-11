@@ -94,11 +94,12 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void map_shouldLeaveOwningOrganisationOffBothPayloads() throws Exception {
+    void map_shouldLeaveOwningOrganisationOffEveryPayload() throws Exception {
         OutboxEvent event = owningOrganisationEvent();
 
         assertThat(objectMapper.readTree(mapper.mapToV1(event)).has("organisationId")).isFalse();
         assertThat(objectMapper.readTree(mapper.mapToV2(event)).has("organisationId")).isFalse();
+        assertThat(objectMapper.readTree(mapper.mapToV3(event)).has("organisationId")).isFalse();
     }
 
     @Test
