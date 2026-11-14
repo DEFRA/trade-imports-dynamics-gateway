@@ -25,7 +25,7 @@ stack in
 # from the workspace root
 ./scripts/stack/run-stack.sh        # full stack from published images
 ./scripts/stack/run-stack.sh -e gateway   # everything except this service (run it natively)
-./scripts/stack/stop-stack.sh       # tear down and wipe volumes
+tim docker down                     # tear down and wipe volumes
 ```
 
 This gateway runs as part of that stack (the `servicebus` profile provides a
