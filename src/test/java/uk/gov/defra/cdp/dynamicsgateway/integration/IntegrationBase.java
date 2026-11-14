@@ -1,14 +1,5 @@
 package uk.gov.defra.cdp.dynamicsgateway.integration;
 
-import com.azure.core.amqp.AmqpRetryOptions;
-import com.azure.messaging.servicebus.ServiceBusClientBuilder;
-import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
-import com.azure.messaging.servicebus.ServiceBusReceiverClient;
-import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
-import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
-import java.time.Duration;
-import java.util.List;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -22,7 +13,6 @@ import org.testcontainers.utility.MountableFile;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("integration-test")
-@Slf4j
 public abstract class IntegrationBase {
 
     static final String QUEUE_NAME = "test-queue";
@@ -53,32 +43,5 @@ public abstract class IntegrationBase {
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("azure.servicebus.connection-string",
             () -> SERVICE_BUS_CONTAINER.getConnectionString() + "EntityPath=" + QUEUE_NAME);
-    }
-
-    static List<ServiceBusReceivedMessage> receiveFromServiceBus(int maxMessages, Duration timeout) {
-        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
-                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
-                .retryOptions(new AmqpRetryOptions().setTryTimeout(timeout).setMaxRetries(0))
-                .sessionReceiver()
-                .queueName(QUEUE_NAME)
-                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
-                .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
-            return receiver.receiveMessages(maxMessages, timeout)
-                .stream()
-                .toList();
-        } catch (Exception e) {
-            log.debug("No Service Bus message received yet", e);
-            return List.of();
-        }
-    }
-
-    static void drainServiceBusQueue() {
-        for (int attempt = 0; attempt < 10; attempt++) {
-            if (receiveFromServiceBus(10, Duration.ofSeconds(1)).isEmpty()) {
-                return;
-            }
-        }
-        log.warn("Service Bus queue {} still returning messages after drain attempts", QUEUE_NAME);
     }
 }

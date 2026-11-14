@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
@@ -14,9 +15,9 @@ import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import java.time.Duration;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -44,11 +45,6 @@ class EventsSendControllerIT extends IntegrationBase {
     @MockitoSpyBean
     private ExternalCallMetrics externalCallMetrics;
 
-    @BeforeEach
-    void emptyQueue() {
-        drainServiceBusQueue();
-    }
-
     @AfterEach
     void resetSpy() {
         Mockito.reset(senderClient, externalCallMetrics);
@@ -57,7 +53,8 @@ class EventsSendControllerIT extends IntegrationBase {
     @Test
     void post_shouldReturnAccepted_andMessageLandsInQueue() {
         // Given
-        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}";
+        String aggregateId = "Imports.Notification.GBN-AG.GBN-AG-26-" + UUID.randomUUID();
+        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"" + aggregateId + "\"}";
 
         // When
         ResponseEntity<Void> response = restTemplate.postForEntity(
@@ -66,11 +63,11 @@ class EventsSendControllerIT extends IntegrationBase {
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
-        ServiceBusReceivedMessage received = receiveMessage();
+        ServiceBusReceivedMessage received = receiveMessage(aggregateId);
         assertThat(received.getBody()).hasToString(postedJson);
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
-        assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
+        assertThat(received.getSessionId()).isEqualTo(aggregateId);
         verify(externalCallMetrics).recordCall(
             eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(false));
     }
@@ -87,7 +84,7 @@ class EventsSendControllerIT extends IntegrationBase {
         if (expectedBodyContains != null) {
             assertThat(response.getBody()).contains(expectedBodyContains);
         }
-        assertThat(receiveFromServiceBus(1, Duration.ofSeconds(3))).isEmpty();
+        verify(senderClient, never()).sendMessage(any(ServiceBusMessage.class));
     }
 
     static Stream<Arguments> badRequestCases() {
@@ -115,14 +112,14 @@ class EventsSendControllerIT extends IntegrationBase {
             eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(true));
     }
 
-    private ServiceBusReceivedMessage receiveMessage() {
+    private ServiceBusReceivedMessage receiveMessage(String sessionId) {
         try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
                 .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
                 .sessionReceiver()
                 .queueName(QUEUE_NAME)
                 .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
                 .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
+             ServiceBusReceiverClient receiver = sessionReceiver.acceptSession(sessionId)) {
             return receiver.receiveMessages(1, Duration.ofSeconds(10))
                 .stream()
                 .findFirst()

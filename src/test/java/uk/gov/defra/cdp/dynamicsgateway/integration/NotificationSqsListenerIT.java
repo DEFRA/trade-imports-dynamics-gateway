@@ -12,13 +12,18 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.azure.core.amqp.AmqpRetryOptions;
 import com.azure.core.amqp.exception.AmqpErrorCondition;
 import com.azure.core.amqp.exception.AmqpException;
+import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusErrorSource;
 import com.azure.messaging.servicebus.ServiceBusException;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
+import com.azure.messaging.servicebus.ServiceBusReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
+import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
+import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import io.floci.testcontainers.FlociContainer;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.URI;
@@ -123,7 +128,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         // only receive one, so the unread partner would otherwise survive into the next test and be
         // counted there. Without this, any assertion on how many messages arrived is measuring the
         // previous test as much as its own.
-        drainServiceBusQueue();
+        drainAsb();
     }
 
     @AfterEach
@@ -558,7 +563,36 @@ class NotificationSqsListenerIT extends IntegrationBase {
      * accumulate results across calls rather than expect a later call to see the same message again.
      */
     private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages) {
-        return receiveFromServiceBus(maxMessages, Duration.ofSeconds(3));
+        return receiveFromAsb(maxMessages, Duration.ofSeconds(3));
+    }
+
+    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages, Duration timeout) {
+        // sessionReceiver and receiver share a lifecycle: both close when the try block exits.
+        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
+                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
+                .retryOptions(new AmqpRetryOptions().setTryTimeout(timeout).setMaxRetries(0))
+                .sessionReceiver()
+                .queueName(QUEUE_NAME)
+                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
+                .buildClient();
+             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
+            return receiver.receiveMessages(maxMessages, timeout)
+                .stream()
+                .toList();
+        } catch (Exception e) {
+            log.debug("No ASB message received yet: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Empties the ASB queue so a test's message counts reflect only its own notification. */
+    private void drainAsb() {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            if (receiveFromAsb(10, Duration.ofSeconds(1)).isEmpty()) {
+                return;
+            }
+        }
+        log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
     }
 
     private static SqsClient localSqsClient() {
