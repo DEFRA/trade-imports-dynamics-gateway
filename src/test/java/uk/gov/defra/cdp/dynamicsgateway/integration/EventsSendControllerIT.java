@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -44,6 +45,11 @@ class EventsSendControllerIT extends IntegrationBase {
 
     @MockitoSpyBean
     private ExternalCallMetrics externalCallMetrics;
+
+    @BeforeEach
+    void drainSharedAsbQueue() {
+        drainAsb();
+    }
 
     @AfterEach
     void resetSpy() {

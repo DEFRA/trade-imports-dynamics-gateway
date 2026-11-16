@@ -128,7 +128,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         // only receive one, so the unread partner would otherwise survive into the next test and be
         // counted there. Without this, any assertion on how many messages arrived is measuring the
         // previous test as much as its own.
-        drainAsb();
+        IntegrationBase.drainAsb();
     }
 
     @AfterEach
@@ -567,32 +567,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages, Duration timeout) {
-        // sessionReceiver and receiver share a lifecycle: both close when the try block exits.
-        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
-                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
-                .retryOptions(new AmqpRetryOptions().setTryTimeout(timeout).setMaxRetries(0))
-                .sessionReceiver()
-                .queueName(QUEUE_NAME)
-                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
-                .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
-            return receiver.receiveMessages(maxMessages, timeout)
-                .stream()
-                .toList();
-        } catch (Exception e) {
-            log.debug("No ASB message received yet: {}", e.getMessage());
-            return List.of();
-        }
-    }
-
-    /** Empties the ASB queue so a test's message counts reflect only its own notification. */
-    private void drainAsb() {
-        for (int attempt = 0; attempt < 10; attempt++) {
-            if (receiveFromAsb(10, Duration.ofSeconds(1)).isEmpty()) {
-                return;
-            }
-        }
-        log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
+        return IntegrationBase.receiveFromAsb(maxMessages, timeout);
     }
 
     private static SqsClient localSqsClient() {

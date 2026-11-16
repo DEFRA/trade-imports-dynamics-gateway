@@ -1,5 +1,15 @@
 package uk.gov.defra.cdp.dynamicsgateway.integration;
 
+import com.azure.core.amqp.AmqpRetryOptions;
+import com.azure.messaging.servicebus.ServiceBusClientBuilder;
+import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
+import com.azure.messaging.servicebus.ServiceBusReceiverClient;
+import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
+import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
+import java.time.Duration;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -14,6 +24,8 @@ import org.testcontainers.utility.MountableFile;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("integration-test")
 public abstract class IntegrationBase {
+
+    private static final Logger log = LoggerFactory.getLogger(IntegrationBase.class);
 
     static final String QUEUE_NAME = "test-queue";
 
@@ -43,5 +55,35 @@ public abstract class IntegrationBase {
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("azure.servicebus.connection-string",
             () -> SERVICE_BUS_CONTAINER.getConnectionString() + "EntityPath=" + QUEUE_NAME);
+    }
+
+    /**
+     * Receives up to {@code maxMessages} from the next available session. The receiver is
+     * RECEIVE_AND_DELETE, so anything returned is consumed.
+     */
+    protected static List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages, Duration timeout) {
+        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
+                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
+                .retryOptions(new AmqpRetryOptions().setTryTimeout(timeout).setMaxRetries(0))
+                .sessionReceiver()
+                .queueName(QUEUE_NAME)
+                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
+                .buildClient();
+             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
+            return receiver.receiveMessages(maxMessages, timeout).stream().toList();
+        } catch (Exception e) {
+            log.debug("No ASB message received yet: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Empties the ASB queue so a test's message counts reflect only its own traffic. */
+    protected static void drainAsb() {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            if (receiveFromAsb(10, Duration.ofSeconds(1)).isEmpty()) {
+                return;
+            }
+        }
+        log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
     }
 }
