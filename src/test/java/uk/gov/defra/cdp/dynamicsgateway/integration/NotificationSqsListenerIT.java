@@ -457,7 +457,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private void collectMessagesFor(List<ServiceBusReceivedMessage> into, String deduplicationId) {
-        receiveFromAsb(10).stream()
+        receiveFromAsb(10, Duration.ofSeconds(3)).stream()
             .filter(m -> m.getMessageId() != null && m.getMessageId().startsWith(deduplicationId))
             .forEach(into::add);
     }
@@ -554,20 +554,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private Optional<ServiceBusReceivedMessage> tryReceiveFromAsb() {
-        return receiveFromAsb(1).stream().findFirst();
-    }
-
-    /**
-     * Receives up to {@code maxMessages} from the next available session. The receiver is
-     * RECEIVE_AND_DELETE, so anything returned is consumed — callers polling for several messages must
-     * accumulate results across calls rather than expect a later call to see the same message again.
-     */
-    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages) {
-        return receiveFromAsb(maxMessages, Duration.ofSeconds(3));
-    }
-
-    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages, Duration timeout) {
-        return IntegrationBase.receiveFromAsb(maxMessages, timeout);
+        return receiveFromAsb(1, Duration.ofSeconds(3)).stream().findFirst();
     }
 
     private static SqsClient localSqsClient() {
