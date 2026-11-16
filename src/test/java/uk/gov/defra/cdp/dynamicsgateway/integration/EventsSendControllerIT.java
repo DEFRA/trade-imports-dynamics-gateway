@@ -52,7 +52,8 @@ class EventsSendControllerIT extends IntegrationBase {
     }
 
     @AfterEach
-    void resetSpy() {
+    void resetSpyAndDrainAsb() {
+        drainAsb();
         Mockito.reset(senderClient, externalCallMetrics);
     }
 

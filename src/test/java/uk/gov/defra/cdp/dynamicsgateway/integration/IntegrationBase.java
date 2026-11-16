@@ -79,9 +79,15 @@ public abstract class IntegrationBase {
 
     /** Empties the ASB queue so a test's message counts reflect only its own traffic. */
     protected static void drainAsb() {
-        for (int attempt = 0; attempt < 10; attempt++) {
+        int emptyPolls = 0;
+        for (int attempt = 0; attempt < 30; attempt++) {
             if (receiveFromAsb(10, Duration.ofSeconds(1)).isEmpty()) {
-                return;
+                emptyPolls++;
+                if (emptyPolls >= 3) {
+                    return;
+                }
+            } else {
+                emptyPolls = 0;
             }
         }
         log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
