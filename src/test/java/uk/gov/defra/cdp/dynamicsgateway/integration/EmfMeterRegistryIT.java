@@ -12,6 +12,8 @@ import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -37,13 +39,15 @@ import uk.gov.defra.cdp.dynamicsgateway.testsupport.CapturedConsole;
       "aws.emf.enabled=true",
       "aws.emf.environment=Local",
       "aws.emf.namespace=trade-imports-dynamics-gateway",
-      "aws.emf.step=1s"
+      "aws.emf.step=1s",
+      "management.endpoints.web.exposure.include=health,metrics"
     })
 class EmfMeterRegistryIT extends IntegrationBase {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
   @Autowired private MeterRegistry meterRegistry;
+  @Autowired private EmfMeterRegistry emfMeterRegistry;
   @Autowired private TestRestTemplate restTemplate;
   @MockitoSpyBean private ServiceBusSenderClient senderClient;
 
@@ -58,8 +62,33 @@ class EmfMeterRegistryIT extends IntegrationBase {
   }
 
   @Test
-  void theMeterRegistryInUseIsTheEmfMeterRegistry() {
-    assertThat(meterRegistry).isInstanceOf(EmfMeterRegistry.class);
+  void everyMeterIsRecordedInTheEmfAndTheCumulativeRegistries() {
+    assertThat(meterRegistry)
+        .isInstanceOfSatisfying(
+            CompositeMeterRegistry.class,
+            composite ->
+                assertThat(composite.getRegistries())
+                    .hasSize(2)
+                    .anyMatch(EmfMeterRegistry.class::isInstance)
+                    .anyMatch(SimpleMeterRegistry.class::isInstance));
+  }
+
+  @Test
+  void theMetricsEndpointReadsTheRunningTotalAfterTheEmfStepHasPassed() {
+    meterRegistry
+        .counter("notification.message", "outcome", "forwarded", "schema.version", "9.9.9")
+        .increment(3);
+
+    await()
+        .pollDelay(Duration.ofMillis(2500))
+        .atMost(Duration.ofSeconds(5))
+        .untilAsserted(
+            () ->
+                assertThat(
+                        countOf(
+                            "/metrics/notification.message"
+                                + "?tag=outcome:forwarded&tag=schema.version:9.9.9"))
+                    .isEqualTo(3.0));
   }
 
   @Test
@@ -75,7 +104,7 @@ class EmfMeterRegistryIT extends IntegrationBase {
             "notification.error",
             "sqs.queue.depth",
             "controller.publishEvent.time")) {
-      assertThat(meterRegistry.find(name).meter()).as(name).isNotNull();
+      assertThat(emfMeterRegistry.find(name).meter()).as(name).isNotNull();
     }
   }
 
@@ -101,7 +130,17 @@ class EmfMeterRegistryIT extends IntegrationBase {
   void aMeterOffTheAllowlistIsNeverRegistered(String name) {
     meterRegistry.counter(name).increment();
 
-    assertThat(meterRegistry.find(name).meter()).isNull();
+    assertThat(emfMeterRegistry.find(name).meter()).isNull();
+  }
+
+  private double countOf(String metricsPath) throws IOException {
+    JsonNode body = JSON.readTree(restTemplate.getForObject(metricsPath, String.class));
+    for (JsonNode measurement : body.path("measurements")) {
+      if ("COUNT".equals(measurement.path("statistic").asText())) {
+        return measurement.path("value").asDouble();
+      }
+    }
+    throw new IllegalStateException("No COUNT measurement in " + body);
   }
 
   private void publishEvent() {

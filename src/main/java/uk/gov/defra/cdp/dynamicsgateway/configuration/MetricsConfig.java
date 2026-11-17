@@ -4,11 +4,13 @@ import io.micrometer.core.aop.CountedAspect;
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.core.instrument.util.NamedThreadFactory;
 import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.actuate.metrics.MetricsEndpoint;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,12 +21,23 @@ import uk.gov.defra.cdp.dynamicsgateway.metrics.EmfMeterRegistry;
 
 /**
  * The meter registry that publishes to CloudWatch when {@code aws.emf.enabled} is true, a startup
- * log line saying publishing is off when it is not, and the aspects that record {@code @Timed} and
- * {@code @Counted} methods.
+ * log line saying publishing is off when it is not, a cumulative registry that the actuator's
+ * {@code /metrics} endpoint reads, and the aspects that record {@code @Timed} and {@code @Counted}
+ * methods.
  */
 @Slf4j
 @Configuration
 public class MetricsConfig {
+
+  @Bean
+  SimpleMeterRegistry cumulativeMeterRegistry() {
+    return new SimpleMeterRegistry();
+  }
+
+  @Bean
+  MetricsEndpoint metricsEndpoint(SimpleMeterRegistry cumulativeMeterRegistry) {
+    return new MetricsEndpoint(cumulativeMeterRegistry);
+  }
 
   @Bean
   @ConditionalOnProperty(name = "aws.emf.enabled", havingValue = "true")

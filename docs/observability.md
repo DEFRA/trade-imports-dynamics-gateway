@@ -4,7 +4,9 @@
 
 `EmfMeterRegistry` publishes timers, distribution summaries, counters and gauges to CloudWatch as EMF once a minute (`aws.emf.step`), in the `aws.emf.namespace` namespace, with a meter's tags as its only dimensions. It does not publish function counters, function timers, long task timers or time gauges. A meter is registered, and so published, only when its name or a dot-separated prefix of it is enabled under `management.metrics.enable` in `application.yml`: `controller: true` lets through every `controller.*` meter.
 
-`aws.emf.enabled` is the one switch for publishing. `aws.emf.environment` is blank on CDP, which leaves the EMF library to detect ECS and send to the platform's agent; set it to `Local` to write the EMF documents to stdout. With `aws.emf.enabled` false, as in the integration tests, Spring Boot's in-memory registry is used and nothing is published.
+`aws.emf.enabled` is the one switch for publishing. `aws.emf.environment` is blank on CDP, which leaves the EMF library to detect ECS and send to the platform's agent; set it to `Local` to write the EMF documents to stdout. With `aws.emf.enabled` false, as in the integration tests, only the cumulative registry below exists and nothing is published.
+
+Every meter is also recorded in a cumulative in-memory registry, and the actuator's `/metrics` endpoint reads that one. `EmfMeterRegistry` is a step registry: a counter there holds only the last completed minute's count, so reading it through `/metrics` would show 0 for anything counted since. Spring Boot puts both registries behind one composite `MeterRegistry`, which is what the code injects.
 
 ## External-call metrics
 
@@ -37,7 +39,7 @@ Each call is also logged as one line with the nested ECS fields `event.category`
 
 A message reaches the dead-letter queue when SQS redrives it after its last receive, which the gateway never sees, so `sqs.queue.depth{queue=notification-dlq}` above 0 is the signal that a message ran out of retries.
 
-The counters are also readable per instance at `/metrics/<name>`, for example `/metrics/notification.message?tag=outcome:forwarded&tag=schema.version:0.1.0`.
+The counters are also readable per instance at `/metrics/<name>` as running totals since the task started, for example `/metrics/notification.message?tag=outcome:forwarded&tag=schema.version:0.1.0`. The performance tests read that one to count what the gateway forwarded.
 
 ## Following a notification across services
 
