@@ -10,6 +10,7 @@ import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.aop.CountedAspect;
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.boot.actuate.metrics.MetricsEndpoint;
 import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -37,8 +39,6 @@ class MetricsConfigTest {
               ConfigurableApplicationContext.CONVERSION_SERVICE_BEAN_NAME,
               ConversionService.class,
               ApplicationConversionService::getSharedInstance)
-          .withBean(
-              SimpleMeterRegistry.class, SimpleMeterRegistry::new, bean -> bean.setPrimary(true))
           .withPropertyValues("aws.emf.namespace=test-namespace", "aws.emf.step=1m");
 
   private MetricsConfig metricsConfig;
@@ -66,6 +66,52 @@ class MetricsConfigTest {
               assertThat(context).hasNotFailed();
               assertThat(context).doesNotHaveBean(EmfMeterRegistry.class);
             });
+  }
+
+  @Test
+  void meterRegistry_recordsInTheCumulativeAndEmfRegistries_whenEmfIsEnabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=true")
+        .run(
+            context ->
+                assertThat(context.getBean(MeterRegistry.class))
+                    .isInstanceOfSatisfying(
+                        CompositeMeterRegistry.class,
+                        composite ->
+                            assertThat(composite.getRegistries())
+                                .containsExactlyInAnyOrder(
+                                    context.getBean(SimpleMeterRegistry.class),
+                                    context.getBean(EmfMeterRegistry.class))));
+  }
+
+  @Test
+  void meterRegistry_recordsInTheCumulativeRegistryOnly_whenEmfIsDisabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=false")
+        .run(
+            context ->
+                assertThat(context.getBean(MeterRegistry.class))
+                    .isInstanceOfSatisfying(
+                        CompositeMeterRegistry.class,
+                        composite ->
+                            assertThat(composite.getRegistries())
+                                .containsExactly(context.getBean(SimpleMeterRegistry.class))));
+  }
+
+  @Test
+  void metricsEndpoint_readsTheCumulativeRegistry() {
+    contextRunner.run(
+        context -> {
+          context.getBean(SimpleMeterRegistry.class).counter("cumulative.only").increment(2);
+
+          assertThat(
+                  context
+                      .getBean(MetricsEndpoint.class)
+                      .metric("cumulative.only", null)
+                      .getMeasurements())
+              .singleElement()
+              .satisfies(sample -> assertThat(sample.getValue()).isEqualTo(2.0));
+        });
   }
 
   @Test

@@ -6,7 +6,7 @@
 
 `aws.emf.enabled` is the one switch for publishing. `aws.emf.environment` is blank on CDP, which leaves the EMF library to detect ECS and send to the platform's agent; set it to `Local` to write the EMF documents to stdout. With `aws.emf.enabled` false, as in the integration tests, only the cumulative registry below exists and nothing is published.
 
-Every meter is also recorded in a cumulative in-memory registry, and the actuator's `/metrics` endpoint reads that one. `EmfMeterRegistry` is a step registry: a counter there holds only the last completed minute's count, so reading it through `/metrics` would show 0 for anything counted since. Spring Boot puts both registries behind one composite `MeterRegistry`, which is what the code injects.
+Every meter is also recorded in a cumulative in-memory registry, and the actuator's `/metrics` endpoint reads that one. `EmfMeterRegistry` is a step registry: a counter there holds only the last completed minute's count, so reading it through `/metrics` would show 0 for anything counted since. `MetricsConfig` puts both registries behind one composite `MeterRegistry`, marked `@Primary`, which is what the code injects.
 
 ## External-call metrics
 

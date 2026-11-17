@@ -4,26 +4,29 @@ import io.micrometer.core.aop.CountedAspect;
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.core.instrument.util.NamedThreadFactory;
 import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.actuate.metrics.MetricsEndpoint;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import software.amazon.cloudwatchlogs.emf.config.EnvironmentConfigurationProvider;
 import software.amazon.cloudwatchlogs.emf.environment.Environments;
 import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.EmfMeterRegistry;
 
 /**
- * The meter registry that publishes to CloudWatch when {@code aws.emf.enabled} is true, a startup
- * log line saying publishing is off when it is not, a cumulative registry that the actuator's
- * {@code /metrics} endpoint reads, and the aspects that record {@code @Timed} and {@code @Counted}
- * methods.
+ * The meter registry the application records into: a composite of a cumulative registry, which the
+ * actuator's {@code /metrics} endpoint reads, and the registry that publishes to CloudWatch when
+ * {@code aws.emf.enabled} is true. Also a startup log line saying publishing is off when it is not,
+ * and the aspects that record {@code @Timed} and {@code @Counted} methods.
  */
 @Slf4j
 @Configuration
@@ -32,6 +35,17 @@ public class MetricsConfig {
   @Bean
   SimpleMeterRegistry cumulativeMeterRegistry() {
     return new SimpleMeterRegistry();
+  }
+
+  @Bean
+  @Primary
+  CompositeMeterRegistry meterRegistry(
+      SimpleMeterRegistry cumulativeMeterRegistry,
+      ObjectProvider<EmfMeterRegistry> emfMeterRegistry) {
+    CompositeMeterRegistry composite = new CompositeMeterRegistry();
+    composite.add(cumulativeMeterRegistry);
+    emfMeterRegistry.ifAvailable(composite::add);
+    return composite;
   }
 
   @Bean
