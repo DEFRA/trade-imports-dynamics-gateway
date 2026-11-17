@@ -127,6 +127,8 @@ class MetricsConfigTest {
 
   private static final class TimedTarget {
     @Timed("test.timed.operation")
-    void timedOperation() {}
+    String timedOperation() {
+      return "done";
+    }
   }
 }

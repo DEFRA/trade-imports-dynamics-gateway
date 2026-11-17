@@ -29,16 +29,16 @@ public class QueueDepthMetrics {
     register(meterRegistry, "notification-dlq", dlqService::approximateCount);
   }
 
-  private static void register(MeterRegistry meterRegistry, String queue, LongSupplier depth) {
+  private void register(MeterRegistry meterRegistry, String queue, LongSupplier depth) {
     Gauge.builder("sqs.queue.depth", depth, reading -> depthOf(queue, reading))
         .tag("queue", queue)
         .strongReference(true)
         .register(meterRegistry);
   }
 
-  private static double depthOf(String queue, LongSupplier depth) {
+  private double depthOf(String queue, LongSupplier depth) {
     try {
-      return depth.getAsLong();
+      return (double) depth.getAsLong();
     } catch (RuntimeException e) {
       log.warn("Could not read the depth of queue {}", queue, e);
       return Double.NaN;
