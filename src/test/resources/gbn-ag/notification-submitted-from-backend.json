@@ -16,27 +16,6 @@
       "notificationStatusCode" : "SUBMITTED",
       "versionId" : 1,
       "issueDateTime" : "2026-05-21T10:15:00Z",
-      "issuer" : {
-        "identifier" : null,
-        "urlId" : null,
-        "name" : "Animal and Plant Health Agency",
-        "partyRoleCode" : null,
-        "partyTypeCode" : null,
-        "postalAddress" : {
-          "lineOne" : "Woodham Lane",
-          "lineTwo" : null,
-          "cityName" : "Addlestone",
-          "postcodeCode" : "KT15 3NB",
-          "countryId" : "GB",
-          "countryName" : null,
-          "countrySubDivisionName" : null
-        },
-        "definedContact" : [ {
-          "personName" : null,
-          "emailURIUniversalCommunication" : "imports@apha.example.gov.uk",
-          "telephoneUniversalCommunication" : "03000 200301"
-        } ]
-      },
       "firstSignatoryAuthentication" : {
         "includedClause" : [ {
           "identifier" : "PURPOSE",
