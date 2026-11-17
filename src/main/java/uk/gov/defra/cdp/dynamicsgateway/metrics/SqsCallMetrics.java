@@ -1,0 +1,73 @@
+package uk.gov.defra.cdp.dynamicsgateway.metrics;
+
+import java.time.Duration;
+import java.util.Locale;
+import java.util.Set;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.interceptor.Context;
+import software.amazon.awssdk.core.interceptor.ExecutionAttribute;
+import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
+import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
+import software.amazon.awssdk.core.interceptor.SdkExecutionAttribute;
+
+/**
+ * Records every call an SQS client makes, retries included, as one {@code sqs} external call named
+ * after its SQS action in kebab case ({@code ReceiveMessage} as {@code receive-message}), or
+ * {@code other} for an action outside the fixed set, and keeps its outcome for the availability
+ * gauge.
+ */
+@Component
+@RequiredArgsConstructor
+public class SqsCallMetrics implements ExecutionInterceptor {
+
+  private static final ExecutionAttribute<Long> STARTED_AT_NANOS =
+      new ExecutionAttribute<>("sqsCallStartedAtNanos");
+
+  private static final Set<String> OPERATIONS =
+      Set.of(
+          "receive-message",
+          "delete-message",
+          "delete-message-batch",
+          "change-message-visibility",
+          "change-message-visibility-batch",
+          "get-queue-attributes",
+          "get-queue-url",
+          "start-message-move-task",
+          "purge-queue");
+
+  private final ExternalCallRecorder externalCallRecorder;
+  private final LastCallOutcomes lastCallOutcomes;
+
+  @Override
+  public void beforeExecution(Context.BeforeExecution context, ExecutionAttributes attributes) {
+    attributes.putAttribute(STARTED_AT_NANOS, System.nanoTime());
+  }
+
+  @Override
+  public void afterExecution(Context.AfterExecution context, ExecutionAttributes attributes) {
+    externalCallRecorder.recordSuccess(ExternalCall.SQS, operationOf(attributes), elapsed(attributes));
+    lastCallOutcomes.recordSuccess(ExternalCall.SQS);
+  }
+
+  @Override
+  public void onExecutionFailure(Context.FailedExecution context, ExecutionAttributes attributes) {
+    externalCallRecorder.recordFailure(
+        ExternalCall.SQS, operationOf(attributes), elapsed(attributes), context.exception());
+    lastCallOutcomes.recordFailure(ExternalCall.SQS);
+  }
+
+  static String operationOf(ExecutionAttributes attributes) {
+    String action = attributes.getAttribute(SdkExecutionAttribute.OPERATION_NAME);
+    if (action == null) {
+      return "other";
+    }
+    String operation = action.replaceAll("([a-z])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
+    return OPERATIONS.contains(operation) ? operation : "other";
+  }
+
+  private static Duration elapsed(ExecutionAttributes attributes) {
+    Long startedAt = attributes.getAttribute(STARTED_AT_NANOS);
+    return startedAt == null ? Duration.ZERO : Duration.ofNanos(System.nanoTime() - startedAt);
+  }
+}

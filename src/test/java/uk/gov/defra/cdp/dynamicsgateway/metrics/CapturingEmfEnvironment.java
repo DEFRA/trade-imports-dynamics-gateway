@@ -7,30 +7,26 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import software.amazon.cloudwatchlogs.emf.environment.Environment;
+import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
 import software.amazon.cloudwatchlogs.emf.model.MetricsContext;
 import software.amazon.cloudwatchlogs.emf.sinks.ISink;
 
-/**
- * A test-only EMF environment whose sink keeps every document it is given, or fails on demand.
- */
 public class CapturingEmfEnvironment implements Environment {
 
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private final List<String> serialised = new ArrayList<>();
-  private final boolean failing;
 
-  public CapturingEmfEnvironment() {
-    this(false);
+  public MetricsLogger metricsLogger() {
+    return new MetricsLogger(this);
   }
 
-  public CapturingEmfEnvironment(boolean failing) {
-    this.failing = failing;
-  }
-
-  /** Returns every document the sink has accepted, parsed. */
   public List<JsonNode> documents() {
     return serialised.stream().map(CapturingEmfEnvironment::parse).toList();
+  }
+
+  public List<JsonNode> documentsFor(String metricName) {
+    return documents().stream().filter(document -> document.has(metricName)).toList();
   }
 
   private static JsonNode parse(String document) {
@@ -63,7 +59,7 @@ public class CapturingEmfEnvironment implements Environment {
 
   @Override
   public void configureContext(MetricsContext context) {
-    // Nothing to add: the default dimensions are not wanted in a captured document.
+    // Adds no environment properties.
   }
 
   @Override
@@ -71,9 +67,6 @@ public class CapturingEmfEnvironment implements Environment {
     return new ISink() {
       @Override
       public void accept(MetricsContext context) {
-        if (failing) {
-          throw new IllegalStateException("sink unavailable");
-        }
         try {
           serialised.addAll(context.serialize());
         } catch (JsonProcessingException e) {

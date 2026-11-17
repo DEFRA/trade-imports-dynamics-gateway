@@ -20,11 +20,11 @@ public class NotificationErrorHandler implements ErrorHandler<Object> {
     private final Counter discardedCounter;
 
     public NotificationErrorHandler(MeterRegistry meterRegistry) {
-        this.retryCounter = Counter.builder("notification.sqs.errors")
+        this.retryCounter = Counter.builder("notification.error")
             .tag("action", "retry")
             .description("Errors left for SQS retry (transient)")
             .register(meterRegistry);
-        this.discardedCounter = Counter.builder("notification.sqs.errors")
+        this.discardedCounter = Counter.builder("notification.error")
             .tag("action", "discarded")
             .description("Errors discarded as non-retryable (message deleted)")
             .register(meterRegistry);

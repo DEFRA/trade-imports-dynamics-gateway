@@ -1,5 +1,6 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
+import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
@@ -20,6 +21,7 @@ public class NotificationQueueService {
     private final NotificationSqsConfig sqsConfig;
 
     /** The source queue's approximate visible and in-flight message counts. */
+    @Timed("service.queueDepth.time")
     public NotificationQueueDepth depth() {
         var attributes = sqsAsyncClient.getQueueAttributes(request -> request
                 .queueUrl(sqsConfig.queueUrl())

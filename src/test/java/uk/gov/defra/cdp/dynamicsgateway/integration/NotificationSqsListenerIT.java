@@ -2,6 +2,7 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +27,7 @@ import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import io.floci.testcontainers.FlociContainer;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -262,6 +264,28 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
+    void sqsToAsb_recordsTheListenerTime_threeServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
+        // Given
+        long baseListenerCalls = listenerCallCount();
+        long baseSends = durationCount(meterRegistry, "azure-service-bus", "send-message");
+        long baseReceives = durationCount(meterRegistry, "sqs", "receive-message");
+        String deduplicationId = UUID.randomUUID().toString();
+        sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
+
+        // When / Then
+        List<ServiceBusReceivedMessage> mine = new ArrayList<>();
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            collectMessagesFor(mine, deduplicationId);
+            assertThat(listenerCallCount()).isEqualTo(baseListenerCalls + 1);
+            assertThat(durationCount(meterRegistry, "azure-service-bus", "send-message"))
+                .isEqualTo(baseSends + 3);
+            assertThat(durationCount(meterRegistry, "sqs", "receive-message")).isGreaterThan(baseReceives);
+            assertThat(availability("azure-service-bus")).isEqualTo(1.0);
+            assertThat(availability("sqs")).isEqualTo(1.0);
+        });
+    }
+
+    @Test
     void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
         // Given — ASB always rejects with a transient error; QueueMessageSender wraps it as retryable.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
@@ -383,10 +407,23 @@ class NotificationSqsListenerIT extends IntegrationBase {
         });
     }
 
+    private long listenerCallCount() {
+        return meterRegistry.find("listener.notification.time").timers().stream()
+            .mapToLong(Timer::count)
+            .sum();
+    }
+
+    private double availability(String dependency) {
+        return meterRegistry.get("external.dependency.available")
+            .tag("dependency", dependency)
+            .gauge()
+            .value();
+    }
+
     private double forwardedCount(String schemaVersion) {
-        return meterRegistry.get("notification.sqs.messages")
+        return meterRegistry.get("notification.message")
             .tag("outcome", "forwarded")
-            .tag("schemaVersion", schemaVersion)
+            .tag("schema.version", schemaVersion)
             .counter()
             .count();
     }

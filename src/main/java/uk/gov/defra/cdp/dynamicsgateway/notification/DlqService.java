@@ -1,6 +1,7 @@
 package uk.gov.defra.cdp.dynamicsgateway.notification;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.annotation.Timed;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -39,9 +40,10 @@ public class DlqService {
      * @param limit the most messages to return
      * @return the messages and the approximate depth sampled before they were received
      */
+    @Timed("service.dlqList.time")
     public DlqListResponse list(int limit) {
         String dlqUrl = sqsConfig.dlqUrl();
-        long approximateCount = approximateCount(dlqUrl);
+        long approximateCount = approximateCount();
         List<Message> collected = new ArrayList<>();
         try {
             while (collected.size() < limit) {
@@ -64,6 +66,7 @@ public class DlqService {
      * Starts an SQS {@code StartMessageMoveTask} that moves every DLQ message back onto its source
      * queue, and returns before the move finishes.
      */
+    @Timed("service.dlqReplayAll.time")
     public void replayAll() {
         sqsAsyncClient.startMessageMoveTask(request -> request.sourceArn(sqsConfig.dlqArn())).join();
         log.info("Started DLQ replay-all move task");
@@ -73,6 +76,7 @@ public class DlqService {
      * Purges the DLQ with SQS {@code PurgeQueue}. Deletion can take up to 60 seconds, so a
      * {@link #list} straight after may still return purged messages.
      */
+    @Timed("service.dlqDeleteAll.time")
     public void deleteAll() {
         sqsAsyncClient.purgeQueue(request -> request.queueUrl(sqsConfig.dlqUrl())).join();
         log.info("Purged DLQ");
@@ -133,9 +137,14 @@ public class DlqService {
         return value == null ? 0 : Integer.parseInt(value);
     }
 
-    private long approximateCount(String dlqUrl) {
+    /**
+     * The DLQ's {@code ApproximateNumberOfMessages}: messages waiting to be received, eventually
+     * consistent. A failed SQS call throws a {@link java.util.concurrent.CompletionException}.
+     */
+    @Timed("service.dlqDepth.time")
+    public long approximateCount() {
         String value = sqsAsyncClient.getQueueAttributes(request -> request
-                .queueUrl(dlqUrl)
+                .queueUrl(sqsConfig.dlqUrl())
                 .attributeNames(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES))
             .join()
             .attributes()

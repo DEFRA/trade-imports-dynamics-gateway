@@ -8,7 +8,7 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <filter class="uk.gov.defra.cdp.dynamicsgateway.filter.HealthCheckFilter"/>
 
-        <encoder class="co.elastic.logging.logback.EcsEncoder">
+        <encoder class="uk.gov.defra.cdp.dynamicsgateway.logging.EcsEventEncoder">
             <serviceVersion>${service.version}</serviceVersion>
             <serviceName>${service.name}</serviceName>
         </encoder>

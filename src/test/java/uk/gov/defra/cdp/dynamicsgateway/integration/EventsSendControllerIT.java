@@ -2,9 +2,9 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.failureTotal;
 
 import com.azure.core.amqp.AmqpRetryOptions;
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
@@ -14,6 +14,7 @@ import com.azure.messaging.servicebus.ServiceBusReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -31,28 +32,31 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
 
 class EventsSendControllerIT extends IntegrationBase {
+
+    private static final String SERVICE_BUS = "azure-service-bus";
+    private static final String SEND_MESSAGE = "send-message";
 
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     @MockitoSpyBean
     private ServiceBusSenderClient senderClient;
 
-    @MockitoSpyBean
-    private ExternalCallMetrics externalCallMetrics;
-
     @AfterEach
     void resetSpy() {
-        Mockito.reset(senderClient, externalCallMetrics);
+        Mockito.reset(senderClient);
     }
 
     @Test
-    void post_shouldReturnAccepted_andMessageLandsInQueue() {
+    void post_shouldReturnAccepted_messageLandsInQueue_andTheSendIsRecordedWithNoFailure() {
         // Given
+        long sendsBefore = durationCount(meterRegistry, SERVICE_BUS, SEND_MESSAGE);
+        double failuresBefore = failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE);
         String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}";
 
         // When
@@ -67,8 +71,8 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
         assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
-        verify(externalCallMetrics).recordCall(
-            eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(false));
+        assertThat(durationCount(meterRegistry, SERVICE_BUS, SEND_MESSAGE)).isEqualTo(sendsBefore + 1);
+        assertThat(failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -96,8 +100,9 @@ class EventsSendControllerIT extends IntegrationBase {
     }
 
     @Test
-    void post_shouldReturnBadGateway_whenSendFails() {
+    void post_shouldReturnBadGateway_andRecordAFailedSend_whenSendFails() {
         // Given
+        double failuresBefore = failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE);
         doThrow(new RuntimeException("ASB send failed")).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
         // When
@@ -107,8 +112,7 @@ class EventsSendControllerIT extends IntegrationBase {
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
         assertThat(response.getBody()).contains("error");
-        verify(externalCallMetrics).recordCall(
-            eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(true));
+        assertThat(failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore + 1);
     }
 
     private ServiceBusReceivedMessage receiveMessage() {

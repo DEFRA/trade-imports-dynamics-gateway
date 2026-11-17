@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 import io.awspring.cloud.sqs.listener.SqsHeaders;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
@@ -21,7 +22,9 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 
 /**
  * Consumes notification events from an SQS FIFO queue and forwards each external event to Azure
- * Service Bus once per PIMS schema version.
+ * Service Bus once per PIMS schema version. Each version's send counts once in
+ * {@code notification.message}, tagged {@code outcome} ({@code forwarded} or {@code failed}) and
+ * {@code schema.version}.
  */
 @Slf4j
 @Component
@@ -32,21 +35,18 @@ public class NotificationSqsListener {
         "uk.gov.defra.imports.notification.NotificationSubmissionAmended"
     );
 
-    private static final String MESSAGES_METRIC = "notification.sqs.messages";
-    private static final String OUTCOME_TAG = "outcome";
-
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
     private final PimsPayloadMapper pimsPayloadMapper;
-    private final Counter forwardedCounterV1;
-    private final List<BestEffortStream> bestEffortStreams;
+    private final SchemaStream requiredStream;
+    private final List<SchemaStream> bestEffortStreams;
 
-    private record BestEffortStream(
+    private record SchemaStream(
         String schemaVersion,
         Function<OutboxEvent, String> mapToPayload,
         String messageIdSuffix,
         Counter forwardedCounter,
-        Counter failureCounter) {}
+        Counter failedCounter) {}
 
     public NotificationSqsListener(
             QueueMessageSender queueMessageSender,
@@ -56,36 +56,33 @@ public class NotificationSqsListener {
         this.queueMessageSender = queueMessageSender;
         this.objectMapper = objectMapper;
         this.pimsPayloadMapper = pimsPayloadMapper;
-        this.forwardedCounterV1 = forwardedCounter(meterRegistry, "0.1.0");
+        this.requiredStream = schemaStream(meterRegistry, "0.1.0", pimsPayloadMapper::mapToV1, "");
         this.bestEffortStreams = List.of(
-            bestEffortStream(meterRegistry, "0.2.0", pimsPayloadMapper::mapToV2, "-v2", "v2-mapping-failed"),
-            bestEffortStream(meterRegistry, "0.3.0", pimsPayloadMapper::mapToV3, "-v3", "v3-mapping-failed"));
+            schemaStream(meterRegistry, "0.2.0", pimsPayloadMapper::mapToV2, "-v2"),
+            schemaStream(meterRegistry, "0.3.0", pimsPayloadMapper::mapToV3, "-v3"));
     }
 
-    private static BestEffortStream bestEffortStream(
+    private static SchemaStream schemaStream(
             MeterRegistry meterRegistry,
             String schemaVersion,
             Function<OutboxEvent, String> mapToPayload,
-            String messageIdSuffix,
-            String failureOutcome) {
-        Counter failureCounter = Counter.builder(MESSAGES_METRIC)
-            .tag(OUTCOME_TAG, failureOutcome)
-            .description("v" + schemaVersion
-                + " PIMS payload failed to map or publish; v0.1.0 delivery is unaffected")
-            .register(meterRegistry);
-        return new BestEffortStream(schemaVersion, mapToPayload, messageIdSuffix,
-            forwardedCounter(meterRegistry, schemaVersion), failureCounter);
+            String messageIdSuffix) {
+        return new SchemaStream(schemaVersion, mapToPayload, messageIdSuffix,
+            messageCounter(meterRegistry, "forwarded", schemaVersion),
+            messageCounter(meterRegistry, "failed", schemaVersion));
     }
 
-    private static Counter forwardedCounter(MeterRegistry meterRegistry, String schemaVersion) {
-        return Counter.builder(MESSAGES_METRIC)
-            .tag(OUTCOME_TAG, "forwarded")
-            .tag("schemaVersion", schemaVersion)
-            .description("Messages successfully forwarded to ASB")
+    private static Counter messageCounter(
+            MeterRegistry meterRegistry, String outcome, String schemaVersion) {
+        return Counter.builder("notification.message")
+            .tag("outcome", outcome)
+            .tag("schema.version", schemaVersion)
+            .description("PIMS payloads per schema version, forwarded to ASB or failed to map or send")
             .register(meterRegistry);
     }
 
     @SqsListener("${aws.sqs.notification.queue-url}")
+    @Timed("listener.notification.time")
     public void receive(
             String body,
             @Header(SqsHeaders.MessageSystemAttributes.SQS_MESSAGE_GROUP_ID_HEADER) String aggregateId,
@@ -121,24 +118,31 @@ public class NotificationSqsListener {
         String asbMessageId = resolveAsbMessageId(parsedBody, deduplicationId);
         OutboxEvent outboxEvent = pimsPayloadMapper.parse(parsedBody);
 
-        String v1Payload = pimsPayloadMapper.mapToV1(outboxEvent);
-        queueMessageSender.publish(v1Payload, aggregateId, asbMessageId);
-        forwardedCounterV1.increment();
+        publish(requiredStream, outboxEvent, aggregateId, asbMessageId);
 
         bestEffortStreams.forEach(stream -> publishBestEffort(stream, outboxEvent, aggregateId, asbMessageId));
     }
 
-    private void publishBestEffort(
-            BestEffortStream stream, OutboxEvent outboxEvent, String aggregateId, String asbMessageId) {
+    private void publish(
+            SchemaStream stream, OutboxEvent outboxEvent, String aggregateId, String asbMessageId) {
         try {
             String payload = stream.mapToPayload().apply(outboxEvent);
             queueMessageSender.publish(payload, aggregateId, asbMessageId + stream.messageIdSuffix());
-            stream.forwardedCounter().increment();
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
+            stream.failedCounter().increment();
+            throw e;
+        }
+        stream.forwardedCounter().increment();
+    }
+
+    private void publishBestEffort(
+            SchemaStream stream, OutboxEvent outboxEvent, String aggregateId, String asbMessageId) {
+        try {
+            publish(stream, outboxEvent, aggregateId, asbMessageId);
+        } catch (RuntimeException e) {
             log.error("Failed to map/publish v{} PIMS payload; v0.1.0 already forwarded, "
                 + "message not retried for this failure: aggregateId={}, asbMessageId={}",
                 stream.schemaVersion(), aggregateId, asbMessageId, e);
-            stream.failureCounter().increment();
         }
     }
 

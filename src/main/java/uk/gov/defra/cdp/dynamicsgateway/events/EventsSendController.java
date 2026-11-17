@@ -23,7 +23,7 @@ public class EventsSendController {
     private final QueueMessageSender queueMessageSender;
     private final ObjectMapper objectMapper;
 
-    @Timed("events.publish")
+    @Timed("controller.publishEvent.time")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void publishEvent(@RequestBody JsonNode body) {
