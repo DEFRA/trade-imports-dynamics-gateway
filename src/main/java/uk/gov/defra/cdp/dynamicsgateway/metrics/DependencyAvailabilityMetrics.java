@@ -13,17 +13,17 @@ import org.springframework.stereotype.Component;
 public class DependencyAvailabilityMetrics {
 
   DependencyAvailabilityMetrics(MeterRegistry meterRegistry, LastCallOutcomes lastCallOutcomes) {
-    for (String dependency : ExternalCall.DEPENDENCIES) {
+    for (Dependency dependency : Dependency.values()) {
       Gauge.builder(
               "external.dependency.available",
               lastCallOutcomes,
               outcomes -> gaugeValueOf(outcomes, dependency))
-          .tag(ExternalCallRecorder.DEPENDENCY_TAG, dependency)
+          .tag(ExternalCallRecorder.DEPENDENCY_TAG, dependency.tagValue())
           .register(meterRegistry);
     }
   }
 
-  private static double gaugeValueOf(LastCallOutcomes outcomes, String dependency) {
+  private static double gaugeValueOf(LastCallOutcomes outcomes, Dependency dependency) {
     return outcomes
         .lastCallSucceeded(dependency)
         .map(succeeded -> succeeded ? 1.0 : 0.0)

@@ -1,10 +1,9 @@
 package uk.gov.defra.cdp.dynamicsgateway.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.CapturedLogs.loggedBy;
 
-import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import java.net.ProxySelector;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -12,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ProxyConfigTest {
@@ -93,15 +91,6 @@ class ProxyConfigTest {
     }
 
     private List<ILoggingEvent> logEventsWhileConfiguringProxy() {
-        Logger logger = (Logger) LoggerFactory.getLogger(ProxyConfig.class);
-        ListAppender<ILoggingEvent> appender = new ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            proxyConfig.configureProxy();
-        } finally {
-            logger.detachAppender(appender);
-        }
-        return appender.list;
+        return loggedBy(ProxyConfig.class, proxyConfig::configureProxy);
     }
 }

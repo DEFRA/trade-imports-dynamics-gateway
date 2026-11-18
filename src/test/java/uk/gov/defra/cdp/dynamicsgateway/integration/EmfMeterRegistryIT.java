@@ -18,17 +18,12 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.EmfMeterRegistry;
@@ -56,13 +51,8 @@ class EmfMeterRegistryIT extends IntegrationBase {
     doNothing().when(senderClient).sendMessage(any(ServiceBusMessage.class));
   }
 
-  @AfterEach
-  void resetSpy() {
-    Mockito.reset(senderClient);
-  }
-
   @Test
-  void everyMeterIsRecordedInTheEmfAndTheCumulativeRegistries() {
+  void thePrimaryRegistryIsACompositeOfTheEmfAndTheCumulativeRegistries() {
     assertThat(meterRegistry)
         .isInstanceOfSatisfying(
             CompositeMeterRegistry.class,
@@ -92,8 +82,8 @@ class EmfMeterRegistryIT extends IntegrationBase {
   }
 
   @Test
-  void theMetersAPublishedEventRecordsAndEveryGatewayMeterAreLetThroughTheAllowlist() {
-    publishEvent();
+  void aPublishedEventsMetersAndTheGatewayGaugesReachTheEmfRegistry() {
+    postEvent("emf-registry-session");
 
     for (String name :
         List.of(
@@ -109,18 +99,20 @@ class EmfMeterRegistryIT extends IntegrationBase {
   }
 
   @Test
-  void theRegistryPublishesARecordedSendOnItsOwnSchedule() throws Exception {
+  void theRegistryPublishesARecordedSendOnItsOwnSchedule() {
+    JsonNode document;
     CapturedConsole console = captureSystemOut();
     try (console) {
-      publishEvent();
+      postEvent("emf-registry-session");
 
-      await()
-          .atMost(Duration.ofSeconds(10))
-          .pollInterval(Duration.ofSeconds(1))
-          .until(() -> emfDocumentFor("external.call.duration", console).isPresent());
+      document =
+          await()
+              .atMost(Duration.ofSeconds(10))
+              .pollInterval(Duration.ofSeconds(1))
+              .until(() -> serviceBusSendDocument(console), Optional::isPresent)
+              .orElseThrow();
     }
 
-    JsonNode document = emfDocumentFor("external.call.duration", console).orElseThrow();
     assertThat(namespaceOf(document)).isEqualTo("trade-imports-dynamics-gateway");
     assertThat(document.path("dependency").asText()).isEqualTo("azure-service-bus");
   }
@@ -143,20 +135,11 @@ class EmfMeterRegistryIT extends IntegrationBase {
     throw new IllegalStateException("No COUNT measurement in " + body);
   }
 
-  private void publishEvent() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    restTemplate.postForEntity(
-        "/events", new HttpEntity<>("{\"aggregateId\":\"emf-registry-session\"}", headers), Void.class);
-  }
-
-  private static Optional<JsonNode> emfDocumentFor(String metricName, CapturedConsole console)
-      throws IOException {
-    for (String line : console.text().split("\n")) {
-      if (line.contains("\"_aws\"") && line.contains("\"" + metricName + "\"")) {
-        return Optional.of(JSON.readTree(line));
-      }
-    }
-    return Optional.empty();
+  private static Optional<JsonNode> serviceBusSendDocument(CapturedConsole console) {
+    return console.firstJsonLine(
+        line ->
+            line.has("_aws")
+                && line.has("external.call.duration")
+                && "azure-service-bus".equals(line.path("dependency").asText()));
   }
 }

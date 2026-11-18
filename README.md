@@ -133,6 +133,8 @@ JSON is snake_case.
 It is open (no auth), read-only and eventually consistent: SQS `GetQueueAttributes` counts can lag
 and drift between calls.
 
+### Observability
+
 The metrics the gateway publishes to CloudWatch, the line it logs for each Service Bus and SQS call,
 and how to follow a notification across services are in [docs/observability.md](docs/observability.md).
 

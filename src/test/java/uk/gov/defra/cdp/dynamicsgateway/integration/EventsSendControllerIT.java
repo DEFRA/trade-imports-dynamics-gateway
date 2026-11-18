@@ -3,6 +3,8 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.AZURE_SERVICE_BUS;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SEND_MESSAGE;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.failureTotal;
 
@@ -35,9 +37,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 class EventsSendControllerIT extends IntegrationBase {
 
-    private static final String SERVICE_BUS = "azure-service-bus";
-    private static final String SEND_MESSAGE = "send-message";
-
     @Autowired
     private TestRestTemplate restTemplate;
 
@@ -55,8 +54,8 @@ class EventsSendControllerIT extends IntegrationBase {
     @Test
     void post_shouldReturnAccepted_messageLandsInQueue_andTheSendIsRecordedWithNoFailure() {
         // Given
-        long sendsBefore = durationCount(meterRegistry, SERVICE_BUS, SEND_MESSAGE);
-        double failuresBefore = failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE);
+        long sendsBefore = durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
+        double failuresBefore = failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
         String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}";
 
         // When
@@ -71,8 +70,8 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
         assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
-        assertThat(durationCount(meterRegistry, SERVICE_BUS, SEND_MESSAGE)).isEqualTo(sendsBefore + 1);
-        assertThat(failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore);
+        assertThat(durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(sendsBefore + 1);
+        assertThat(failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -102,7 +101,7 @@ class EventsSendControllerIT extends IntegrationBase {
     @Test
     void post_shouldReturnBadGateway_andRecordAFailedSend_whenSendFails() {
         // Given
-        double failuresBefore = failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE);
+        double failuresBefore = failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
         doThrow(new RuntimeException("ASB send failed")).when(senderClient).sendMessage(any(ServiceBusMessage.class));
 
         // When
@@ -112,7 +111,7 @@ class EventsSendControllerIT extends IntegrationBase {
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
         assertThat(response.getBody()).contains("error");
-        assertThat(failureTotal(meterRegistry, SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore + 1);
+        assertThat(failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore + 1);
     }
 
     private ServiceBusReceivedMessage receiveMessage() {

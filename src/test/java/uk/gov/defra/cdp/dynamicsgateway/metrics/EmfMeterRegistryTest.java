@@ -3,8 +3,11 @@ package uk.gov.defra.cdp.dynamicsgateway.metrics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.EmfDocuments.dimensionSetsOf;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.EmfDocuments.namespaceOf;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.CapturedLogs.loggedBy;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.EmfDocuments.unitOf;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
@@ -26,7 +29,7 @@ import org.junit.jupiter.api.Test;
 
 class EmfMeterRegistryTest {
 
-  private static final String NAMESPACE = "trade-imports-address-book";
+  private static final String NAMESPACE = "trade-imports-dynamics-gateway";
   private static final Duration STEP = Duration.ofMinutes(1);
 
   private final MockClock clock = new MockClock();
@@ -38,7 +41,7 @@ class EmfMeterRegistryTest {
   void publish_writesEveryTimerValueInMillisecondsWithItsTagsAsTheOnlyDimensions() {
     Timer timer =
         Timer.builder("external.call.duration")
-            .tags("dependency", "mongodb", "operation", "find")
+            .tags("dependency", "azure-service-bus", "operation", "send-message")
             .register(registry);
     timer.record(Duration.ofMillis(2));
     timer.record(Duration.ofMillis(5));
@@ -51,8 +54,8 @@ class EmfMeterRegistryTest {
     assertThat(dimensionSetsOf(document)).hasSize(1);
     assertThat(dimensionSetsOf(document).getFirst())
         .containsExactlyInAnyOrder("dependency", "operation");
-    assertThat(document.path("dependency").asText()).isEqualTo("mongodb");
-    assertThat(document.path("operation").asText()).isEqualTo("find");
+    assertThat(document.path("dependency").asText()).isEqualTo("azure-service-bus");
+    assertThat(document.path("operation").asText()).isEqualTo("send-message");
     assertThat(valuesOf(document, "external.call.duration")).containsExactly(2.0, 5.0);
   }
 
@@ -70,7 +73,7 @@ class EmfMeterRegistryTest {
   void publish_writesEveryDistributionSummaryValueAsACount_whenItHasNoBaseUnit() {
     DistributionSummary summary =
         DistributionSummary.builder("external.call.failure")
-            .tags("dependency", "mongodb", "operation", "insert")
+            .tags("dependency", "sqs", "operation", "receive-message")
             .register(registry);
     summary.record(0);
     summary.record(1);
@@ -84,23 +87,23 @@ class EmfMeterRegistryTest {
 
   @Test
   void publish_writesACountersCountForTheLastMinute() {
-    Counter counter = Counter.builder("address.change").tag("change", "create").register(registry);
+    Counter counter = Counter.builder("notification.message").tag("outcome", "forwarded").register(registry);
     counter.increment();
     counter.increment();
     clock.add(STEP);
 
     registry.publish();
 
-    JsonNode document = onlyDocumentFor("address.change");
+    JsonNode document = onlyDocumentFor("notification.message");
     assertThat(unitOf(document)).isEqualTo("Count");
-    assertThat(valuesOf(document, "address.change")).containsExactly(2.0);
+    assertThat(valuesOf(document, "notification.message")).containsExactly(2.0);
   }
 
   @Test
   void publish_writesAFiniteGaugeAndSkipsANaNOne() {
     AtomicInteger available = new AtomicInteger(1);
     Gauge.builder("external.dependency.available", available, AtomicInteger::get)
-        .tag("dependency", "mongodb")
+        .tag("dependency", "azure-service-bus")
         .register(registry);
     Gauge.builder("unknown.gauge", () -> Double.NaN).register(registry);
 
@@ -163,10 +166,24 @@ class EmfMeterRegistryTest {
     Timer.builder("service.create.time").register(registry).record(Duration.ofMillis(4));
     clock.add(STEP);
 
-    registry.publish();
+    List<ILoggingEvent> lines = loggedBy(EmfMeterRegistry.class, registry::publish);
 
     assertThat(emf.documentsFor("bad.dimension")).isEmpty();
     assertThat(emf.documentsFor("service.create.time")).hasSize(1);
+    assertThat(lines).singleElement().satisfies(line -> {
+      assertThat(line.getLevel()).isEqualTo(Level.WARN);
+      assertThat(line.getFormattedMessage()).isEqualTo("Could not publish meter bad.dimension");
+      assertThat(line.getThrowableProxy()).isNotNull();
+    });
+  }
+
+  @Test
+  void publish_writesADistributionSummaryWithNoUnit_whenItsBaseUnitIsNotBytes() {
+    DistributionSummary.builder("send.wait").baseUnit("seconds").register(registry).record(3);
+
+    registry.publish();
+
+    assertThat(unitOf(onlyDocumentFor("send.wait"))).isEqualTo("None");
   }
 
   @Test

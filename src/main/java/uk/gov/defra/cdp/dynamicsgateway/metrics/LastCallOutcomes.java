@@ -13,13 +13,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class LastCallOutcomes {
 
-  private final Map<String, Boolean> succeededByDependency = new ConcurrentHashMap<>();
+  private final Map<Dependency, Boolean> succeededByDependency = new ConcurrentHashMap<>();
 
-  public void recordSuccess(String dependency) {
+  public void recordSuccess(Dependency dependency) {
     succeededByDependency.put(dependency, true);
   }
 
-  public void recordFailure(String dependency) {
+  public void recordFailure(Dependency dependency) {
     succeededByDependency.put(dependency, false);
   }
 
@@ -29,7 +29,7 @@ public class LastCallOutcomes {
    * @param dependency the system called
    * @return whether it succeeded, or empty when the dependency has not been called since start-up
    */
-  public Optional<Boolean> lastCallSucceeded(String dependency) {
+  public Optional<Boolean> lastCallSucceeded(Dependency dependency) {
     return Optional.ofNullable(succeededByDependency.get(dependency));
   }
 }

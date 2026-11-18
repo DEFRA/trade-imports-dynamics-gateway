@@ -8,28 +8,32 @@ import org.junit.jupiter.params.provider.CsvSource;
 import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.interceptor.SdkExecutionAttribute;
 
-class SqsCallMetricsTest {
+class SqsCallRecorderTest {
 
   @ParameterizedTest(name = "{0} is {1}")
   @CsvSource({
     "ReceiveMessage, receive-message",
+    "DeleteMessage, delete-message",
     "DeleteMessageBatch, delete-message-batch",
+    "ChangeMessageVisibility, change-message-visibility",
     "ChangeMessageVisibilityBatch, change-message-visibility-batch",
     "GetQueueAttributes, get-queue-attributes",
+    "GetQueueUrl, get-queue-url",
     "StartMessageMoveTask, start-message-move-task",
     "PurgeQueue, purge-queue",
     "CreateQueue, other",
     "SendMessage, other"
   })
-  void anSqsActionIsNamedInKebabCase_orOtherOutsideTheFixedSet(String action, String operation) {
+  void operationOf_shouldBeTheActionInKebabCase_orOtherOutsideTheFixedSet(
+      String action, String operation) {
     ExecutionAttributes attributes = new ExecutionAttributes();
     attributes.putAttribute(SdkExecutionAttribute.OPERATION_NAME, action);
 
-    assertThat(SqsCallMetrics.operationOf(attributes)).isEqualTo(operation);
+    assertThat(SqsCallRecorder.operationOf(attributes)).isEqualTo(operation);
   }
 
   @Test
-  void aCallWithNoActionIsOther() {
-    assertThat(SqsCallMetrics.operationOf(new ExecutionAttributes())).isEqualTo("other");
+  void operationOf_shouldBeOther_whenTheCallHasNoAction() {
+    assertThat(SqsCallRecorder.operationOf(new ExecutionAttributes())).isEqualTo("other");
   }
 }

@@ -5,55 +5,113 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
-import lombok.RequiredArgsConstructor;
+import java.util.function.LongSupplier;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.event.Level;
 import org.slf4j.spi.LoggingEventBuilder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * Records each call to a dependency as the timer {@code external.call.duration} and the
  * distribution summary {@code external.call.failure} (1 for a failure, 0 for a success), both
- * tagged {@code dependency} and {@code operation}, and logs it with the ECS {@code event.*} fields.
- * A failure's line also carries the ECS {@code error.type} and {@code error.message} fields.
+ * tagged {@code dependency} and {@code operation}, logs it with the ECS {@code event.*} fields, and
+ * records its outcome as the dependency's last call outcome. A failure's line also carries the ECS
+ * {@code error.type} and {@code error.message} fields.
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ExternalCallRecorder {
 
   static final String DEPENDENCY_TAG = "dependency";
 
   private final MeterRegistry meterRegistry;
+  private final LastCallOutcomes lastCallOutcomes;
+  private final LongSupplier nanoTime;
+
+  @Autowired
+  public ExternalCallRecorder(MeterRegistry meterRegistry, LastCallOutcomes lastCallOutcomes) {
+    this(meterRegistry, lastCallOutcomes, System::nanoTime);
+  }
+
+  /**
+   * Creates a recorder that times calls by the given clock.
+   *
+   * @param nanoTime the current time in nanoseconds, as {@link System#nanoTime()} gives it
+   */
+  public ExternalCallRecorder(
+      MeterRegistry meterRegistry, LastCallOutcomes lastCallOutcomes, LongSupplier nanoTime) {
+    this.meterRegistry = meterRegistry;
+    this.lastCallOutcomes = lastCallOutcomes;
+    this.nanoTime = nanoTime;
+  }
+
+  /**
+   * Runs the call and records it: a success when it returns, a failure when it throws, which is
+   * then rethrown.
+   *
+   * @param call the call made
+   * @param action makes the call
+   */
+  public void measure(ExternalCall call, Runnable action) {
+    long startedAt = callStartedAt();
+    try {
+      action.run();
+    } catch (RuntimeException e) {
+      recordFailure(call, elapsedSince(startedAt), e);
+      throw e;
+    }
+    recordSuccess(call, elapsedSince(startedAt));
+  }
+
+  /**
+   * The time a call starts, for {@link #elapsedSince(long)} once it ends. For a call made where
+   * {@link #measure} cannot wrap it.
+   *
+   * @return the current time in nanoseconds
+   */
+  public long callStartedAt() {
+    return nanoTime.getAsLong();
+  }
+
+  /**
+   * How long a call has taken.
+   *
+   * @param callStartedAt when the call started, from {@link #callStartedAt()}
+   * @return the time since then
+   */
+  public Duration elapsedSince(long callStartedAt) {
+    return Duration.ofNanos(nanoTime.getAsLong() - callStartedAt);
+  }
 
   /**
    * Records a call that succeeded.
    *
-   * @param dependency the system called
-   * @param operation what was asked of it, from a fixed set
+   * @param call the call made
    * @param elapsed how long the call took
    */
-  public void recordSuccess(String dependency, String operation, Duration elapsed) {
-    recordMeters(dependency, operation, elapsed, 0);
-    logCall(Level.INFO, dependency + "/" + operation, "success", elapsed, null);
+  public void recordSuccess(ExternalCall call, Duration elapsed) {
+    recordMeters(call, elapsed, 0);
+    logCall(Level.INFO, call, "success", elapsed, null);
+    lastCallOutcomes.recordSuccess(call.dependency());
   }
 
   /**
    * Records a call that failed.
    *
-   * @param dependency the system called
-   * @param operation what was asked of it, from a fixed set
+   * @param call the call made
    * @param elapsed how long the call took
    * @param cause why it failed
    */
-  public void recordFailure(
-      String dependency, String operation, Duration elapsed, Throwable cause) {
-    recordMeters(dependency, operation, elapsed, 1);
-    logCall(Level.WARN, dependency + "/" + operation, "failure", elapsed, cause);
+  public void recordFailure(ExternalCall call, Duration elapsed, Throwable cause) {
+    recordMeters(call, elapsed, 1);
+    logCall(Level.WARN, call, "failure", elapsed, cause);
+    lastCallOutcomes.recordFailure(call.dependency());
   }
 
-  private void recordMeters(String dependency, String operation, Duration elapsed, int failure) {
-    Tags tags = Tags.of(DEPENDENCY_TAG, dependency, "operation", operation);
+  private void recordMeters(ExternalCall call, Duration elapsed, int failure) {
+    Tags tags =
+        Tags.of(DEPENDENCY_TAG, call.dependency().tagValue(), "operation", call.operation());
     Timer.builder("external.call.duration").tags(tags).register(meterRegistry).record(elapsed);
     DistributionSummary.builder("external.call.failure")
         .tags(tags)
@@ -62,7 +120,8 @@ public class ExternalCallRecorder {
   }
 
   private static void logCall(
-      Level level, String action, String outcome, Duration elapsed, Throwable cause) {
+      Level level, ExternalCall call, String outcome, Duration elapsed, Throwable cause) {
+    String action = call.dependency().tagValue() + "/" + call.operation();
     LoggingEventBuilder line =
         log.atLevel(level)
             .addKeyValue("event.category", "external-call")

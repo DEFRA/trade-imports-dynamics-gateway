@@ -17,14 +17,13 @@ import org.slf4j.event.KeyValuePair;
 public class EcsEventEncoder extends EcsEncoder {
 
   private static final String EVENT_PREFIX = "event.";
-  private static final String ERROR_PREFIX = "error.";
 
   @Override
   protected void addCustomFields(ILoggingEvent event, StringBuilder builder) {
     super.addCustomFields(event, builder);
     appendEventObject(fieldsStartingWith(EVENT_PREFIX, event), builder);
     if (event.getThrowableProxy() == null) {
-      appendFlatFields(fieldsStartingWith(ERROR_PREFIX, event), builder);
+      appendFlatFields(fieldsStartingWith("error.", event), builder);
     }
   }
 

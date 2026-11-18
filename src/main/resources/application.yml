@@ -58,7 +58,6 @@ management:
     env:
       enabled: true
   metrics:
-    enabled: ${METRICS_ENABLED:true}
     enable:
       all: false
       controller: true

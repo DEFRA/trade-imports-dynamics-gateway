@@ -8,7 +8,8 @@ import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
 
 /**
- * Reads the backlog of the notification source queue, so load runs can watch it drain.
+ * Reads the backlog of the notification source queue: its approximate visible and in-flight message
+ * counts.
  *
  * <p>{@code GetQueueAttributes} counts are eventually consistent, so a reading is a snapshot that can
  * drift between calls. A failed SQS call throws a {@link java.util.concurrent.CompletionException}.

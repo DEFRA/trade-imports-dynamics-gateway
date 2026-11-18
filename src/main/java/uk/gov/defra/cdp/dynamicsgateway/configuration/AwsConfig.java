@@ -20,7 +20,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsAsyncClientBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallMetrics;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallRecorder;
 import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationErrorHandler;
 
 @Slf4j
@@ -39,14 +39,14 @@ public class AwsConfig {
     }
 
     @Bean
-    public SqsAsyncClient sqsAsyncClient(SqsCallMetrics sqsCallMetrics) {
+    public SqsAsyncClient sqsAsyncClient(SqsCallRecorder sqsCallRecorder) {
         SqsAsyncClientBuilder builder = SqsAsyncClient.builder()
             .region(Region.of(region))
             .credentialsProvider(resolveCredentialsProvider())
             .overrideConfiguration(c -> c
                 .retryStrategy(RetryMode.ADAPTIVE_V2)
                 .apiCallTimeout(Duration.ofSeconds(30))
-                .addExecutionInterceptor(sqsCallMetrics));
+                .addExecutionInterceptor(sqsCallRecorder));
         if (hasEndpointOverride()) {
             log.info("Using SQS endpoint override: {}", appAwsConfig.endpointOverride());
             builder.endpointOverride(URI.create(appAwsConfig.endpointOverride()));

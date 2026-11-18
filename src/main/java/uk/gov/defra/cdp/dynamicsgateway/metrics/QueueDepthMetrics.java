@@ -11,8 +11,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationQueueService;
 /**
  * Registers the gauge {@code sqs.queue.depth}, tagged {@code queue}: the approximate number of
  * messages waiting on the notification queue ({@code notification}) and on its dead-letter queue
- * ({@code notification-dlq}). Each reading asks SQS, so the queue is read once per publish; a
- * failed read is NaN.
+ * ({@code notification-dlq}). Each reading asks SQS; a failed read is NaN.
  */
 @Slf4j
 @Component
@@ -29,16 +28,16 @@ public class QueueDepthMetrics {
     register(meterRegistry, "notification-dlq", dlqService::approximateCount);
   }
 
-  private void register(MeterRegistry meterRegistry, String queue, LongSupplier depth) {
-    Gauge.builder("sqs.queue.depth", depth, reading -> depthOf(queue, reading))
+  private void register(MeterRegistry meterRegistry, String queue, LongSupplier readDepth) {
+    Gauge.builder("sqs.queue.depth", readDepth, readQueueDepth -> depthOf(queue, readQueueDepth))
         .tag("queue", queue)
         .strongReference(true)
         .register(meterRegistry);
   }
 
-  private double depthOf(String queue, LongSupplier depth) {
+  private double depthOf(String queue, LongSupplier readDepth) {
     try {
-      return (double) depth.getAsLong();
+      return (double) readDepth.getAsLong();
     } catch (RuntimeException e) {
       log.warn("Could not read the depth of queue {}", queue, e);
       return Double.NaN;

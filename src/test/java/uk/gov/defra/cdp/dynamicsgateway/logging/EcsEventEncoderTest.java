@@ -21,15 +21,15 @@ class EcsEventEncoderTest {
   private static final Logger LOG = LoggerFactory.getLogger(EcsEventEncoderTest.class);
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  private final EcsEventEncoder encoder = new EcsEventEncoder();
-  private final EcsEncoder ecsEncoder = new EcsEncoder();
+  private final EcsEventEncoder eventEncoder = new EcsEventEncoder();
+  private final EcsEncoder plainEcsEncoder = new EcsEncoder();
 
   @BeforeEach
   void startEncoders() {
     var context = (LoggerContext) LoggerFactory.getILoggerFactory();
-    for (EcsEncoder each : new EcsEncoder[] {encoder, ecsEncoder}) {
+    for (EcsEncoder each : new EcsEncoder[] {eventEncoder, plainEcsEncoder}) {
       each.setContext(context);
-      each.setServiceName("trade-imports-address-book");
+      each.setServiceName("trade-imports-dynamics-gateway");
       each.start();
     }
   }
@@ -46,36 +46,36 @@ class EcsEventEncoderTest {
             () ->
                 LOG.atInfo()
                     .addKeyValue("event.category", "external-call")
-                    .addKeyValue("event.action", "mongodb/find")
+                    .addKeyValue("event.action", "azure-service-bus/send-message")
                     .addKeyValue("event.outcome", "success")
                     .addKeyValue("event.duration", 2_882_625L)
-                    .log("External call mongodb/find success in 2 ms"));
+                    .log("External call azure-service-bus/send-message success in 2 ms"));
 
     JsonNode line = encode(event);
 
     JsonNode eventObject = line.path("event");
     assertThat(eventObject.isObject()).isTrue();
     assertThat(eventObject.path("category").asText()).isEqualTo("external-call");
-    assertThat(eventObject.path("action").asText()).isEqualTo("mongodb/find");
+    assertThat(eventObject.path("action").asText()).isEqualTo("azure-service-bus/send-message");
     assertThat(eventObject.path("outcome").asText()).isEqualTo("success");
     assertThat(eventObject.path("duration").isIntegralNumber()).isTrue();
     assertThat(eventObject.path("duration").asLong()).isEqualTo(2_882_625L);
   }
 
   @Test
-  void encode_keepsTheErrorFieldsAfterTheEventObject() throws IOException {
+  void encode_writesTheThrowablesErrorFieldsBesideTheEventObject() throws IOException {
     ILoggingEvent event =
         logged(
             () ->
                 LOG.atWarn()
                     .addKeyValue("event.outcome", "failure")
-                    .setCause(new IllegalStateException("mongo unavailable"))
+                    .setCause(new IllegalStateException("The sender is disposed"))
                     .log("External call failed"));
 
     JsonNode line = encode(event);
 
     assertThat(line.path("error.type").asText()).isEqualTo("java.lang.IllegalStateException");
-    assertThat(line.path("error.message").asText()).isEqualTo("mongo unavailable");
+    assertThat(line.path("error.message").asText()).isEqualTo("The sender is disposed");
     assertThat(line.has("error.stack_trace")).isTrue();
     assertThat(line.path("event").path("outcome").asText()).isEqualTo("failure");
   }
@@ -89,13 +89,13 @@ class EcsEventEncoderTest {
                 LOG.atWarn()
                     .addKeyValue("event.outcome", "failure")
                     .addKeyValue("error.type", "java.lang.IllegalStateException")
-                    .addKeyValue("error.message", "mongo unavailable")
+                    .addKeyValue("error.message", "The sender is disposed")
                     .log("External call failed"));
 
     JsonNode line = encode(event);
 
     assertThat(line.path("error.type").asText()).isEqualTo("java.lang.IllegalStateException");
-    assertThat(line.path("error.message").asText()).isEqualTo("mongo unavailable");
+    assertThat(line.path("error.message").asText()).isEqualTo("The sender is disposed");
     assertThat(line.has("error.stack_trace")).isFalse();
     assertThat(line.has("event.outcome")).isFalse();
     assertThat(line.path("event").path("outcome").asText()).isEqualTo("failure");
@@ -112,7 +112,7 @@ class EcsEventEncoderTest {
                     .setCause(new IllegalStateException("from the throwable"))
                     .log("External call failed"));
 
-    String line = new String(encoder.encode(event));
+    String line = new String(eventEncoder.encode(event));
 
     assertThat(line)
         .contains("\"error.type\":\"java.lang.IllegalStateException\"")
@@ -127,7 +127,8 @@ class EcsEventEncoderTest {
     ILoggingEvent event =
         logged(() -> LOG.atInfo().addKeyValue("other.key", "value").log("Started"));
 
-    assertThat(new String(encoder.encode(event))).isEqualTo(new String(ecsEncoder.encode(event)));
+    assertThat(new String(eventEncoder.encode(event)))
+        .isEqualTo(new String(plainEcsEncoder.encode(event)));
   }
 
   @Test
@@ -171,6 +172,6 @@ class EcsEventEncoderTest {
   }
 
   private JsonNode encode(ILoggingEvent event) throws IOException {
-    return JSON.readTree(encoder.encode(event));
+    return JSON.readTree(eventEncoder.encode(event));
   }
 }

@@ -3,7 +3,6 @@ package uk.gov.defra.cdp.dynamicsgateway.events;
 import com.azure.messaging.servicebus.ServiceBusException;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
-import java.time.Duration;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +11,6 @@ import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallRecorder;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.LastCallOutcomes;
 
 /**
  * Forwards events to Azure Service Bus (ASB), classifying send failures as
@@ -30,7 +28,6 @@ public class QueueMessageSender {
 
     private final ServiceBusSenderClient senderClient;
     private final ExternalCallRecorder externalCallRecorder;
-    private final LastCallOutcomes lastCallOutcomes;
 
     /**
      * Send a pre-serialised message to ASB on the given session, generating a fresh ASB messageId.
@@ -69,7 +66,8 @@ public class QueueMessageSender {
             .setSessionId(sessionId);
 
         try {
-            sendAndRecord(message);
+            externalCallRecorder.measure(
+                ExternalCall.SERVICE_BUS_SEND_MESSAGE, () -> senderClient.sendMessage(message));
             log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", resolvedMessageId, sessionId);
         } catch (ServiceBusException e) {
             classifyAndThrow(e, resolvedMessageId, sessionId);
@@ -82,25 +80,6 @@ public class QueueMessageSender {
                 resolvedMessageId, sessionId, e);
             throw new SqsNonRetryableException("Unexpected ASB send failure", e);
         }
-    }
-
-    private void sendAndRecord(ServiceBusMessage message) {
-        String dependency = ExternalCall.SERVICE_BUS_SEND_MESSAGE.dependency();
-        String operation = ExternalCall.SERVICE_BUS_SEND_MESSAGE.operation();
-        long startedAt = System.nanoTime();
-        try {
-            senderClient.sendMessage(message);
-        } catch (RuntimeException e) {
-            externalCallRecorder.recordFailure(dependency, operation, elapsedSince(startedAt), e);
-            lastCallOutcomes.recordFailure(dependency);
-            throw e;
-        }
-        externalCallRecorder.recordSuccess(dependency, operation, elapsedSince(startedAt));
-        lastCallOutcomes.recordSuccess(dependency);
-    }
-
-    private static Duration elapsedSince(long startedAtNanos) {
-        return Duration.ofNanos(System.nanoTime() - startedAtNanos);
     }
 
     private void classifyAndThrow(ServiceBusException e, String messageId, String sessionId) {

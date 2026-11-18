@@ -1,6 +1,7 @@
 package uk.gov.defra.cdp.dynamicsgateway.metrics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.availability;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -16,31 +17,23 @@ class DependencyAvailabilityMetricsTest {
   }
 
   @Test
-  void eachDependencyIsUnknownUntilItIsCalled() {
-    assertThat(availability("azure-service-bus")).isNaN();
-    assertThat(availability("sqs")).isNaN();
+  void availabilityGauge_shouldBeNaNForEachDependency_whenItHasNotBeenCalled() {
+    assertThat(availability(meterRegistry, "azure-service-bus")).isNaN();
+    assertThat(availability(meterRegistry, "sqs")).isNaN();
   }
 
   @Test
-  void aDependencyIsAvailableAfterASuccessAndUnavailableAfterAFailure_independentlyOfTheOther() {
-    lastCallOutcomes.recordSuccess("azure-service-bus");
-    lastCallOutcomes.recordFailure("sqs");
+  void availabilityGauge_shouldBeOneAfterASuccessAndZeroAfterAFailure_independentlyPerDependency() {
+    lastCallOutcomes.recordSuccess(Dependency.AZURE_SERVICE_BUS);
+    lastCallOutcomes.recordFailure(Dependency.SQS);
 
-    assertThat(availability("azure-service-bus")).isEqualTo(1.0);
-    assertThat(availability("sqs")).isZero();
+    assertThat(availability(meterRegistry, "azure-service-bus")).isEqualTo(1.0);
+    assertThat(availability(meterRegistry, "sqs")).isZero();
 
-    lastCallOutcomes.recordFailure("azure-service-bus");
-    lastCallOutcomes.recordSuccess("sqs");
+    lastCallOutcomes.recordFailure(Dependency.AZURE_SERVICE_BUS);
+    lastCallOutcomes.recordSuccess(Dependency.SQS);
 
-    assertThat(availability("azure-service-bus")).isZero();
-    assertThat(availability("sqs")).isEqualTo(1.0);
-  }
-
-  private double availability(String dependency) {
-    return meterRegistry
-        .get("external.dependency.available")
-        .tag("dependency", dependency)
-        .gauge()
-        .value();
+    assertThat(availability(meterRegistry, "azure-service-bus")).isZero();
+    assertThat(availability(meterRegistry, "sqs")).isEqualTo(1.0);
   }
 }

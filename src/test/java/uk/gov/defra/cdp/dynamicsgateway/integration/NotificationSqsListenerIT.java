@@ -2,6 +2,9 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.AZURE_SERVICE_BUS;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SEND_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.availability;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -267,7 +270,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     void sqsToAsb_recordsTheListenerTime_threeServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
         // Given
         long baseListenerCalls = listenerCallCount();
-        long baseSends = durationCount(meterRegistry, "azure-service-bus", "send-message");
+        long baseSends = durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
         long baseReceives = durationCount(meterRegistry, "sqs", "receive-message");
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
@@ -277,11 +280,11 @@ class NotificationSqsListenerIT extends IntegrationBase {
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(listenerCallCount()).isEqualTo(baseListenerCalls + 1);
-            assertThat(durationCount(meterRegistry, "azure-service-bus", "send-message"))
+            assertThat(durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE))
                 .isEqualTo(baseSends + 3);
             assertThat(durationCount(meterRegistry, "sqs", "receive-message")).isGreaterThan(baseReceives);
-            assertThat(availability("azure-service-bus")).isEqualTo(1.0);
-            assertThat(availability("sqs")).isEqualTo(1.0);
+            assertThat(availability(meterRegistry, AZURE_SERVICE_BUS)).isEqualTo(1.0);
+            assertThat(availability(meterRegistry, "sqs")).isEqualTo(1.0);
         });
     }
 
@@ -411,13 +414,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         return meterRegistry.find("listener.notification.time").timers().stream()
             .mapToLong(Timer::count)
             .sum();
-    }
-
-    private double availability(String dependency) {
-        return meterRegistry.get("external.dependency.available")
-            .tag("dependency", dependency)
-            .gauge()
-            .value();
     }
 
     private double forwardedCount(String schemaVersion) {

@@ -35,20 +35,15 @@ import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.Dependency;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallRecorder;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.LastCallOutcomes;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.QueueDepthMetrics;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallMetrics;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallRecorder;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqListResponse;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqService;
 import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationQueueService;
 
-/**
- * Exercises {@link DlqService}, the SQS call metrics and the queue depth gauge against a real SQS
- * (Floci) so the DLQ list/peek plumbing — FIFO receive semantics, receipt-handle lifecycle, system
- * attributes, {@code GetQueueAttributes} counting and the early visibility-release — runs against the
- * actual API rather than mocks. Standalone (no Spring context, no ASB emulator).
- */
 @Slf4j
 class DlqServiceIT {
 
@@ -116,9 +111,7 @@ class DlqServiceIT {
         await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0 && totalInQueue(sourceUrl) == 0);
         // DlqService never reads the source-queue URL (list uses dlqUrl, replayAll uses dlqArn), so a
         // placeholder satisfies @NotBlank; the real source queue is driven directly via seedDlqViaRedrive.
-        NotificationSqsConfig config = new NotificationSqsConfig(
-            "http://localhost/unused-source-queue", dlqUrl, dlqArn, 20, 10);
-        dlqService = new DlqService(asyncSqsClient, config, objectMapper);
+        dlqService = dlqServiceFor(dlqUrl);
     }
 
     @Test
@@ -221,7 +214,7 @@ class DlqServiceIT {
         assertThat(durationCount(METER_REGISTRY, "sqs", "get-queue-attributes"))
             .isEqualTo(attributeReadsBefore + 1);
         assertThat(durationCount(METER_REGISTRY, "sqs", "receive-message")).isGreaterThan(receivesBefore);
-        assertThat(LAST_CALL_OUTCOMES.lastCallSucceeded("sqs")).contains(true);
+        assertThat(LAST_CALL_OUTCOMES.lastCallSucceeded(Dependency.SQS)).contains(true);
     }
 
     @Test
@@ -233,21 +226,23 @@ class DlqServiceIT {
 
         assertThat(failureTotal(METER_REGISTRY, "sqs", "get-queue-attributes"))
             .isEqualTo(failuresBefore + 1);
-        assertThat(LAST_CALL_OUTCOMES.lastCallSucceeded("sqs")).contains(false);
+        assertThat(LAST_CALL_OUTCOMES.lastCallSucceeded(Dependency.SQS)).contains(false);
     }
 
     @Test
     void queueDepthGauge_readsTheMessagesWaitingOnEachQueue() {
         seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
         seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
-        await().atMost(Duration.ofSeconds(10)).until(() -> totalInQueue(dlqUrl) == 2);
+        sendTo(sourceUrl, "{\"key\":\"c\"}", GROUP_A, "dedup-c");
+        await().atMost(Duration.ofSeconds(10))
+            .until(() -> totalInQueue(dlqUrl) == 2 && totalInQueue(sourceUrl) == 1);
         MeterRegistry registry = new SimpleMeterRegistry();
         NotificationSqsConfig config = new NotificationSqsConfig(sourceUrl, dlqUrl, dlqArn, 20, 10);
         new QueueDepthMetrics(
             registry, new NotificationQueueService(asyncSqsClient, config), dlqService);
 
         assertThat(queueDepth(registry, "notification-dlq")).isEqualTo(2.0);
-        assertThat(queueDepth(registry, "notification")).isZero();
+        assertThat(queueDepth(registry, "notification")).isEqualTo(1.0);
     }
 
     @Test
@@ -314,9 +309,13 @@ class DlqServiceIT {
     }
 
     private void seedDlq(String body, String group, String dedupId) {
+        sendTo(dlqUrl, body, group, dedupId);
+    }
+
+    private void sendTo(String queueUrl, String body, String group, String dedupId) {
         try (SqsClient sqs = localSqsClient()) {
             sqs.sendMessage(SendMessageRequest.builder()
-                .queueUrl(dlqUrl)
+                .queueUrl(queueUrl)
                 .messageBody(body)
                 .messageGroupId(group)
                 .messageDeduplicationId(dedupId)
@@ -379,14 +378,14 @@ class DlqServiceIT {
     }
 
     private static SqsAsyncClient buildAsyncSqsClient() {
-        SqsCallMetrics sqsCallMetrics =
-            new SqsCallMetrics(new ExternalCallRecorder(METER_REGISTRY), LAST_CALL_OUTCOMES);
+        SqsCallRecorder sqsCallRecorder =
+            new SqsCallRecorder(new ExternalCallRecorder(METER_REGISTRY, LAST_CALL_OUTCOMES));
         return SqsAsyncClient.builder()
             .endpointOverride(URI.create(FLOCI.getEndpoint()))
             .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(FLOCI.getAccessKey(), FLOCI.getSecretKey())))
-            .overrideConfiguration(c -> c.addExecutionInterceptor(sqsCallMetrics))
+            .overrideConfiguration(c -> c.addExecutionInterceptor(sqsCallRecorder))
             .build();
     }
 }

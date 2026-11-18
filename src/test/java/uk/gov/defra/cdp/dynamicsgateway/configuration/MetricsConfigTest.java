@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.CapturedLogs.loggedBy;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import io.micrometer.core.annotation.Counted;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.aop.CountedAspect;
 import io.micrometer.core.aop.TimedAspect;
@@ -16,10 +17,7 @@ import java.lang.reflect.Method;
 import java.util.List;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.actuate.metrics.MetricsEndpoint;
@@ -29,7 +27,6 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.convert.ConversionService;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.EmfMeterRegistry;
 
-@ExtendWith(MockitoExtension.class)
 class MetricsConfigTest {
 
   private final ApplicationContextRunner contextRunner =
@@ -40,15 +37,6 @@ class MetricsConfigTest {
               ConversionService.class,
               ApplicationConversionService::getSharedInstance)
           .withPropertyValues("aws.emf.namespace=test-namespace", "aws.emf.step=1m");
-
-  private MetricsConfig metricsConfig;
-  private MeterRegistry meterRegistry;
-
-  @BeforeEach
-  void setUp() {
-    metricsConfig = new MetricsConfig();
-    meterRegistry = new SimpleMeterRegistry();
-  }
 
   @Test
   void emfMeterRegistry_isCreatedWhenEmfIsEnabled() {
@@ -69,7 +57,7 @@ class MetricsConfigTest {
   }
 
   @Test
-  void meterRegistry_recordsInTheCumulativeAndEmfRegistries_whenEmfIsEnabled() {
+  void meterRegistry_isACompositeOfTheCumulativeAndEmfRegistries_whenEmfIsEnabled() {
     contextRunner
         .withPropertyValues("aws.emf.enabled=true")
         .run(
@@ -85,7 +73,7 @@ class MetricsConfigTest {
   }
 
   @Test
-  void meterRegistry_recordsInTheCumulativeRegistryOnly_whenEmfIsDisabled() {
+  void meterRegistry_isACompositeOfTheCumulativeRegistryOnly_whenEmfIsDisabled() {
     contextRunner
         .withPropertyValues("aws.emf.enabled=false")
         .run(
@@ -138,29 +126,32 @@ class MetricsConfigTest {
 
   @Test
   void timedAspect_recordsTimedMetricWhenIntercepted() throws Throwable {
-    // Given
-    TimedAspect timedAspect = metricsConfig.timedAspect(meterRegistry);
-    ProceedingJoinPoint joinPoint = mock(ProceedingJoinPoint.class);
-    MethodSignature signature = mock(MethodSignature.class);
-    Method method = TimedTarget.class.getDeclaredMethod("timedOperation");
-    when(joinPoint.getSignature()).thenReturn(signature);
-    when(signature.getMethod()).thenReturn(method);
-    when(joinPoint.proceed()).thenReturn("done");
+    MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    TimedAspect timedAspect = new MetricsConfig().timedAspect(meterRegistry);
 
-    // When
-    timedAspect.timedMethod(joinPoint);
+    timedAspect.timedMethod(joinPointFor(AnnotatedTarget.class.getDeclaredMethod("timedOperation")));
 
-    // Then
     assertThat(meterRegistry.find("test.timed.operation").timer()).isNotNull();
   }
 
   @Test
-  void countedAspect_isCreatedWithTheSuppliedRegistry() {
-    // When
-    CountedAspect result = metricsConfig.countedAspect(meterRegistry);
+  void countedAspect_countsAnInterceptedCallInTheSuppliedRegistry() throws Throwable {
+    MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    CountedAspect countedAspect = new MetricsConfig().countedAspect(meterRegistry);
+    Method method = AnnotatedTarget.class.getDeclaredMethod("countedOperation");
 
-    // Then
-    assertThat(result).isNotNull();
+    countedAspect.interceptAndRecord(joinPointFor(method), method.getAnnotation(Counted.class));
+
+    assertThat(meterRegistry.get("test.counted.operation").counter().count()).isEqualTo(1.0);
+  }
+
+  private static ProceedingJoinPoint joinPointFor(Method method) throws Throwable {
+    ProceedingJoinPoint joinPoint = mock(ProceedingJoinPoint.class);
+    MethodSignature signature = mock(MethodSignature.class);
+    when(joinPoint.getSignature()).thenReturn(signature);
+    when(signature.getMethod()).thenReturn(method);
+    when(joinPoint.proceed()).thenReturn("done");
+    return joinPoint;
   }
 
   private static void runWithNoArguments(ApplicationRunner runner) {
@@ -171,9 +162,14 @@ class MetricsConfigTest {
     }
   }
 
-  private static final class TimedTarget {
+  private static final class AnnotatedTarget {
     @Timed("test.timed.operation")
     String timedOperation() {
+      return "done";
+    }
+
+    @Counted("test.counted.operation")
+    String countedOperation() {
       return "done";
     }
   }

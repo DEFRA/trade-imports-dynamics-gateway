@@ -8,12 +8,12 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallRecorder;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.LastCallOutcomes;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallMetrics;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallRecorder;
 
 class AwsConfigTest {
 
-    private static final SqsCallMetrics SQS_CALL_METRICS = new SqsCallMetrics(
-        new ExternalCallRecorder(new SimpleMeterRegistry()), new LastCallOutcomes());
+    private static final SqsCallRecorder SQS_CALL_RECORDER = new SqsCallRecorder(
+        new ExternalCallRecorder(new SimpleMeterRegistry(), new LastCallOutcomes()));
     private static final String REGION = "eu-west-2";
     private static final String ENDPOINT = "http://localhost:4566";
     private static final String ACCESS_KEY = "test-access-key";
@@ -24,7 +24,7 @@ class AwsConfigTest {
         AppAwsConfig appAwsConfig = new AppAwsConfig(null, null, null);
         AwsConfig awsConfig = new AwsConfig(REGION, appAwsConfig);
 
-        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_METRICS);
+        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_RECORDER);
 
         assertThat(client).isNotNull();
         client.close();
@@ -35,9 +35,20 @@ class AwsConfigTest {
         AppAwsConfig appAwsConfig = new AppAwsConfig(ENDPOINT, ACCESS_KEY, SECRET_KEY);
         AwsConfig awsConfig = new AwsConfig(REGION, appAwsConfig);
 
-        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_METRICS);
+        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_RECORDER);
 
         assertThat(client).isNotNull();
+        client.close();
+    }
+
+    @Test
+    void sqsAsyncClient_shouldRecordEveryCallThroughTheSqsCallRecorder() {
+        AwsConfig awsConfig = new AwsConfig(REGION, new AppAwsConfig(null, null, null));
+
+        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_RECORDER);
+
+        assertThat(client.serviceClientConfiguration().overrideConfiguration().executionInterceptors())
+            .contains(SQS_CALL_RECORDER);
         client.close();
     }
 
@@ -90,7 +101,7 @@ class AwsConfigTest {
         AppAwsConfig appAwsConfig = new AppAwsConfig(ENDPOINT, ACCESS_KEY, null);
         AwsConfig awsConfig = new AwsConfig(REGION, appAwsConfig);
 
-        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_METRICS);
+        SqsAsyncClient client = awsConfig.sqsAsyncClient(SQS_CALL_RECORDER);
 
         assertThat(client).isNotNull();
         client.close();

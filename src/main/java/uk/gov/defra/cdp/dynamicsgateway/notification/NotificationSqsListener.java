@@ -22,9 +22,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.OutboxEvent;
 
 /**
  * Consumes notification events from an SQS FIFO queue and forwards each external event to Azure
- * Service Bus once per PIMS schema version. Each version's send counts once in
- * {@code notification.message}, tagged {@code outcome} ({@code forwarded} or {@code failed}) and
- * {@code schema.version}.
+ * Service Bus once per PIMS schema version.
  */
 @Slf4j
 @Component
