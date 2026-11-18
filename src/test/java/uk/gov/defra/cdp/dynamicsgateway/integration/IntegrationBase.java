@@ -70,6 +70,12 @@ public abstract class IntegrationBase {
                 return List.of();
             }
             throw e;
+        } catch (IllegalStateException e) {
+            if (isSessionAcceptTimeout(e)) {
+                log.debug("No ASB session available within {}", timeout, e);
+                return List.of();
+            }
+            throw e;
         }
     }
 
@@ -94,6 +100,11 @@ public abstract class IntegrationBase {
             }
         }
         log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
+    }
+
+    private static boolean isSessionAcceptTimeout(Throwable exception) {
+        String message = exception.getMessage();
+        return message != null && message.contains("timeout");
     }
 
     private static ServiceBusSessionReceiverClient newAsbSessionReceiver(Duration tryTimeout) {
