@@ -54,12 +54,11 @@ class PimsEventMapperTest {
     private static final String EVENT_TYPE = "uk.gov.defra.imports.notification.NotificationSubmitted";
 
     @Test
-    void map_shouldPassThroughAllEnvelopeFields() {
+    void map_shouldPassThroughEnvelopeIdentityFields() {
         // Given
-        OutboxEvent event = new OutboxEvent(
-            EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE,
-            NOW, null, null, null, null, null);
+        OutboxEvent event = OutboxEventFixtures.builder()
+            .timestamp(NOW)
+            .build();
 
         // When
         PimsEventV1 result = mapper.map(event);
@@ -175,7 +174,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldMapExchangedDocument_andDropIssuerAndReferenceDocument() {
+    void map_shouldMapExchangedDocumentIdentityAndAuthentication() {
         // Given
         Authentication auth = new Authentication(List.of(new Clause("c1", "content", "url")));
         ExchangedDocument doc = new ExchangedDocument(
@@ -197,7 +196,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldMapTradeParty_andDropRoleCodeAndDefinedContact() {
+    void map_shouldMapTradeParty() {
         // Given
         CodedValue roleCode = new CodedValue("IMPORTER", "url", "name");
         CodedValue typeCode = new CodedValue("TC", "tcUrl", "tcName");
@@ -252,7 +251,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldMapTransportMovement_andDropIdentifierUrlIdAndReferencedDocuments() {
+    void map_shouldMapTransportMovement() {
         // Given
         LogisticsTransportMeans means = new LogisticsTransportMeans("vessel");
         TransportEvent te = new TransportEvent(NOW, null, null);
@@ -272,7 +271,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldMapProductUnitQuantity_andDropUnitCode() {
+    void map_shouldMapProductUnitQuantity() {
         // Given
         ProductUnitQuantity qty = new ProductUnitQuantity(5, "HEAD");
         LineTradeDelivery delivery = new LineTradeDelivery(qty);
@@ -288,7 +287,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldMapLogisticsPackage_andDropLevelCodeAndTypeCode() {
+    void map_shouldMapLogisticsPackage() {
         // Given
         LogisticsPackage pkg = new LogisticsPackage(1, "BOX", 10);
         TradeLineItem item = new TradeLineItem(null, null, null, null, null, null, null, List.of(pkg), null);
@@ -303,7 +302,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldMapAnimalIdentifier_andDropUrlId() {
+    void map_shouldMapAnimalIdentifier() {
         // Given
         AnimalIdentifier id = new AnimalIdentifier("EAR_TAG", "UK123456", "urlId");
         TradeProductInstance instance = new TradeProductInstance(null, List.of(id), null);
@@ -398,7 +397,7 @@ class PimsEventMapperTest {
     }
 
     @Test
-    void map_shouldConstructDroppedInputTypes() {
+    void map_shouldMapIdentifiers_whenContactsAndReferencedDocumentsArePresent() {
         DefinedContact contact = new DefinedContact("Person", "+44123", "email@test.com");
         ReferencedDocument refDoc = new ReferencedDocument("T", null, "R", "ref-1", "2026-08-13");
         TradeParty party = new TradeParty("p-1", null, null, null, null, null, List.of(contact));
@@ -412,31 +411,24 @@ class PimsEventMapperTest {
         assertThat(mapper.map(event).data().specifiedConsignment().consignorParty().identifier()).isEqualTo("p-1");
     }
 
-    // --- Helpers ---
-
     private OutboxEvent minimalEvent() {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).build();
     }
 
     private OutboxEvent eventWithData(GbnAgData data) {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, data, null, null, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).data(data).build();
     }
 
     private OutboxEvent eventWithActor(OutboxActor actor) {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, actor, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).actor(actor).build();
     }
 
     private OutboxEvent eventWithMetadata(OutboxEventMetadata metadata) {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, metadata, null, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).metadata(metadata).build();
     }
 
     private OutboxEvent eventWithStatusChanges(List<OutboxStatusChange> changes) {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, changes, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).statusChanges(changes).build();
     }
 
     private SpecifiedConsignmentBuilder emptyConsignment() {

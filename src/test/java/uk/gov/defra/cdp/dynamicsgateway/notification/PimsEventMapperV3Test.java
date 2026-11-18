@@ -44,11 +44,10 @@ class PimsEventMapperV3Test {
     private static final String EVENT_TYPE = "uk.gov.defra.imports.notification.NotificationSubmitted";
 
     @Test
-    void map_shouldPassThroughAllEnvelopeFields() {
-        OutboxEvent event = new OutboxEvent(
-            EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE,
-            NOW, null, null, null, null, null);
+    void map_shouldPassThroughEnvelopeIdentityFields() {
+        OutboxEvent event = OutboxEventFixtures.builder()
+            .timestamp(NOW)
+            .build();
 
         PimsEventV3 result = mapper.map(event);
 
@@ -167,20 +166,15 @@ class PimsEventMapperV3Test {
         assertThat(mapper.map(minimalEvent()).data()).isNull();
     }
 
-    // --- Helpers ---
-
     private OutboxEvent minimalEvent() {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, null, null, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).build();
     }
 
     private OutboxEvent eventWithData(GbnAgData data) {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, data, null, null, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).data(data).build();
     }
 
     private OutboxEvent eventWithMetadata(OutboxEventMetadata metadata) {
-        return new OutboxEvent(EVENT_ID, "Notification", "GBN-AG",
-            AGGREGATE_ID, 1L, EVENT_TYPE, NOW, null, metadata, null, null, null);
+        return OutboxEventFixtures.builder().timestamp(NOW).metadata(metadata).build();
     }
 }

@@ -7,17 +7,12 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
-import com.azure.messaging.servicebus.ServiceBusReceiverClient;
-import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
-import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import java.time.Duration;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,7 +31,6 @@ import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
 
 class EventsSendControllerIT extends IntegrationBase {
 
-    /** Distinct from NotificationSqsListenerIT's aggregate so ASB session reads are not crossed. */
     private static final String EVENTS_SEND_AGGREGATE_ID =
         "Imports.Notification.GBN-AG.GBN-AG-26-EVENTS-SEND-IT";
 
@@ -48,11 +42,6 @@ class EventsSendControllerIT extends IntegrationBase {
 
     @MockitoSpyBean
     private ExternalCallMetrics externalCallMetrics;
-
-    @BeforeEach
-    void drainSharedAsbQueue() {
-        drainAsb();
-    }
 
     @AfterEach
     void resetSpyAndDrainAsb() {
@@ -73,7 +62,10 @@ class EventsSendControllerIT extends IntegrationBase {
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
-        ServiceBusReceivedMessage received = receiveMessageForSession(EVENTS_SEND_AGGREGATE_ID);
+        ServiceBusReceivedMessage received = receiveFirstFromAsbSession(
+                EVENTS_SEND_AGGREGATE_ID, Duration.ofSeconds(10))
+            .orElseThrow(() -> new AssertionError(
+                "No message received for session " + EVENTS_SEND_AGGREGATE_ID + " within timeout"));
         assertThat(received.getBody()).hasToString(postedJson);
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
@@ -120,22 +112,6 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(response.getBody()).contains("error");
         verify(externalCallMetrics).recordCall(
             eq(ExternalCall.SERVICE_BUS_SEND_MESSAGE), any(Duration.class), eq(true));
-    }
-
-    private ServiceBusReceivedMessage receiveMessageForSession(String sessionId) {
-        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
-                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
-                .sessionReceiver()
-                .queueName(QUEUE_NAME)
-                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
-                .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptSession(sessionId)) {
-            return receiver.receiveMessages(1, Duration.ofSeconds(10))
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                    "No message received for session " + sessionId + " within timeout"));
-        }
     }
 
     private HttpEntity<String> jsonEntity(String body) {

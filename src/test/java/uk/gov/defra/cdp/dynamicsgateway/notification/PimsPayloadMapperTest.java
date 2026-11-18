@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.InputStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,16 +91,26 @@ class PimsPayloadMapperTest {
 
     @Test
     void parse_shouldReadOwningOrganisationId() throws Exception {
-        assertThat(owningOrganisationEvent().organisationId()).isEqualTo("5900001");
+        assertThat(fixtureEvent().organisationId()).isEqualTo("5900001");
     }
 
     @Test
-    void map_shouldLeaveOwningOrganisationOffEveryPayload() throws Exception {
-        OutboxEvent event = owningOrganisationEvent();
+    void map_shouldIgnoreOwningOrganisationOnEveryPayload() throws Exception {
+        OutboxEvent withOwner = fixtureEvent();
+        ObjectNode withoutOwnerNode = (ObjectNode) fixtureJson().deepCopy();
+        withoutOwnerNode.remove("organisationId");
+        OutboxEvent withoutOwner = mapper.parse(withoutOwnerNode);
 
-        assertThat(objectMapper.readTree(mapper.mapToV1(event)).has("organisationId")).isFalse();
-        assertThat(objectMapper.readTree(mapper.mapToV2(event)).has("organisationId")).isFalse();
-        assertThat(objectMapper.readTree(mapper.mapToV3(event)).has("organisationId")).isFalse();
+        JsonNode v1WithOwner = objectMapper.readTree(mapper.mapToV1(withOwner));
+        JsonNode v1WithoutOwner = objectMapper.readTree(mapper.mapToV1(withoutOwner));
+        JsonNode v2WithOwner = objectMapper.readTree(mapper.mapToV2(withOwner));
+        JsonNode v2WithoutOwner = objectMapper.readTree(mapper.mapToV2(withoutOwner));
+        JsonNode v3WithOwner = objectMapper.readTree(mapper.mapToV3(withOwner));
+        JsonNode v3WithoutOwner = objectMapper.readTree(mapper.mapToV3(withoutOwner));
+
+        assertThat(v1WithOwner).isEqualTo(v1WithoutOwner);
+        assertThat(v2WithOwner).isEqualTo(v2WithoutOwner);
+        assertThat(v3WithOwner).isEqualTo(v3WithoutOwner);
     }
 
     @Test
@@ -371,21 +382,13 @@ class PimsPayloadMapperTest {
         assertThat(line.has("applicableClassification")).isFalse();
     }
 
-    private OutboxEvent owningOrganisationEvent() throws Exception {
-        String body = """
-            {
-              "eventId": "evt-org",
-              "aggregateVersion": 1,
-              "eventType": "uk.gov.defra.imports.notification.NotificationSubmitted",
-              "organisationId": "5900001"
-            }
-            """;
-        return mapper.parse(objectMapper.readTree(body));
+    private OutboxEvent fixtureEvent() throws Exception {
+        return mapper.parse(fixtureJson());
     }
 
-    private OutboxEvent fixtureEvent() throws Exception {
+    private JsonNode fixtureJson() throws Exception {
         try (InputStream in = getClass().getResourceAsStream("/gbn-ag/notification-submitted-from-backend.json")) {
-            return mapper.parse(objectMapper.readTree(in));
+            return objectMapper.readTree(in);
         }
     }
 }
