@@ -21,5 +21,6 @@ public record OutboxEvent(
     GbnAgData data,
     OutboxEventMetadata metadata,
     OutboxActor actor,
-    List<OutboxStatusChange> statusChanges
+    List<OutboxStatusChange> statusChanges,
+    String organisationId
 ) {}

@@ -6,6 +6,7 @@
   "aggregateVersion" : 1,
   "eventType" : "uk.gov.defra.imports.notification.NotificationSubmitted",
   "timestamp" : "2026-05-21T10:15:00Z",
+  "organisationId" : "5900001",
   "data" : {
     "$model" : "defra/certificate-internal/1",
     "$type" : "gbn-ag",

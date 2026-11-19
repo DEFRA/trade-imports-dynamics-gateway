@@ -16,18 +16,13 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.azure.core.amqp.AmqpRetryOptions;
 import com.azure.core.amqp.exception.AmqpErrorCondition;
 import com.azure.core.amqp.exception.AmqpException;
-import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusErrorSource;
 import com.azure.messaging.servicebus.ServiceBusException;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
-import com.azure.messaging.servicebus.ServiceBusReceiverClient;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
-import com.azure.messaging.servicebus.ServiceBusSessionReceiverClient;
-import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import io.floci.testcontainers.FlociContainer;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -70,7 +65,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     private static final String QUEUE_NAME_SQS = "trade_imports_animals_eu_notifications_gateway.fifo";
     private static final String DLQ_NAME_SQS = "trade_imports_animals_eu_notifications_gateway-deadletter.fifo";
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
-    // Mirrors the CDP-provisioned queues: after this many failed receives SQS redrives to the DLQ.
+    private static final Duration ASB_POLL_TIMEOUT = Duration.ofSeconds(3);
     private static final int MAX_RECEIVE_COUNT = 3;
     private static final int VISIBILITY_TIMEOUT_SECONDS = 5;
 
@@ -94,12 +89,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         try (SqsClient sqs = localSqsClient()) {
             dlqUrl = createFifoQueue(sqs, DLQ_NAME_SQS, Map.of());
             String dlqArn = queueArn(sqs, dlqUrl);
-            // RedrivePolicy on the source queue: SQS moves a message to the DLQ once it has been
-            // received MAX_RECEIVE_COUNT times without being deleted — the native mechanism this IT
-            // exercises. VISIBILITY_TIMEOUT_SECONDS governs the redelivery cadence: long enough that
-            // the transient-leave test's single-attempt assertion settles before a 2nd redelivery,
-            // short enough that exhaustion (MAX_RECEIVE_COUNT cycles) still reaches the DLQ inside
-            // IT-1's await.
             queueUrl = createFifoQueue(sqs, QUEUE_NAME_SQS, Map.of(
                 QueueAttributeName.REDRIVE_POLICY,
                 "{\"deadLetterTargetArn\":\"" + dlqArn + "\",\"maxReceiveCount\":\"" + MAX_RECEIVE_COUNT + "\"}",
@@ -124,16 +113,9 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @BeforeEach
     void purgeQueuesAndResetSpy() {
-        // Reset before each test as well as after: the exact senderClient invocation-count assertions
-        // must start from a clean slate, independent of test ordering or any stray invocation.
         Mockito.reset(senderClient);
-        // Purge the DLQ too so a message redriven by one test can't leak into another's assertions.
         purgeQueue(queueUrl);
         purgeQueue(dlqUrl);
-        // And drain ASB. Dual-emit puts two messages on the bus per notification, but most tests here
-        // only receive one, so the unread partner would otherwise survive into the next test and be
-        // counted there. Without this, any assertion on how many messages arrived is measuring the
-        // previous test as much as its own.
         drainAsb();
     }
 
@@ -170,9 +152,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
     void sqsToAsb_shouldEmitEverySchemaVersionInOrderOnOneSession_forOneNotification() {
         // Given
         String deduplicationId = UUID.randomUUID().toString();
-        sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
+        sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
-        // When — accumulate across polls: the receiver is RECEIVE_AND_DELETE
         String v1Id = deduplicationId;
         String v2Id = deduplicationId + "-v2";
         String v3Id = deduplicationId + "-v3";
@@ -212,8 +193,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         JsonNode v2Metadata = v2Body.path("metadata");
         assertThat(v2Metadata.path("schemaVersion").asText()).isEqualTo("0.2.0");
         assertThat(v2Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.2.0.schema.json");
-        // event-envelope-v1 requires ["schemaVersion","schemaUri"] under additionalProperties:false,
-        // so the legacy "schemaUrl" key must not survive real Jackson serialisation onto a real bus.
         assertThat(v2Metadata.has("schemaUrl"))
             .as("metadata.schemaUrl must not appear on the wire — the envelope forbids it")
             .isFalse();
@@ -239,8 +218,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         assertThat(lineItems.get(0).path("applicableClassification")).hasSize(1);
         assertThat(lineItems.get(0).path("applicableClassification").get(0).path("systemId").asText())
             .isEqualTo("CN");
-        // ...and absent, never "[]", where it did not. The schema sets minItems:1, so an empty array
-        // is invalid whereas an omitted field is fine.
         assertThat(lineItems.get(1).has("applicableClassification"))
             .as("applicableClassification must be omitted rather than emitted as an empty array")
             .isFalse();
@@ -253,7 +230,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         double baseV2 = forwardedCount("0.2.0");
         double baseV3 = forwardedCount("0.3.0");
         String deduplicationId = UUID.randomUUID().toString();
-        sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
+        sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
         // When / Then
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
@@ -273,7 +250,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         long baseSends = durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE);
         long baseReceives = durationCount(meterRegistry, SQS_RECEIVE_MESSAGE);
         String deduplicationId = UUID.randomUUID().toString();
-        sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
+        sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
@@ -289,7 +266,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
-        // Given — ASB always rejects with a transient error; QueueMessageSender wraps it as retryable.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
@@ -297,11 +273,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
-        // When / Then — no in-process retry: a single publish attempt, then the exception propagates so
-        // the message is left in SQS for native redelivery (→ DLQ after maxReceiveCount).
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
             verify(senderClient, times(1)).sendMessage(any(ServiceBusMessage.class)));
-        // ApproximateNumberOfMessages(NotVisible) are eventually-consistent, so poll rather than read once.
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
             assertThat(totalMessagesInQueue())
                 .as("after a transient failure the message must remain in SQS for redelivery, not be deleted")
@@ -310,9 +283,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldForwardMessage_whenAsbFailsTransientlyThenRecovers() {
-        // Given — ASB rejects the first attempt transiently, then succeeds. There is no in-process
-        // retry, so recovery happens via native SQS redelivery on the next visibility cycle: the first
-        // send throws, the redelivered send calls through to the real ASB emulator.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).doCallRealMethod().when(senderClient).sendMessage(any(ServiceBusMessage.class));
@@ -369,8 +339,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldLandMessageOnDlq_whenAsbFailsUntilRedeliveryIsExhausted() {
-        // Given — ASB rejects every attempt transiently, so the error handler re-throws (never acks)
-        // and the message is left for native SQS redelivery on each cycle rather than deleted.
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
         doThrow(transientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
@@ -378,11 +346,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
-        // When / Then — after MAX_RECEIVE_COUNT failed receives the RedrivePolicy moves the message to
-        // the DLQ. At the 5s visibility timeout, exhaustion (MAX_RECEIVE_COUNT redelivery cycles)
-        // completes in ~20s, so the await allows 45s. This proves exhaustion actually reaches the DLQ —
-        // no other test covers it; the transient test above only proves the message is *left* on the
-        // source queue.
         await().atMost(Duration.ofSeconds(45)).untilAsserted(() ->
             assertThat(totalMessagesInQueue(dlqUrl))
                 .as("after maxReceiveCount redelivery failures the message must be redriven to the DLQ")
@@ -428,12 +391,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\"}";
     }
 
-    /**
-     * A notification rich enough to exercise the v0.2.0-only mappings. Deliberately carries no
-     * {@code eventId}: the gateway prefers it over the SQS deduplication header when deriving the ASB
-     * messageId, and these assertions are on the header-derived id.
-     */
-    private static String dualEmitNotificationJson() {
+    private static String notificationJsonWithoutEventId() {
         return """
             {
               "aggregateId": "%s",
@@ -489,7 +447,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private void collectMessagesFor(List<ServiceBusReceivedMessage> into, String deduplicationId) {
-        receiveFromAsb(10).stream()
+        consumeFromNextAsbSession(10, ASB_POLL_TIMEOUT).stream()
             .filter(m -> m.getMessageId() != null && m.getMessageId().startsWith(deduplicationId))
             .forEach(into::add);
     }
@@ -586,45 +544,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     private Optional<ServiceBusReceivedMessage> tryReceiveFromAsb() {
-        return receiveFromAsb(1).stream().findFirst();
-    }
-
-    /**
-     * Receives up to {@code maxMessages} from the next available session. The receiver is
-     * RECEIVE_AND_DELETE, so anything returned is consumed — callers polling for several messages must
-     * accumulate results across calls rather than expect a later call to see the same message again.
-     */
-    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages) {
-        return receiveFromAsb(maxMessages, Duration.ofSeconds(3));
-    }
-
-    private List<ServiceBusReceivedMessage> receiveFromAsb(int maxMessages, Duration timeout) {
-        // sessionReceiver and receiver share a lifecycle: both close when the try block exits.
-        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
-                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
-                .retryOptions(new AmqpRetryOptions().setTryTimeout(timeout).setMaxRetries(0))
-                .sessionReceiver()
-                .queueName(QUEUE_NAME)
-                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
-                .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
-            return receiver.receiveMessages(maxMessages, timeout)
-                .stream()
-                .toList();
-        } catch (Exception e) {
-            log.debug("No ASB message received yet: {}", e.getMessage());
-            return List.of();
-        }
-    }
-
-    /** Empties the ASB queue so a test's message counts reflect only its own notification. */
-    private void drainAsb() {
-        for (int attempt = 0; attempt < 10; attempt++) {
-            if (receiveFromAsb(10, Duration.ofSeconds(1)).isEmpty()) {
-                return;
-            }
-        }
-        log.warn("ASB queue still returning messages after drain attempts; counts may be unreliable");
+        return consumeFromNextAsbSession(1, ASB_POLL_TIMEOUT).stream().findFirst();
     }
 
     private static SqsClient localSqsClient() {
