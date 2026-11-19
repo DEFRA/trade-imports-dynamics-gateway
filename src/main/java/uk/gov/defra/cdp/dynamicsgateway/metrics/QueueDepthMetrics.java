@@ -25,7 +25,7 @@ public class QueueDepthMetrics {
         meterRegistry,
         "notification",
         () -> notificationQueueService.depth().approximateCount());
-    register(meterRegistry, "notification-dlq", dlqService::approximateCount);
+    register(meterRegistry, "notification-dlq", dlqService::dlqDepth);
   }
 
   private void register(MeterRegistry meterRegistry, String queue, LongSupplier readDepth) {

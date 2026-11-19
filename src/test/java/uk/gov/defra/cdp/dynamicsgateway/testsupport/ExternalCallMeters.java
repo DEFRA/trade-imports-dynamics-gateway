@@ -10,56 +10,52 @@ import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall;
 
 public final class ExternalCallMeters {
 
-  public static final String AZURE_SERVICE_BUS = Dependency.AZURE_SERVICE_BUS.tagValue();
-  public static final String SEND_MESSAGE = ExternalCall.SERVICE_BUS_SEND_MESSAGE.operation();
+  public static final ExternalCall SQS_RECEIVE_MESSAGE =
+      new ExternalCall(Dependency.SQS, "receive-message");
+  public static final ExternalCall SQS_GET_QUEUE_ATTRIBUTES =
+      new ExternalCall(Dependency.SQS, "get-queue-attributes");
 
   private ExternalCallMeters() {}
 
-  public static long durationCount(MeterRegistry registry, String dependency, String operation) {
-    return duration(registry, dependency, operation).map(Timer::count).orElse(0L);
+  public static long durationCount(MeterRegistry registry, ExternalCall call) {
+    return duration(registry, call).map(Timer::count).orElse(0L);
   }
 
-  public static double totalDurationMillis(
-      MeterRegistry registry, String dependency, String operation) {
-    return duration(registry, dependency, operation)
+  public static double totalDurationMillis(MeterRegistry registry, ExternalCall call) {
+    return duration(registry, call)
         .map(timer -> timer.totalTime(TimeUnit.MILLISECONDS))
         .orElse(0.0);
   }
 
-  public static long recordedCallCount(
-      MeterRegistry registry, String dependency, String operation) {
-    return failure(registry, dependency, operation).map(DistributionSummary::count).orElse(0L);
+  public static long recordedCallCount(MeterRegistry registry, ExternalCall call) {
+    return failure(registry, call).map(DistributionSummary::count).orElse(0L);
   }
 
-  public static double failureTotal(MeterRegistry registry, String dependency, String operation) {
-    return failure(registry, dependency, operation)
-        .map(DistributionSummary::totalAmount)
-        .orElse(0.0);
+  public static double failureTotal(MeterRegistry registry, ExternalCall call) {
+    return failure(registry, call).map(DistributionSummary::totalAmount).orElse(0.0);
   }
 
-  public static double availability(MeterRegistry registry, String dependency) {
+  public static double availability(MeterRegistry registry, Dependency dependency) {
     return registry
         .get("external.dependency.available")
-        .tag("dependency", dependency)
+        .tag("dependency", dependency.tagValue())
         .gauge()
         .value();
   }
 
-  private static Optional<Timer> duration(
-      MeterRegistry registry, String dependency, String operation) {
+  private static Optional<Timer> duration(MeterRegistry registry, ExternalCall call) {
     return Optional.ofNullable(
-        registry
-            .find("external.call.duration")
-            .tags("dependency", dependency, "operation", operation)
-            .timer());
+        registry.find("external.call.duration").tags(tagsOf(call)).timer());
   }
 
-  private static Optional<DistributionSummary> failure(
-      MeterRegistry registry, String dependency, String operation) {
+  private static Optional<DistributionSummary> failure(MeterRegistry registry, ExternalCall call) {
     return Optional.ofNullable(
-        registry
-            .find("external.call.failure")
-            .tags("dependency", dependency, "operation", operation)
-            .summary());
+        registry.find("external.call.failure").tags(tagsOf(call)).summary());
+  }
+
+  private static String[] tagsOf(ExternalCall call) {
+    return new String[] {
+      "dependency", call.dependency().tagValue(), "operation", call.operation()
+    };
   }
 }

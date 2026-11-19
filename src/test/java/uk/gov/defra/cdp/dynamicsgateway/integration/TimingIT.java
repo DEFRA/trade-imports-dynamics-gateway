@@ -74,7 +74,7 @@ class TimingIT extends IntegrationBase {
 
   @ParameterizedTest(name = "{0}")
   @MethodSource("endpoints")
-  void endpoint_shouldTimeOnlyItsControllerAndServiceCall(
+  void endpoint_shouldMoveOnlyItsOwnTimersByOne(
       String request, Consumer<TimingIT> call, List<String> timed) {
     Map<String, Long> before = timerCounts();
 

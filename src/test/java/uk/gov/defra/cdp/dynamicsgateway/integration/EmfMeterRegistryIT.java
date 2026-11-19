@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.Dependency;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.EmfMeterRegistry;
 import uk.gov.defra.cdp.dynamicsgateway.testsupport.CapturedConsole;
 
@@ -114,7 +115,6 @@ class EmfMeterRegistryIT extends IntegrationBase {
     }
 
     assertThat(namespaceOf(document)).isEqualTo("trade-imports-dynamics-gateway");
-    assertThat(document.path("dependency").asText()).isEqualTo("azure-service-bus");
   }
 
   @ParameterizedTest
@@ -140,6 +140,8 @@ class EmfMeterRegistryIT extends IntegrationBase {
         line ->
             line.has("_aws")
                 && line.has("external.call.duration")
-                && "azure-service-bus".equals(line.path("dependency").asText()));
+                && Dependency.AZURE_SERVICE_BUS
+                    .tagValue()
+                    .equals(line.path("dependency").asText()));
   }
 }

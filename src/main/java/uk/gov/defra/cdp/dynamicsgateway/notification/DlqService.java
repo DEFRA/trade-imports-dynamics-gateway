@@ -43,7 +43,7 @@ public class DlqService {
     @Timed("service.dlqList.time")
     public DlqListResponse list(int limit) {
         String dlqUrl = sqsConfig.dlqUrl();
-        long approximateCount = approximateCount();
+        long approximateCount = dlqDepth();
         List<Message> collected = new ArrayList<>();
         try {
             while (collected.size() < limit) {
@@ -142,7 +142,7 @@ public class DlqService {
      * consistent. A failed SQS call throws a {@link java.util.concurrent.CompletionException}.
      */
     @Timed("service.dlqDepth.time")
-    public long approximateCount() {
+    public long dlqDepth() {
         String value = sqsAsyncClient.getQueueAttributes(request -> request
                 .queueUrl(sqsConfig.dlqUrl())
                 .attributeNames(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES))

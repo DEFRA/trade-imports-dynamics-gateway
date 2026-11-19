@@ -18,8 +18,8 @@ class DependencyAvailabilityMetricsTest {
 
   @Test
   void availabilityGauge_shouldBeNaNForEachDependency_whenItHasNotBeenCalled() {
-    assertThat(availability(meterRegistry, "azure-service-bus")).isNaN();
-    assertThat(availability(meterRegistry, "sqs")).isNaN();
+    assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isNaN();
+    assertThat(availability(meterRegistry, Dependency.SQS)).isNaN();
   }
 
   @Test
@@ -27,13 +27,13 @@ class DependencyAvailabilityMetricsTest {
     lastCallOutcomes.recordSuccess(Dependency.AZURE_SERVICE_BUS);
     lastCallOutcomes.recordFailure(Dependency.SQS);
 
-    assertThat(availability(meterRegistry, "azure-service-bus")).isEqualTo(1.0);
-    assertThat(availability(meterRegistry, "sqs")).isZero();
+    assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isEqualTo(1.0);
+    assertThat(availability(meterRegistry, Dependency.SQS)).isZero();
 
     lastCallOutcomes.recordFailure(Dependency.AZURE_SERVICE_BUS);
     lastCallOutcomes.recordSuccess(Dependency.SQS);
 
-    assertThat(availability(meterRegistry, "azure-service-bus")).isZero();
-    assertThat(availability(meterRegistry, "sqs")).isEqualTo(1.0);
+    assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isZero();
+    assertThat(availability(meterRegistry, Dependency.SQS)).isEqualTo(1.0);
   }
 }

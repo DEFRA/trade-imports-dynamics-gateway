@@ -32,11 +32,11 @@ class ExternalCallRecorderTest {
   void recordSuccess_shouldRecordTheDurationAZeroFailureAndTheDependencyAsSucceeded() {
     recorder.recordSuccess(SEND, Duration.ofMillis(7));
 
-    assertThat(durationCount(meterRegistry, "azure-service-bus", "send-message")).isEqualTo(1);
-    assertThat(totalDurationMillis(meterRegistry, "azure-service-bus", "send-message"))
+    assertThat(durationCount(meterRegistry, SEND)).isEqualTo(1);
+    assertThat(totalDurationMillis(meterRegistry, SEND))
         .isEqualTo(7);
-    assertThat(recordedCallCount(meterRegistry, "azure-service-bus", "send-message")).isEqualTo(1);
-    assertThat(failureTotal(meterRegistry, "azure-service-bus", "send-message")).isZero();
+    assertThat(recordedCallCount(meterRegistry, SEND)).isEqualTo(1);
+    assertThat(failureTotal(meterRegistry, SEND)).isZero();
     assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(true);
   }
 
@@ -44,10 +44,10 @@ class ExternalCallRecorderTest {
   void recordFailure_shouldRecordTheDurationAFailureOfOneAndTheDependencyAsFailed() {
     recorder.recordFailure(RECEIVE, Duration.ofMillis(3), new IllegalStateException());
 
-    assertThat(durationCount(meterRegistry, "sqs", "receive-message")).isEqualTo(1);
-    assertThat(totalDurationMillis(meterRegistry, "sqs", "receive-message")).isEqualTo(3);
-    assertThat(recordedCallCount(meterRegistry, "sqs", "receive-message")).isEqualTo(1);
-    assertThat(failureTotal(meterRegistry, "sqs", "receive-message")).isEqualTo(1);
+    assertThat(durationCount(meterRegistry, RECEIVE)).isEqualTo(1);
+    assertThat(totalDurationMillis(meterRegistry, RECEIVE)).isEqualTo(3);
+    assertThat(recordedCallCount(meterRegistry, RECEIVE)).isEqualTo(1);
+    assertThat(failureTotal(meterRegistry, RECEIVE)).isEqualTo(1);
     assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.SQS)).contains(false);
   }
 
@@ -93,10 +93,10 @@ class ExternalCallRecorderTest {
   void measure_shouldRecordTheTimeTheCallTookAsASuccess_whenTheCallReturns() {
     recorder.measure(SEND, () -> nanoTime.addAndGet(Duration.ofMillis(50).toNanos()));
 
-    assertThat(durationCount(meterRegistry, "azure-service-bus", "send-message")).isEqualTo(1);
-    assertThat(totalDurationMillis(meterRegistry, "azure-service-bus", "send-message"))
+    assertThat(durationCount(meterRegistry, SEND)).isEqualTo(1);
+    assertThat(totalDurationMillis(meterRegistry, SEND))
         .isEqualTo(50);
-    assertThat(failureTotal(meterRegistry, "azure-service-bus", "send-message")).isZero();
+    assertThat(failureTotal(meterRegistry, SEND)).isZero();
     assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(true);
   }
 
@@ -114,9 +114,9 @@ class ExternalCallRecorderTest {
                     }))
         .isSameAs(cause);
 
-    assertThat(totalDurationMillis(meterRegistry, "azure-service-bus", "send-message"))
+    assertThat(totalDurationMillis(meterRegistry, SEND))
         .isEqualTo(50);
-    assertThat(failureTotal(meterRegistry, "azure-service-bus", "send-message")).isEqualTo(1);
+    assertThat(failureTotal(meterRegistry, SEND)).isEqualTo(1);
     assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(false);
   }
 

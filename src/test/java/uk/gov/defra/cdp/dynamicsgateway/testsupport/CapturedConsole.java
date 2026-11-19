@@ -30,21 +30,17 @@ public final class CapturedConsole implements AutoCloseable {
     return captured.toString(StandardCharsets.UTF_8);
   }
 
-  /**
-   * The first complete JSON line written so far that matches. A line still being written is left
-   * out, so a caller polling while the console is written to never parses half a line.
-   *
-   * @param matches which line to find
-   * @return the line, parsed, or empty when no complete line matches
-   */
   public Optional<JsonNode> firstJsonLine(Predicate<JsonNode> matches) {
-    String text = text();
-    String completeLines = text.substring(0, text.lastIndexOf('\n') + 1);
-    return Arrays.stream(completeLines.split("\n"))
+    return Arrays.stream(completeLinesWritten().split("\n"))
         .filter(line -> line.trim().startsWith("{"))
         .map(CapturedConsole::parsed)
         .filter(matches)
         .findFirst();
+  }
+
+  private String completeLinesWritten() {
+    String text = text();
+    return text.substring(0, text.lastIndexOf('\n') + 1);
   }
 
   @Override

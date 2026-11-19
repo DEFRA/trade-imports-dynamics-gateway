@@ -2,8 +2,8 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.AZURE_SERVICE_BUS;
-import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SEND_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall.SERVICE_BUS_SEND_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SQS_RECEIVE_MESSAGE;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.availability;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 
@@ -62,6 +62,7 @@ import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.Dependency;
 
 @Slf4j
 class NotificationSqsListenerIT extends IntegrationBase {
@@ -268,23 +269,21 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_recordsTheListenerTime_threeServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
-        // Given
         long baseListenerCalls = listenerCallCount();
-        long baseSends = durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
-        long baseReceives = durationCount(meterRegistry, "sqs", "receive-message");
+        long baseSends = durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE);
+        long baseReceives = durationCount(meterRegistry, SQS_RECEIVE_MESSAGE);
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(dualEmitNotificationJson(), AGGREGATE_ID, deduplicationId);
 
-        // When / Then
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(listenerCallCount()).isEqualTo(baseListenerCalls + 1);
-            assertThat(durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE))
+            assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE))
                 .isEqualTo(baseSends + 3);
-            assertThat(durationCount(meterRegistry, "sqs", "receive-message")).isGreaterThan(baseReceives);
-            assertThat(availability(meterRegistry, AZURE_SERVICE_BUS)).isEqualTo(1.0);
-            assertThat(availability(meterRegistry, "sqs")).isEqualTo(1.0);
+            assertThat(durationCount(meterRegistry, SQS_RECEIVE_MESSAGE)).isGreaterThan(baseReceives);
+            assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isEqualTo(1.0);
+            assertThat(availability(meterRegistry, Dependency.SQS)).isEqualTo(1.0);
         });
     }
 

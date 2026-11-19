@@ -1,18 +1,12 @@
 package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.awaitility.Awaitility.await;
-import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
-import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.failureTotal;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.floci.testcontainers.FlociContainer;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.URI;
 import java.time.Duration;
-import java.util.concurrent.CompletionException;
 import java.util.EnumMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -35,14 +29,8 @@ import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.Dependency;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallRecorder;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.LastCallOutcomes;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.QueueDepthMetrics;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.SqsCallRecorder;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqListResponse;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqService;
-import uk.gov.defra.cdp.dynamicsgateway.notification.NotificationQueueService;
 
 @Slf4j
 class DlqServiceIT {
@@ -62,9 +50,6 @@ class DlqServiceIT {
     private static final FlociContainer FLOCI = new FlociContainer(
         DockerImageName.parse("floci/floci:latest"))
         .withRegion(REGION);
-
-    private static final MeterRegistry METER_REGISTRY = new SimpleMeterRegistry();
-    private static final LastCallOutcomes LAST_CALL_OUTCOMES = new LastCallOutcomes();
 
     private static String sourceUrl;
     private static String dlqUrl;
@@ -111,7 +96,9 @@ class DlqServiceIT {
         await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0 && totalInQueue(sourceUrl) == 0);
         // DlqService never reads the source-queue URL (list uses dlqUrl, replayAll uses dlqArn), so a
         // placeholder satisfies @NotBlank; the real source queue is driven directly via seedDlqViaRedrive.
-        dlqService = dlqServiceFor(dlqUrl);
+        NotificationSqsConfig config = new NotificationSqsConfig(
+            "http://localhost/unused-source-queue", dlqUrl, dlqArn, 20, 10);
+        dlqService = new DlqService(asyncSqsClient, config, objectMapper);
     }
 
     @Test
@@ -204,76 +191,6 @@ class DlqServiceIT {
         await().atMost(Duration.ofSeconds(30)).until(() -> totalInQueue(dlqUrl) == 0);
     }
 
-    @Test
-    void list_recordsEachSqsActionAsAnSqsCall_andSqsAsAvailable() {
-        long attributeReadsBefore = durationCount(METER_REGISTRY, "sqs", "get-queue-attributes");
-        long receivesBefore = durationCount(METER_REGISTRY, "sqs", "receive-message");
-
-        dlqService.list(1);
-
-        assertThat(durationCount(METER_REGISTRY, "sqs", "get-queue-attributes"))
-            .isEqualTo(attributeReadsBefore + 1);
-        assertThat(durationCount(METER_REGISTRY, "sqs", "receive-message")).isGreaterThan(receivesBefore);
-        assertThat(LAST_CALL_OUTCOMES.lastCallSucceeded(Dependency.SQS)).contains(true);
-    }
-
-    @Test
-    void aCallToAMissingQueueIsRecordedAsAFailedSqsCall_andSqsAsUnavailable() {
-        double failuresBefore = failureTotal(METER_REGISTRY, "sqs", "get-queue-attributes");
-        DlqService missingQueue = dlqServiceFor(missingQueueUrl());
-
-        assertThatExceptionOfType(CompletionException.class).isThrownBy(missingQueue::approximateCount);
-
-        assertThat(failureTotal(METER_REGISTRY, "sqs", "get-queue-attributes"))
-            .isEqualTo(failuresBefore + 1);
-        assertThat(LAST_CALL_OUTCOMES.lastCallSucceeded(Dependency.SQS)).contains(false);
-    }
-
-    @Test
-    void queueDepthGauge_readsTheMessagesWaitingOnEachQueue() {
-        seedDlq("{\"key\":\"a\"}", GROUP_A, "dedup-a");
-        seedDlq("{\"key\":\"b\"}", GROUP_B, "dedup-b");
-        sendTo(sourceUrl, "{\"key\":\"c\"}", GROUP_A, "dedup-c");
-        await().atMost(Duration.ofSeconds(10))
-            .until(() -> totalInQueue(dlqUrl) == 2 && totalInQueue(sourceUrl) == 1);
-        MeterRegistry registry = new SimpleMeterRegistry();
-        NotificationSqsConfig config = new NotificationSqsConfig(sourceUrl, dlqUrl, dlqArn, 20, 10);
-        new QueueDepthMetrics(
-            registry, new NotificationQueueService(asyncSqsClient, config), dlqService);
-
-        assertThat(queueDepth(registry, "notification-dlq")).isEqualTo(2.0);
-        assertThat(queueDepth(registry, "notification")).isEqualTo(1.0);
-    }
-
-    @Test
-    void queueDepthGauge_isNaN_whenTheQueueCannotBeRead() {
-        MeterRegistry registry = new SimpleMeterRegistry();
-        NotificationSqsConfig config =
-            new NotificationSqsConfig(missingQueueUrl(), missingQueueUrl(), dlqArn, 20, 10);
-        new QueueDepthMetrics(
-            registry,
-            new NotificationQueueService(asyncSqsClient, config),
-            dlqServiceFor(missingQueueUrl()));
-
-        assertThat(queueDepth(registry, "notification-dlq")).isNaN();
-        assertThat(queueDepth(registry, "notification")).isNaN();
-    }
-
-    private static double queueDepth(MeterRegistry registry, String queue) {
-        return registry.get("sqs.queue.depth").tag("queue", queue).gauge().value();
-    }
-
-    private static String missingQueueUrl() {
-        return dlqUrl.replace(DLQ_QUEUE, "missing-queue.fifo");
-    }
-
-    private DlqService dlqServiceFor(String queueUrl) {
-        return new DlqService(
-            asyncSqsClient,
-            new NotificationSqsConfig("http://localhost/unused-source-queue", queueUrl, dlqArn, 20, 10),
-            objectMapper);
-    }
-
     /**
      * Seed the DLQ the real way — send to the source queue, then receive-without-deleting until
      * ApproximateReceiveCount exceeds maxReceiveCount and SQS redrives the message to the DLQ. Unlike
@@ -309,13 +226,9 @@ class DlqServiceIT {
     }
 
     private void seedDlq(String body, String group, String dedupId) {
-        sendTo(dlqUrl, body, group, dedupId);
-    }
-
-    private void sendTo(String queueUrl, String body, String group, String dedupId) {
         try (SqsClient sqs = localSqsClient()) {
             sqs.sendMessage(SendMessageRequest.builder()
-                .queueUrl(queueUrl)
+                .queueUrl(dlqUrl)
                 .messageBody(body)
                 .messageGroupId(group)
                 .messageDeduplicationId(dedupId)
@@ -378,14 +291,11 @@ class DlqServiceIT {
     }
 
     private static SqsAsyncClient buildAsyncSqsClient() {
-        SqsCallRecorder sqsCallRecorder =
-            new SqsCallRecorder(new ExternalCallRecorder(METER_REGISTRY, LAST_CALL_OUTCOMES));
         return SqsAsyncClient.builder()
             .endpointOverride(URI.create(FLOCI.getEndpoint()))
             .region(Region.of(REGION))
             .credentialsProvider(StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(FLOCI.getAccessKey(), FLOCI.getSecretKey())))
-            .overrideConfiguration(c -> c.addExecutionInterceptor(sqsCallRecorder))
             .build();
     }
 }

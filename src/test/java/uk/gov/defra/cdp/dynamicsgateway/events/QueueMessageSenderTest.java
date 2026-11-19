@@ -6,8 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
-import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.AZURE_SERVICE_BUS;
-import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SEND_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall.SERVICE_BUS_SEND_MESSAGE;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.failureTotal;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.recordedCallCount;
@@ -171,10 +170,10 @@ class QueueMessageSenderTest {
 
         queueMessageSender.publish("{\"key\":\"value\"}", "session-1");
 
-        assertThat(durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(1);
-        assertThat(totalDurationMillis(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(50);
-        assertThat(recordedCallCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(1);
-        assertThat(failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isZero();
+        assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1);
+        assertThat(totalDurationMillis(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(50);
+        assertThat(recordedCallCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1);
+        assertThat(failureTotal(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isZero();
         assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(true);
     }
 
@@ -190,9 +189,9 @@ class QueueMessageSenderTest {
         assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
             .isInstanceOf(SqsRetryableException.class);
 
-        assertThat(durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(1);
-        assertThat(totalDurationMillis(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(50);
-        assertThat(failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(1.0);
+        assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1);
+        assertThat(totalDurationMillis(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(50);
+        assertThat(failureTotal(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1.0);
         assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(false);
     }
 
