@@ -3,12 +3,13 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.AZURE_SERVICE_BUS;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SEND_MESSAGE;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.failureTotal;
 
-import com.azure.core.amqp.AmqpRetryOptions;
 import com.azure.messaging.servicebus.ServiceBusClientBuilder;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
@@ -18,7 +19,7 @@ import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
-import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +57,8 @@ class EventsSendControllerIT extends IntegrationBase {
         // Given
         long sendsBefore = durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
         double failuresBefore = failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE);
-        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"Imports.Notification.GBN-AG.GBN-AG-26-001\"}";
+        String aggregateId = "Imports.Notification.GBN-AG.GBN-AG-26-" + UUID.randomUUID();
+        String postedJson = "{\"eventType\":\"NotificationSubmitted\",\"aggregateId\":\"" + aggregateId + "\"}";
 
         // When
         ResponseEntity<Void> response = restTemplate.postForEntity(
@@ -65,11 +67,11 @@ class EventsSendControllerIT extends IntegrationBase {
         // Then
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
-        ServiceBusReceivedMessage received = receiveMessage();
+        ServiceBusReceivedMessage received = receiveMessage(aggregateId);
         assertThat(received.getBody()).hasToString(postedJson);
         assertThat(received.getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
         assertThat(received.getMessageId()).isNotBlank();
-        assertThat(received.getSessionId()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
+        assertThat(received.getSessionId()).isEqualTo(aggregateId);
         assertThat(durationCount(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(sendsBefore + 1);
         assertThat(failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore);
     }
@@ -86,7 +88,7 @@ class EventsSendControllerIT extends IntegrationBase {
         if (expectedBodyContains != null) {
             assertThat(response.getBody()).contains(expectedBodyContains);
         }
-        assertThat(receiveNoMessage()).isEmpty();
+        verify(senderClient, never()).sendMessage(any(ServiceBusMessage.class));
     }
 
     static Stream<Arguments> badRequestCases() {
@@ -114,35 +116,18 @@ class EventsSendControllerIT extends IntegrationBase {
         assertThat(failureTotal(meterRegistry, AZURE_SERVICE_BUS, SEND_MESSAGE)).isEqualTo(failuresBefore + 1);
     }
 
-    private ServiceBusReceivedMessage receiveMessage() {
+    private ServiceBusReceivedMessage receiveMessage(String sessionId) {
         try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
                 .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
                 .sessionReceiver()
                 .queueName(QUEUE_NAME)
                 .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
                 .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
+             ServiceBusReceiverClient receiver = sessionReceiver.acceptSession(sessionId)) {
             return receiver.receiveMessages(1, Duration.ofSeconds(10))
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("No message received from queue within timeout"));
-        }
-    }
-
-    private Optional<ServiceBusReceivedMessage> receiveNoMessage() {
-        try (ServiceBusSessionReceiverClient sessionReceiver = new ServiceBusClientBuilder()
-                .connectionString(SERVICE_BUS_CONTAINER.getConnectionString())
-                .retryOptions(new AmqpRetryOptions().setTryTimeout(Duration.ofSeconds(3)).setMaxRetries(0))
-                .sessionReceiver()
-                .queueName(QUEUE_NAME)
-                .receiveMode(ServiceBusReceiveMode.RECEIVE_AND_DELETE)
-                .buildClient();
-             ServiceBusReceiverClient receiver = sessionReceiver.acceptNextSession()) {
-            return receiver.receiveMessages(1, Duration.ofSeconds(1))
-                .stream()
-                .findFirst();
-        } catch (Exception _) {
-            return Optional.empty();
         }
     }
 
