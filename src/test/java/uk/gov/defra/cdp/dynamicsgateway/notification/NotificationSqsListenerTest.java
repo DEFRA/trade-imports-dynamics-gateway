@@ -321,9 +321,9 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.4.0")).isEqualTo(1.0);
-        assertThat(failureCount("v2-mapping-failed")).isEqualTo(1.0);
-        assertThat(failureCount("v3-mapping-failed")).isEqualTo(0.0);
-        assertThat(failureCount("v4-mapping-failed")).isEqualTo(0.0);
+        assertThat(counterValue("failed", "0.2.0")).isEqualTo(1.0);
+        assertThat(counterValue("failed", "0.3.0")).isEqualTo(0.0);
+        assertThat(counterValue("failed", "0.4.0")).isEqualTo(0.0);
     }
 
     @Test
@@ -342,9 +342,9 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.4.0")).isEqualTo(1.0);
-        assertThat(failureCount("v2-mapping-failed")).isEqualTo(0.0);
-        assertThat(failureCount("v3-mapping-failed")).isEqualTo(1.0);
-        assertThat(failureCount("v4-mapping-failed")).isEqualTo(0.0);
+        assertThat(counterValue("failed", "0.2.0")).isEqualTo(0.0);
+        assertThat(counterValue("failed", "0.3.0")).isEqualTo(1.0);
+        assertThat(counterValue("failed", "0.4.0")).isEqualTo(0.0);
     }
 
     @Test
@@ -401,11 +401,7 @@ class NotificationSqsListenerTest {
     }
 
     private double counterValue(String outcome, String schemaVersion) {
-        return meterRegistry.counter("notification.sqs.messages", "outcome", outcome,
-            "schemaVersion", schemaVersion).count();
-    }
-
-    private double failureCount(String outcome) {
-        return meterRegistry.counter("notification.sqs.messages", "outcome", outcome).count();
+        return meterRegistry.counter("notification.message", "outcome", outcome,
+            "schema.version", schemaVersion).count();
     }
 }
