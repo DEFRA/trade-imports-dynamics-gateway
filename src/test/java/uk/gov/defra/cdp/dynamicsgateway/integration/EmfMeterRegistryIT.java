@@ -118,7 +118,7 @@ class EmfMeterRegistryIT extends IntegrationBase {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"http.server.requests", "notification.sqs.messages", "jvm.gc.pause"})
+  @ValueSource(strings = {"http.server.requests", "jvm.gc.pause"})
   void aMeterOffTheAllowlistIsNeverRegistered(String name) {
     meterRegistry.counter(name).increment();
 

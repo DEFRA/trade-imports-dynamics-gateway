@@ -178,7 +178,7 @@ class PimsEventMapperTest {
         // Given
         Authentication auth = new Authentication(List.of(new Clause("c1", "content", "url")));
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-08-12", null, auth, null);
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-08-12", auth, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When
@@ -366,7 +366,7 @@ class PimsEventMapperTest {
     @Test
     void map_shouldHandleNullAuthenticationInExchangedDocument() {
         // Given
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null, null, null);
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When / Then
@@ -376,7 +376,7 @@ class PimsEventMapperTest {
     @Test
     void map_shouldHandleNullIncludedClauseList() {
         // Given
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null,
             new Authentication(null), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
@@ -387,7 +387,7 @@ class PimsEventMapperTest {
     @Test
     void map_shouldHandleNullClauseElementInAuthentication() {
         // Given
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null,
             new Authentication(Collections.singletonList(null)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
@@ -401,7 +401,7 @@ class PimsEventMapperTest {
         DefinedContact contact = new DefinedContact("Person", "+44123", "email@test.com");
         ReferencedDocument refDoc = new ReferencedDocument("T", null, "R", "ref-1", "2026-08-13");
         TradeParty party = new TradeParty("p-1", null, null, null, null, null, List.of(contact));
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null,
             new Authentication(List.of(new Clause("c1", "text", null))), List.of(refDoc));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc,
             emptyConsignment().withConsignorParty(party).build()));

@@ -154,30 +154,43 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
+        List<ServiceBusReceivedMessage> versions = awaitFourOrderedAsbMessages(deduplicationId);
+        assertThat(versions).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
+        assertEverySchemaVersionPayload(versions);
+    }
+
+    private List<ServiceBusReceivedMessage> awaitFourOrderedAsbMessages(String deduplicationId) {
         String v1Id = deduplicationId;
         String v2Id = deduplicationId + "-v2";
         String v3Id = deduplicationId + "-v3";
+        String v4Id = deduplicationId + "-v4";
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
-                .as("one inbound notification must produce exactly three ASB messages")
-                .containsExactlyInAnyOrder(v1Id, v2Id, v3Id);
+                .as("one inbound notification must produce exactly four ASB messages")
+                .containsExactlyInAnyOrder(v1Id, v2Id, v3Id, v4Id);
         });
 
-        // Then
         await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
-                .as("no fourth message may follow the v0.1.0, v0.2.0 and v0.3.0 messages, which arrive in order")
-                .containsExactly(v1Id, v2Id, v3Id);
+                .as("no fifth message may follow the v0.1.0–v0.4.0 messages, which arrive in order")
+                .containsExactly(v1Id, v2Id, v3Id, v4Id);
         });
 
-        ServiceBusReceivedMessage v1 = messageWithId(mine, v1Id);
-        ServiceBusReceivedMessage v2 = messageWithId(mine, v2Id);
-        ServiceBusReceivedMessage v3 = messageWithId(mine, v3Id);
+        return List.of(
+            messageWithId(mine, v1Id),
+            messageWithId(mine, v2Id),
+            messageWithId(mine, v3Id),
+            messageWithId(mine, v4Id));
+    }
 
-        assertThat(List.of(v1, v2, v3)).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
+    private void assertEverySchemaVersionPayload(List<ServiceBusReceivedMessage> versions) {
+        ServiceBusReceivedMessage v1 = versions.get(0);
+        ServiceBusReceivedMessage v2 = versions.get(1);
+        ServiceBusReceivedMessage v3 = versions.get(2);
+        ServiceBusReceivedMessage v4 = versions.get(3);
 
         JsonNode v3Body = readBody(v3);
         assertThat(v3Body.path("metadata").path("schemaVersion").asText()).isEqualTo("0.3.0");
@@ -213,7 +226,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
         JsonNode lineItems = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
         assertThat(lineItems).hasSize(2);
-        // Populated where the notification carried a classification...
         assertThat(lineItems.get(0).path("applicableClassification").isArray()).isTrue();
         assertThat(lineItems.get(0).path("applicableClassification")).hasSize(1);
         assertThat(lineItems.get(0).path("applicableClassification").get(0).path("systemId").asText())
@@ -221,6 +233,10 @@ class NotificationSqsListenerIT extends IntegrationBase {
         assertThat(lineItems.get(1).has("applicableClassification"))
             .as("applicableClassification must be omitted rather than emitted as an empty array")
             .isFalse();
+
+        JsonNode v4Metadata = readBody(v4).path("metadata");
+        assertThat(v4Metadata.path("schemaVersion").asText()).isEqualTo("0.4.0");
+        assertThat(v4Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.4.0.schema.json");
     }
 
     @Test
@@ -229,6 +245,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
         double baseV1 = forwardedCount("0.1.0");
         double baseV2 = forwardedCount("0.2.0");
         double baseV3 = forwardedCount("0.3.0");
+        double baseV4 = forwardedCount("0.4.0");
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
@@ -239,13 +256,15 @@ class NotificationSqsListenerIT extends IntegrationBase {
             assertThat(forwardedCount("0.1.0")).isEqualTo(baseV1 + 1);
             assertThat(forwardedCount("0.2.0")).isEqualTo(baseV2 + 1);
             assertThat(forwardedCount("0.3.0")).isEqualTo(baseV3 + 1);
+            assertThat(forwardedCount("0.4.0")).isEqualTo(baseV4 + 1);
             assertThat(messageIds(mine))
-                .containsExactlyInAnyOrder(deduplicationId, deduplicationId + "-v2", deduplicationId + "-v3");
+                .containsExactlyInAnyOrder(
+                    deduplicationId, deduplicationId + "-v2", deduplicationId + "-v3", deduplicationId + "-v4");
         });
     }
 
     @Test
-    void sqsToAsb_recordsTheListenerTime_threeServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
+    void sqsToAsb_recordsTheListenerTime_fourServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
         long baseListenerCalls = listenerCallCount();
         long baseSends = durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE);
         long baseReceives = durationCount(meterRegistry, SQS_RECEIVE_MESSAGE);
@@ -257,7 +276,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             collectMessagesFor(mine, deduplicationId);
             assertThat(listenerCallCount()).isEqualTo(baseListenerCalls + 1);
             assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE))
-                .isEqualTo(baseSends + 3);
+                .isEqualTo(baseSends + 4);
             assertThat(durationCount(meterRegistry, SQS_RECEIVE_MESSAGE)).isGreaterThan(baseReceives);
             assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isEqualTo(1.0);
             assertThat(availability(meterRegistry, Dependency.SQS)).isEqualTo(1.0);

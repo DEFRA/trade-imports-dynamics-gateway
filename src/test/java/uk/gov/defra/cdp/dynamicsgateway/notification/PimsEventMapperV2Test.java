@@ -80,7 +80,7 @@ class PimsEventMapperV2Test {
         ReferencedDocument refDoc = new ReferencedDocument(
             "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "ZZZ", "GBHC1234567890", "2026-09-10");
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, List.of(refDoc));
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, List.of(refDoc));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When
@@ -100,7 +100,7 @@ class PimsEventMapperV2Test {
             "https://refdata.tbc.defra.gov.uk/clause/II.1");
         Clause transport = new Clause("II.2", "Transport conditions were met.", null);
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null,
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10",
             new Authentication(List.of(attestation, transport)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
@@ -122,7 +122,7 @@ class PimsEventMapperV2Test {
     void map_shouldHandleNullFirstSignatoryAuthentication() {
         // Given
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, null);
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When / Then

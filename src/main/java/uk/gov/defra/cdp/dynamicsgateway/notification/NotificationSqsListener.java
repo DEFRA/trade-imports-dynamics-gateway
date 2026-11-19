@@ -57,7 +57,8 @@ public class NotificationSqsListener {
         this.requiredStream = schemaStream(meterRegistry, "0.1.0", pimsPayloadMapper::mapToV1, "");
         this.bestEffortStreams = List.of(
             schemaStream(meterRegistry, "0.2.0", pimsPayloadMapper::mapToV2, "-v2"),
-            schemaStream(meterRegistry, "0.3.0", pimsPayloadMapper::mapToV3, "-v3"));
+            schemaStream(meterRegistry, "0.3.0", pimsPayloadMapper::mapToV3, "-v3"),
+            schemaStream(meterRegistry, "0.4.0", pimsPayloadMapper::mapToV4, "-v4"));
     }
 
     private static SchemaStream schemaStream(

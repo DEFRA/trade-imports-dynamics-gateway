@@ -10,7 +10,6 @@ public record ExchangedDocument(
     String notificationStatusCode,
     Integer versionId,
     String issueDateTime,
-    TradeParty issuer,
     Authentication firstSignatoryAuthentication,
     List<ReferencedDocument> referenceDocument
 ) {}

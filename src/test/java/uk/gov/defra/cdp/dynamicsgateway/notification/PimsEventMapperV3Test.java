@@ -12,14 +12,11 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.CodedValue;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ConsignmentItem;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.DefinedContact;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeLineItem;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV3;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsReferencedDocument;
 
@@ -79,28 +76,20 @@ class PimsEventMapperV3Test {
     }
 
     @Test
-    void map_shouldSendIssuerAndDocumentTypeListUrl() {
-        var pimsDoc = mapper.map(eventWithIssuerAndDocument()).data().exchangedDocument();
+    void map_shouldOmitIssuerAndStillSendDocumentTypeListUrl() {
+        var pimsDoc = mapper.map(eventWithReferenceDocument()).data().exchangedDocument();
 
         assertThat(pimsDoc.identifier()).isEqualTo("id-1");
-        assertThat(pimsDoc.issuer().name()).isEqualTo("Animal and Plant Health Agency");
-        assertThat(pimsDoc.issuer().postalAddress().lineOne()).isEqualTo("Woodham Lane");
-        assertThat(pimsDoc.issuer().definedContact()).singleElement().satisfies(contact -> {
-            assertThat(contact.emailURIUniversalCommunication()).isEqualTo("imports@apha.example.gov.uk");
-            assertThat(contact.telephoneUniversalCommunication()).isEqualTo("03000 200301");
-        });
+        assertThat(pimsDoc.issuer()).isNull();
         assertThat(pimsDoc.referenceDocument()).containsExactly(new PimsReferencedDocument(
             "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "GBHC1234567890", "2026-09-10"));
     }
 
-    private OutboxEvent eventWithIssuerAndDocument() {
-        TradeParty issuer = new TradeParty(null, null, "Animal and Plant Health Agency", null, null,
-            new TradeAddress("Woodham Lane", null, null, null, "GB", null, null),
-            List.of(new DefinedContact(null, "03000 200301", "imports@apha.example.gov.uk")));
+    private OutboxEvent eventWithReferenceDocument() {
         ReferencedDocument refDoc = new ReferencedDocument(
             "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "ZZZ", "GBHC1234567890", "2026-09-10");
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", issuer, null, List.of(refDoc));
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, List.of(refDoc));
         return eventWithData(new GbnAgData("m", "t", doc, null));
     }
 
@@ -111,7 +100,7 @@ class PimsEventMapperV3Test {
             "https://refdata.tbc.defra.gov.uk/clause/II.1");
         Clause transport = new Clause("II.2", "Transport conditions were met.", null);
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null,
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10",
             new Authentication(List.of(attestation, transport)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
@@ -133,7 +122,7 @@ class PimsEventMapperV3Test {
     void map_shouldHandleNullFirstSignatoryAuthentication() {
         // Given
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, null);
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
         // When / Then

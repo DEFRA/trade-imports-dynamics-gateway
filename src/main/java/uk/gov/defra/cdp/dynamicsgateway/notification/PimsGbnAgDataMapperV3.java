@@ -38,7 +38,7 @@ class PimsGbnAgDataMapperV3 {
             doc.notificationStatusCode(),
             doc.versionId(),
             doc.issueDateTime(),
-            commonMapper.mapTradeParty(doc.issuer()),
+            null,
             mapAuthentication(doc.firstSignatoryAuthentication()),
             mapList(doc.referenceDocument(), commonMapper::mapReferencedDocument)
         );

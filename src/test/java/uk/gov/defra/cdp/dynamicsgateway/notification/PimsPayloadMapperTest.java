@@ -55,7 +55,20 @@ class PimsPayloadMapperTest {
             ),
             envelopeMapper
         );
-        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3);
+        PimsCommonMapperV4 commonMapperV4 = new PimsCommonMapperV4();
+        PimsEventMapperV4 pimsEventMapperV4 = new PimsEventMapperV4(
+            new PimsGbnAgDataMapperV4(
+                new PimsConsignmentMapperV4(
+                    new PimsTransportMapperV4(commonMapperV4),
+                    new PimsLineItemMapperV4(commonMapperV4),
+                    commonMapperV4
+                ),
+                commonMapperV4
+            ),
+            envelopeMapper
+        );
+        mapper = new PimsPayloadMapper(
+            objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3, pimsEventMapperV4);
     }
 
     @Test
@@ -223,16 +236,11 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV3_shouldAddIssuerDocumentTypeListUrlAndRegionOfOriginCodeToTheBackendFixture() throws Exception {
+    void mapToV3_shouldOmitIssuerAndStillSendDocumentTypeListUrlAndRegionOfOriginCode() throws Exception {
         JsonNode result = objectMapper.readTree(mapper.mapToV3(fixtureEvent()));
 
         JsonNode exchangedDocument = result.path("data").path("exchangedDocument");
-        assertThat(exchangedDocument.path("issuer").path("name").asText()).isEqualTo("Animal and Plant Health Agency");
-        assertThat(exchangedDocument.path("issuer").path("postalAddress").path("postcodeCode").asText())
-            .isEqualTo("KT15 3NB");
-        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0)
-            .path("emailURIUniversalCommunication").asText()).isEqualTo("imports@apha.example.gov.uk");
-        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0).has("personName")).isFalse();
+        assertThat(exchangedDocument.has("issuer")).isFalse();
         assertThat(exchangedDocument.path("referenceDocument").findValuesAsText("urlId"))
             .containsOnly("https://refdata.tbc.defra.gov.uk/gbn-ag-document-types")
             .hasSize(2);
