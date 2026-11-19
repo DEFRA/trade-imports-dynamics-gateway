@@ -154,6 +154,12 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
+        List<ServiceBusReceivedMessage> versions = awaitFourOrderedAsbMessages(deduplicationId);
+        assertThat(versions).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
+        assertEverySchemaVersionPayload(versions);
+    }
+
+    private List<ServiceBusReceivedMessage> awaitFourOrderedAsbMessages(String deduplicationId) {
         String v1Id = deduplicationId;
         String v2Id = deduplicationId + "-v2";
         String v3Id = deduplicationId + "-v3";
@@ -166,7 +172,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
                 .containsExactlyInAnyOrder(v1Id, v2Id, v3Id, v4Id);
         });
 
-        // Then
         await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
@@ -174,12 +179,18 @@ class NotificationSqsListenerIT extends IntegrationBase {
                 .containsExactly(v1Id, v2Id, v3Id, v4Id);
         });
 
-        ServiceBusReceivedMessage v1 = messageWithId(mine, v1Id);
-        ServiceBusReceivedMessage v2 = messageWithId(mine, v2Id);
-        ServiceBusReceivedMessage v3 = messageWithId(mine, v3Id);
-        ServiceBusReceivedMessage v4 = messageWithId(mine, v4Id);
+        return List.of(
+            messageWithId(mine, v1Id),
+            messageWithId(mine, v2Id),
+            messageWithId(mine, v3Id),
+            messageWithId(mine, v4Id));
+    }
 
-        assertThat(List.of(v1, v2, v3, v4)).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
+    private void assertEverySchemaVersionPayload(List<ServiceBusReceivedMessage> versions) {
+        ServiceBusReceivedMessage v1 = versions.get(0);
+        ServiceBusReceivedMessage v2 = versions.get(1);
+        ServiceBusReceivedMessage v3 = versions.get(2);
+        ServiceBusReceivedMessage v4 = versions.get(3);
 
         JsonNode v3Body = readBody(v3);
         assertThat(v3Body.path("metadata").path("schemaVersion").asText()).isEqualTo("0.3.0");
@@ -215,7 +226,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
         JsonNode lineItems = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
         assertThat(lineItems).hasSize(2);
-        // Populated where the notification carried a classification...
         assertThat(lineItems.get(0).path("applicableClassification").isArray()).isTrue();
         assertThat(lineItems.get(0).path("applicableClassification")).hasSize(1);
         assertThat(lineItems.get(0).path("applicableClassification").get(0).path("systemId").asText())
@@ -224,8 +234,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .as("applicableClassification must be omitted rather than emitted as an empty array")
             .isFalse();
 
-        JsonNode v4Body = readBody(v4);
-        JsonNode v4Metadata = v4Body.path("metadata");
+        JsonNode v4Metadata = readBody(v4).path("metadata");
         assertThat(v4Metadata.path("schemaVersion").asText()).isEqualTo("0.4.0");
         assertThat(v4Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.4.0.schema.json");
     }

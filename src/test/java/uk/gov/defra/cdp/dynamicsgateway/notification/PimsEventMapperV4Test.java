@@ -12,14 +12,11 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.CodedValue;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ConsignmentItem;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.DefinedContact;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.SpecifiedConsignment;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeLineItem;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV4;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv4.PimsReferencedDocument;
 
