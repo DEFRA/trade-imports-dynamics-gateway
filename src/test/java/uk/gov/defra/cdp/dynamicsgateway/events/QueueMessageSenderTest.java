@@ -3,14 +3,24 @@ package uk.gov.defra.cdp.dynamicsgateway.events;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall.SERVICE_BUS_SEND_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.failureTotal;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.recordedCallCount;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.totalDurationMillis;
 
 import com.azure.core.amqp.exception.AmqpException;
 import com.azure.messaging.servicebus.ServiceBusErrorSource;
 import com.azure.messaging.servicebus.ServiceBusException;
 import com.azure.messaging.servicebus.ServiceBusMessage;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,24 +29,28 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.CapturingEmfEnvironment;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
-import software.amazon.cloudwatchlogs.emf.logger.MetricsLogger;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.Dependency;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallRecorder;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.LastCallOutcomes;
 
 @ExtendWith(MockitoExtension.class)
 class QueueMessageSenderTest {
 
+    private static final long FIFTY_MILLIS_IN_NANOS = Duration.ofMillis(50).toNanos();
+
     @Mock
     private ServiceBusSenderClient senderClient;
 
-    private final CapturingEmfEnvironment emf = new CapturingEmfEnvironment();
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final LastCallOutcomes lastCallOutcomes = new LastCallOutcomes();
+    private final AtomicLong nanoTime = new AtomicLong();
 
     private QueueMessageSender queueMessageSender;
 
     @BeforeEach
     void setUp() {
-        queueMessageSender = new QueueMessageSender(senderClient,
-            new ExternalCallMetrics(true, "trade-imports-dynamics-gateway", () -> new MetricsLogger(emf)));
+        queueMessageSender = new QueueMessageSender(
+            senderClient, new ExternalCallRecorder(meterRegistry, lastCallOutcomes, nanoTime::get));
     }
 
     @Test
@@ -150,25 +164,35 @@ class QueueMessageSenderTest {
     }
 
     @Test
-    void publish_shouldRecordASuccessfulServiceBusSend() {
+    void publish_shouldRecordTheSendAsOneSuccessfulCallOfTheTimeItTook_andTheServiceBusAsAvailable() {
+        doAnswer(invocation -> nanoTime.addAndGet(FIFTY_MILLIS_IN_NANOS))
+            .when(senderClient).sendMessage(any());
+
         queueMessageSender.publish("{\"key\":\"value\"}", "session-1");
 
-        assertThat(emf.documents()).hasSize(1);
-        assertThat(emf.documents().getFirst().get("Operation").asText()).isEqualTo("send-message");
-        assertThat(emf.documents().getFirst().get("ExternalCallFailure").asInt()).isZero();
+        assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1);
+        assertThat(totalDurationMillis(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(50);
+        assertThat(recordedCallCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1);
+        assertThat(failureTotal(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isZero();
+        assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(true);
     }
 
     @Test
-    void publish_shouldRecordAFailedSend_andStillThrowRetryable() {
+    void publish_shouldRecordTheSendAsOneFailedCallOfTheTimeItTook_andTheServiceBusAsUnavailable_andThrowRetryable_whenTheSendFailsTransiently() {
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
-        doThrow(transientEx).when(senderClient).sendMessage(any());
+        doAnswer(invocation -> {
+            nanoTime.addAndGet(FIFTY_MILLIS_IN_NANOS);
+            throw transientEx;
+        }).when(senderClient).sendMessage(any());
 
         assertThatThrownBy(() -> queueMessageSender.publish("{\"key\":\"value\"}", "session-1"))
             .isInstanceOf(SqsRetryableException.class);
 
-        assertThat(emf.documents()).hasSize(1);
-        assertThat(emf.documents().getFirst().get("ExternalCallFailure").asInt()).isEqualTo(1);
+        assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1);
+        assertThat(totalDurationMillis(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(50);
+        assertThat(failureTotal(meterRegistry, SERVICE_BUS_SEND_MESSAGE)).isEqualTo(1.0);
+        assertThat(lastCallOutcomes.lastCallSucceeded(Dependency.AZURE_SERVICE_BUS)).contains(false);
     }
 
     @Test

@@ -95,6 +95,6 @@ class NotificationErrorHandlerTest {
     }
 
     private double errorCount(String action) {
-        return meterRegistry.counter("notification.sqs.errors", "action", action).count();
+        return meterRegistry.counter("notification.error", "action", action).count();
     }
 }

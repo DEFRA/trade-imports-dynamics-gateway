@@ -32,12 +32,6 @@ import uk.gov.defra.cdp.dynamicsgateway.configuration.NotificationSqsConfig;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqListResponse;
 import uk.gov.defra.cdp.dynamicsgateway.notification.DlqService;
 
-/**
- * Exercises {@link DlqService} against a real SQS (Floci) so the DLQ list/peek plumbing — FIFO
- * receive semantics, receipt-handle lifecycle, system attributes, {@code GetQueueAttributes} counting
- * and the early visibility-release — runs against the actual API rather than mocks. Standalone (no
- * Spring context, no ASB emulator).
- */
 @Slf4j
 class DlqServiceIT {
 

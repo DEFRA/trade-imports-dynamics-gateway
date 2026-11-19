@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -241,7 +242,7 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldThrowRetryable_onFirstAttempt_whenAsbFailsTransiently() {
+    void receive_shouldThrowRetryable_andCountV1AsFailed_whenAsbFailsTransiently() {
         // Given — v1 fails; v0.2.0 must never even be attempted for a v1 failure
         doThrow(new SqsRetryableException("ASB down",
             new RuntimeException("Simulated transient failure")))
@@ -258,6 +259,9 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.1.0")).isEqualTo(1.0);
+        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
     }
 
     @Test
@@ -277,6 +281,27 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.1.0")).isEqualTo(1.0);
+        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
+    }
+
+    @Test
+    void receive_shouldNotThrow_andCountV2AsFailed_whenV2MappingFails() {
+        PimsPayloadMapper failingV2Mapper = spy(pimsPayloadMapper);
+        doThrow(new IllegalStateException("Cannot map to PIMS v0.2.0"))
+            .when(failingV2Mapper).mapToV2(any());
+        NotificationSqsListener listenerWithFailingV2 =
+            new NotificationSqsListener(queueMessageSender, objectMapper, failingV2Mapper, meterRegistry);
+
+        assertThatCode(
+            () -> listenerWithFailingV2.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+            .doesNotThrowAnyException();
+
+        assertThat(failedCount("0.2.0")).isEqualTo(1.0);
+        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
+        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
+        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
     }
 
     @Test
@@ -293,8 +318,9 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
-        assertThat(failureCount("v2-mapping-failed")).isEqualTo(1.0);
-        assertThat(failureCount("v3-mapping-failed")).isEqualTo(0.0);
+        assertThat(failedCount("0.1.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.2.0")).isEqualTo(1.0);
+        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
     }
 
     @Test
@@ -311,8 +337,9 @@ class NotificationSqsListenerTest {
         assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
         assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
-        assertThat(failureCount("v2-mapping-failed")).isEqualTo(0.0);
-        assertThat(failureCount("v3-mapping-failed")).isEqualTo(1.0);
+        assertThat(failedCount("0.1.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.3.0")).isEqualTo(1.0);
     }
 
     @Test
@@ -366,11 +393,11 @@ class NotificationSqsListenerTest {
     }
 
     private double counterValue(String outcome, String schemaVersion) {
-        return meterRegistry.counter("notification.sqs.messages", "outcome", outcome,
-            "schemaVersion", schemaVersion).count();
+        return meterRegistry.counter("notification.message", "outcome", outcome,
+            "schema.version", schemaVersion).count();
     }
 
-    private double failureCount(String outcome) {
-        return meterRegistry.counter("notification.sqs.messages", "outcome", outcome).count();
+    private double failedCount(String schemaVersion) {
+        return counterValue("failed", schemaVersion);
     }
 }

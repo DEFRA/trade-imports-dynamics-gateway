@@ -52,7 +52,7 @@ public class DlqController {
     @ApiResponse(responseCode = "200", description = "Page of DLQ messages",
         content = @Content(schema = @Schema(implementation = DlqListResponse.class)))
     @ApiResponse(responseCode = "400", description = "limit is below 1 or above " + MAX_LIMIT, content = @Content)
-    @Timed("dlq.list")
+    @Timed("controller.dlqList.time")
     public DlqListResponse list(
             @RequestParam(name = "limit", defaultValue = "" + DEFAULT_LIMIT) @Min(1) @Max(MAX_LIMIT) int limit) {
         return dlqService.list(limit);
@@ -63,7 +63,7 @@ public class DlqController {
         description = "Starts an SQS StartMessageMoveTask moving every DLQ message back onto the source queue")
     @ApiResponse(responseCode = "202", description = "Replay-all task started")
     @ApiResponse(responseCode = "502", description = "A replay or delete-all task is already in progress on this queue", content = @Content)
-    @Timed("dlq.replay_all")
+    @Timed("controller.dlqReplayAll.time")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void replayAll(
             @RequestHeader(value = "User-Id", required = false, defaultValue = "unknown") String userId) {
@@ -76,7 +76,7 @@ public class DlqController {
         description = "Purges the DLQ via SQS PurgeQueue; asynchronous, can take up to 60 seconds to fully complete")
     @ApiResponse(responseCode = "202", description = "Delete-all requested")
     @ApiResponse(responseCode = "502", description = "A purge is already in progress on this queue (60s cooldown)", content = @Content)
-    @Timed("dlq.delete_all")
+    @Timed("controller.dlqDeleteAll.time")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void deleteAll(
             @RequestHeader(value = "User-Id", required = false, defaultValue = "unknown") String userId) {

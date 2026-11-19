@@ -1,28 +1,176 @@
 package uk.gov.defra.cdp.dynamicsgateway.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.CapturedLogs.loggedBy;
 
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import io.micrometer.core.annotation.Counted;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.aop.CountedAspect;
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import org.junit.jupiter.api.BeforeEach;
+import java.lang.reflect.Method;
+import java.util.List;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.boot.actuate.metrics.MetricsEndpoint;
+import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.convert.ConversionService;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.EmfMeterRegistry;
 
 class MetricsConfigTest {
 
-    private MetricsConfig metricsConfig;
-    private MeterRegistry meterRegistry;
+  private final ApplicationContextRunner contextRunner =
+      new ApplicationContextRunner()
+          .withUserConfiguration(MetricsConfig.class)
+          .withBean(
+              ConfigurableApplicationContext.CONVERSION_SERVICE_BEAN_NAME,
+              ConversionService.class,
+              ApplicationConversionService::getSharedInstance)
+          .withPropertyValues("aws.emf.namespace=test-namespace", "aws.emf.step=1m");
 
-    @BeforeEach
-    void setUp() {
-        metricsConfig = new MetricsConfig();
-        meterRegistry = new SimpleMeterRegistry();
+  @Test
+  void emfMeterRegistry_isCreatedWhenEmfIsEnabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=true")
+        .run(context -> assertThat(context).hasSingleBean(EmfMeterRegistry.class));
+  }
+
+  @Test
+  void emfMeterRegistry_isLeftOutWhenEmfIsDisabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=false")
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context).doesNotHaveBean(EmfMeterRegistry.class);
+            });
+  }
+
+  @Test
+  void meterRegistry_isACompositeOfTheCumulativeAndEmfRegistries_whenEmfIsEnabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=true")
+        .run(
+            context ->
+                assertThat(context.getBean(MeterRegistry.class))
+                    .isInstanceOfSatisfying(
+                        CompositeMeterRegistry.class,
+                        composite ->
+                            assertThat(composite.getRegistries())
+                                .containsExactlyInAnyOrder(
+                                    context.getBean(SimpleMeterRegistry.class),
+                                    context.getBean(EmfMeterRegistry.class))));
+  }
+
+  @Test
+  void meterRegistry_isACompositeOfTheCumulativeRegistryOnly_whenEmfIsDisabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=false")
+        .run(
+            context ->
+                assertThat(context.getBean(MeterRegistry.class))
+                    .isInstanceOfSatisfying(
+                        CompositeMeterRegistry.class,
+                        composite ->
+                            assertThat(composite.getRegistries())
+                                .containsExactly(context.getBean(SimpleMeterRegistry.class))));
+  }
+
+  @Test
+  void metricsEndpoint_readsTheCumulativeRegistry() {
+    contextRunner.run(
+        context -> {
+          context.getBean(SimpleMeterRegistry.class).counter("cumulative.only").increment(2);
+
+          assertThat(
+                  context
+                      .getBean(MetricsEndpoint.class)
+                      .metric("cumulative.only", null)
+                      .getMeasurements())
+              .singleElement()
+              .satisfies(sample -> assertThat(sample.getValue()).isEqualTo(2.0));
+        });
+  }
+
+  @Test
+  void emfPublishingOffLog_logsThatMetricsAreNotPublished_whenEmfIsNotEnabled() {
+    contextRunner.run(
+        context -> {
+          ApplicationRunner offLog = context.getBean(ApplicationRunner.class);
+
+          List<ILoggingEvent> events =
+              loggedBy(MetricsConfig.class, () -> runWithNoArguments(offLog));
+
+          assertThat(events)
+              .extracting(ILoggingEvent::getFormattedMessage)
+              .containsExactly("Not publishing metrics to CloudWatch: aws.emf.enabled is not true");
+        });
+  }
+
+  @Test
+  void emfPublishingOffLog_isLeftOutWhenEmfIsEnabled() {
+    contextRunner
+        .withPropertyValues("aws.emf.enabled=true")
+        .run(context -> assertThat(context).doesNotHaveBean(ApplicationRunner.class));
+  }
+
+  @Test
+  void timedAspect_recordsTimedMetricWhenIntercepted() throws Throwable {
+    MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    TimedAspect timedAspect = new MetricsConfig().timedAspect(meterRegistry);
+
+    timedAspect.timedMethod(joinPointFor(AnnotatedTarget.class.getDeclaredMethod("timedOperation")));
+
+    assertThat(meterRegistry.find("test.timed.operation").timer()).isNotNull();
+  }
+
+  @Test
+  void countedAspect_countsAnInterceptedCallInTheSuppliedRegistry() throws Throwable {
+    MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    CountedAspect countedAspect = new MetricsConfig().countedAspect(meterRegistry);
+    Method method = AnnotatedTarget.class.getDeclaredMethod("countedOperation");
+
+    countedAspect.interceptAndRecord(joinPointFor(method), method.getAnnotation(Counted.class));
+
+    assertThat(meterRegistry.get("test.counted.operation").counter().count()).isEqualTo(1.0);
+  }
+
+  private static ProceedingJoinPoint joinPointFor(Method method) throws Throwable {
+    ProceedingJoinPoint joinPoint = mock(ProceedingJoinPoint.class);
+    MethodSignature signature = mock(MethodSignature.class);
+    when(joinPoint.getSignature()).thenReturn(signature);
+    when(signature.getMethod()).thenReturn(method);
+    when(joinPoint.proceed()).thenReturn("done");
+    return joinPoint;
+  }
+
+  private static void runWithNoArguments(ApplicationRunner runner) {
+    try {
+      runner.run(new DefaultApplicationArguments());
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private static final class AnnotatedTarget {
+    @Timed("test.timed.operation")
+    String timedOperation() {
+      return "done";
     }
 
-    @Test
-    void timedAspect_shouldCreateTimedAspectWithRegistry() {
-        TimedAspect result = metricsConfig.timedAspect(meterRegistry);
-
-        assertThat(result).isNotNull().isInstanceOf(TimedAspect.class);
+    @Counted("test.counted.operation")
+    String countedOperation() {
+      return "done";
     }
+  }
 }

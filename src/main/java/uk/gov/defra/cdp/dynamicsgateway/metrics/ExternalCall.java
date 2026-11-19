@@ -3,17 +3,15 @@ package uk.gov.defra.cdp.dynamicsgateway.metrics;
 import java.util.Objects;
 
 /**
- * One call to a system outside the INS boundary, named as the external-call metric contract names
- * it.
+ * One call to a system outside the INS boundary.
  *
- * @param dependency the system called, for example {@code azure-service-bus}
+ * @param dependency the system called
  * @param operation the operation on that system, for example {@code send-message}
- * @param interfaceId the volumetrics SYN interface id, or {@code null} where there is none
  */
-public record ExternalCall(String dependency, String operation, String interfaceId) {
+public record ExternalCall(Dependency dependency, String operation) {
 
   public static final ExternalCall SERVICE_BUS_SEND_MESSAGE =
-      new ExternalCall("azure-service-bus", "send-message", null);
+      new ExternalCall(Dependency.AZURE_SERVICE_BUS, "send-message");
 
   public ExternalCall {
     Objects.requireNonNull(dependency, "dependency must not be null");

@@ -133,12 +133,10 @@ JSON is snake_case.
 It is open (no auth), read-only and eventually consistent: SQS `GetQueueAttributes` counts can lag
 and drift between calls.
 
-The `notification.sqs.messages` counters (tags `outcome` and `schemaVersion`) are enabled and
-readable at `/metrics/notification.sqs.messages`, for example
-`/metrics/notification.sqs.messages?tag=outcome:forwarded&tag=schemaVersion:0.1.0`. `outcome=forwarded` is tagged with each
-schema version (`0.1.0`, `0.2.0`, `0.3.0`); a failed v0.2.0 or v0.3.0 copy counts under
-`outcome=v2-mapping-failed` or `outcome=v3-mapping-failed`. They live in
-memory, so each gateway instance counts only what it forwarded itself.
+### Observability
+
+The metrics the gateway publishes to CloudWatch, the line it logs for each Service Bus and SQS call,
+and how to follow a notification across services are in [docs/observability.md](docs/observability.md).
 
 ### API documentation (OpenAPI)
 

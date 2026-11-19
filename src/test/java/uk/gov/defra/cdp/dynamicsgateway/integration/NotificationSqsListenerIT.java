@@ -2,6 +2,10 @@ package uk.gov.defra.cdp.dynamicsgateway.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall.SERVICE_BUS_SEND_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.SQS_RECEIVE_MESSAGE;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.availability;
+import static uk.gov.defra.cdp.dynamicsgateway.testsupport.ExternalCallMeters.durationCount;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +25,7 @@ import com.azure.messaging.servicebus.ServiceBusReceivedMessage;
 import com.azure.messaging.servicebus.ServiceBusSenderClient;
 import io.floci.testcontainers.FlociContainer;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -52,6 +57,7 @@ import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.Dependency;
 
 @Slf4j
 class NotificationSqsListenerIT extends IntegrationBase {
@@ -239,6 +245,26 @@ class NotificationSqsListenerIT extends IntegrationBase {
     }
 
     @Test
+    void sqsToAsb_recordsTheListenerTime_threeServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
+        long baseListenerCalls = listenerCallCount();
+        long baseSends = durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE);
+        long baseReceives = durationCount(meterRegistry, SQS_RECEIVE_MESSAGE);
+        String deduplicationId = UUID.randomUUID().toString();
+        sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
+
+        List<ServiceBusReceivedMessage> mine = new ArrayList<>();
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            collectMessagesFor(mine, deduplicationId);
+            assertThat(listenerCallCount()).isEqualTo(baseListenerCalls + 1);
+            assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE))
+                .isEqualTo(baseSends + 3);
+            assertThat(durationCount(meterRegistry, SQS_RECEIVE_MESSAGE)).isGreaterThan(baseReceives);
+            assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isEqualTo(1.0);
+            assertThat(availability(meterRegistry, Dependency.SQS)).isEqualTo(1.0);
+        });
+    }
+
+    @Test
     void sqsToAsb_shouldLeaveMessageInSqs_whenAsbFailureIsTransient() {
         AmqpException transientCause = new AmqpException(true, "timeout", null, null);
         ServiceBusException transientEx = new ServiceBusException(transientCause, ServiceBusErrorSource.SEND);
@@ -346,10 +372,16 @@ class NotificationSqsListenerIT extends IntegrationBase {
         });
     }
 
+    private long listenerCallCount() {
+        return meterRegistry.find("listener.notification.time").timers().stream()
+            .mapToLong(Timer::count)
+            .sum();
+    }
+
     private double forwardedCount(String schemaVersion) {
-        return meterRegistry.get("notification.sqs.messages")
+        return meterRegistry.get("notification.message")
             .tag("outcome", "forwarded")
-            .tag("schemaVersion", schemaVersion)
+            .tag("schema.version", schemaVersion)
             .counter()
             .count();
     }

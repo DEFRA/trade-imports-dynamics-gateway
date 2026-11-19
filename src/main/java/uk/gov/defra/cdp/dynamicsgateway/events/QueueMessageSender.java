@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsRetryableException;
 import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCall;
-import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
+import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallRecorder;
 
 /**
  * Forwards events to Azure Service Bus (ASB), classifying send failures as
@@ -27,7 +27,7 @@ import uk.gov.defra.cdp.dynamicsgateway.metrics.ExternalCallMetrics;
 public class QueueMessageSender {
 
     private final ServiceBusSenderClient senderClient;
-    private final ExternalCallMetrics externalCallMetrics;
+    private final ExternalCallRecorder externalCallRecorder;
 
     /**
      * Send a pre-serialised message to ASB on the given session, generating a fresh ASB messageId.
@@ -66,7 +66,7 @@ public class QueueMessageSender {
             .setSessionId(sessionId);
 
         try {
-            externalCallMetrics.measure(
+            externalCallRecorder.measure(
                 ExternalCall.SERVICE_BUS_SEND_MESSAGE, () -> senderClient.sendMessage(message));
             log.info("Event forwarded to Azure Service Bus, messageId={}, sessionId={}", resolvedMessageId, sessionId);
         } catch (ServiceBusException e) {

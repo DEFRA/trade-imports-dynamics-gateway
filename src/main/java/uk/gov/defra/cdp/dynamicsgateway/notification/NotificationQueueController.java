@@ -33,7 +33,7 @@ public class NotificationQueueController {
     @ApiResponse(responseCode = "200", description = "The queue's approximate depth",
         content = @Content(schema = @Schema(implementation = NotificationQueueDepth.class)))
     @ApiResponse(responseCode = "502", description = "SQS could not be read", content = @Content)
-    @Timed("queue.depth")
+    @Timed("controller.queueDepth.time")
     public NotificationQueueDepth depth() {
         return notificationQueueService.depth();
     }

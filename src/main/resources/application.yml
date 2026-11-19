@@ -7,8 +7,9 @@ aws:
   region: ${AWS_REGION:eu-west-2}
   emf:
     enabled: ${AWS_EMF_ENABLED:true}
-    environment: ${AWS_EMF_ENVIRONMENT:Local}
+    environment: ${AWS_EMF_ENVIRONMENT:}
     namespace: ${AWS_EMF_NAMESPACE:trade-imports-dynamics-gateway}
+    step: ${AWS_EMF_STEP:1m}
     service:
       name: ${AWS_EMF_SERVICE_NAME:trade-imports-dynamics-gateway}
       type: ${AWS_EMF_SERVICE_TYPE:SpringBootApp}
@@ -57,11 +58,23 @@ management:
     env:
       enabled: true
   metrics:
-    enabled: ${METRICS_ENABLED:true}
     enable:
       all: false
       controller: true
-      notification: true
+      service: true
+      listener: true
+      external:
+        call:
+          duration: true
+          failure: true
+        dependency:
+          available: true
+      notification:
+        message: true
+        error: true
+      sqs:
+        queue:
+          depth: true
       jvm:
         memory:
           committed: true
@@ -70,10 +83,6 @@ management:
         threads:
           live: true
           peak: true
-      http:
-        server:
-          requests:
-            active: true
 
 # CDP platform configuration
 cdp:

@@ -13,7 +13,13 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -54,10 +60,31 @@ public abstract class IntegrationBase {
         SERVICE_BUS_CONTAINER.start();
     }
 
+    @Autowired
+    private TestRestTemplate eventsClient;
+
     @DynamicPropertySource
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("azure.servicebus.connection-string",
             () -> SERVICE_BUS_CONTAINER.getConnectionString() + "EntityPath=" + QUEUE_NAME);
+    }
+
+    ResponseEntity<String> postEvent(String aggregateId) {
+        return postEvent(aggregateId, new HttpHeaders());
+    }
+
+    ResponseEntity<String> postEvent(String aggregateId, String traceId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("x-cdp-request-id", traceId);
+        return postEvent(aggregateId, headers);
+    }
+
+    private ResponseEntity<String> postEvent(String aggregateId, HttpHeaders headers) {
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return eventsClient.postForEntity(
+            "/events",
+            new HttpEntity<>("{\"aggregateId\":\"" + aggregateId + "\"}", headers),
+            String.class);
     }
 
     protected static List<ServiceBusReceivedMessage> consumeFromNextAsbSession(int maxMessages, Duration timeout) {
