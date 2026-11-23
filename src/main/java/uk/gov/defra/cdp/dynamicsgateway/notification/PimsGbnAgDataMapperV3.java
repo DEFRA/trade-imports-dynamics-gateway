@@ -4,12 +4,8 @@ import static uk.gov.defra.cdp.dynamicsgateway.notification.PimsMapperSupport.ma
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
-import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.GbnAgData;
-import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsAuthentication;
-import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsClause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsExchangedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsGbnAgData;
 
@@ -39,18 +35,8 @@ class PimsGbnAgDataMapperV3 {
             doc.versionId(),
             doc.issueDateTime(),
             null,
-            mapAuthentication(doc.firstSignatoryAuthentication()),
+            commonMapper.mapAuthentication(doc.firstSignatoryAuthentication()),
             mapList(doc.referenceDocument(), commonMapper::mapReferencedDocument)
         );
-    }
-
-    private PimsAuthentication mapAuthentication(Authentication auth) {
-        if (auth == null) return null;
-        return new PimsAuthentication(mapList(auth.includedClause(), this::mapClause));
-    }
-
-    private PimsClause mapClause(Clause clause) {
-        if (clause == null) return null;
-        return new PimsClause(clause.identifier(), clause.content(), clause.urlId());
     }
 }

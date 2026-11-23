@@ -30,6 +30,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -69,9 +70,15 @@ class NotificationSqsListenerIT extends IntegrationBase {
     private static final int MAX_RECEIVE_COUNT = 3;
     private static final int VISIBILITY_TIMEOUT_SECONDS = 5;
 
-    // Floci scopes SQS queues per region, so the test client and the Floci container must
-    // sign for the same region as the app under test — eu-west-2, the app's default.
     private static final String AWS_REGION = "eu-west-2";
+
+    private record SchemaStream(String schemaVersion, String messageIdSuffix) {}
+
+    private static final List<SchemaStream> SCHEMA_STREAMS = List.of(
+        new SchemaStream("0.1.0", ""),
+        new SchemaStream("0.2.0", "-v2"),
+        new SchemaStream("0.3.0", "-v3"),
+        new SchemaStream("0.4.0", "-v4"));
 
     private static final FlociContainer FLOCI = new FlociContainer(
         DockerImageName.parse("floci/floci:latest"))
@@ -126,23 +133,19 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldForwardMessage_whenValidEvent() {
-        // Given
         String eventBody = notificationJson(AGGREGATE_ID);
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(eventBody, AGGREGATE_ID, deduplicationId);
 
-        // When / Then — wait up to 30s for the listener to poll + forward
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isPresent();
-            // The ASB body is the re-serialised PimsEventV1, not the raw SQS body.
             String asbBody = received.get().getBody().toString();
             JsonNode pimsNode = new ObjectMapper().readTree(asbBody);
             assertThat(pimsNode.path("aggregateId").asText()).isEqualTo(AGGREGATE_ID);
             assertThat(pimsNode.path("eventType").asText())
                 .isEqualTo("uk.gov.defra.imports.notification.NotificationSubmitted");
             assertThat(received.get().getRawAmqpMessage().getProperties().getContentType()).isEqualTo("application/json");
-            // The inbound SQS MessageDeduplicationId is carried through as the ASB messageId.
             assertThat(received.get().getMessageId()).isEqualTo(deduplicationId);
             assertThat(received.get().getSessionId()).isEqualTo(AGGREGATE_ID);
         });
@@ -150,40 +153,38 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldEmitEverySchemaVersionInOrderOnOneSession_forOneNotification() {
-        // Given
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
-        List<ServiceBusReceivedMessage> versions = awaitFourOrderedAsbMessages(deduplicationId);
+        List<ServiceBusReceivedMessage> versions = awaitOneOrderedAsbMessagePerSchemaVersion(deduplicationId);
         assertThat(versions).extracting(ServiceBusReceivedMessage::getSessionId).containsOnly(AGGREGATE_ID);
         assertEverySchemaVersionPayload(versions);
     }
 
-    private List<ServiceBusReceivedMessage> awaitFourOrderedAsbMessages(String deduplicationId) {
-        String v1Id = deduplicationId;
-        String v2Id = deduplicationId + "-v2";
-        String v3Id = deduplicationId + "-v3";
-        String v4Id = deduplicationId + "-v4";
+    private static List<String> expectedMessageIds(String deduplicationId) {
+        return SCHEMA_STREAMS.stream()
+            .map(stream -> deduplicationId + stream.messageIdSuffix())
+            .toList();
+    }
+
+    private List<ServiceBusReceivedMessage> awaitOneOrderedAsbMessagePerSchemaVersion(String deduplicationId) {
+        List<String> expectedIds = expectedMessageIds(deduplicationId);
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
-                .as("one inbound notification must produce exactly four ASB messages")
-                .containsExactlyInAnyOrder(v1Id, v2Id, v3Id, v4Id);
+                .as("one inbound notification must produce exactly one ASB message per schema version")
+                .containsExactlyInAnyOrderElementsOf(expectedIds);
         });
 
         await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
             assertThat(messageIds(mine))
-                .as("no fifth message may follow the v0.1.0–v0.4.0 messages, which arrive in order")
-                .containsExactly(v1Id, v2Id, v3Id, v4Id);
+                .as("no further message may follow the per-version messages, which arrive in order")
+                .containsExactlyElementsOf(expectedIds);
         });
 
-        return List.of(
-            messageWithId(mine, v1Id),
-            messageWithId(mine, v2Id),
-            messageWithId(mine, v3Id),
-            messageWithId(mine, v4Id));
+        return expectedIds.stream().map(id -> messageWithId(mine, id)).toList();
     }
 
     private void assertEverySchemaVersionPayload(List<ServiceBusReceivedMessage> versions) {
@@ -234,37 +235,41 @@ class NotificationSqsListenerIT extends IntegrationBase {
             .as("applicableClassification must be omitted rather than emitted as an empty array")
             .isFalse();
 
-        JsonNode v4Metadata = readBody(v4).path("metadata");
+        JsonNode v4Body = readBody(v4);
+        JsonNode v4Metadata = v4Body.path("metadata");
         assertThat(v4Metadata.path("schemaVersion").asText()).isEqualTo("0.4.0");
         assertThat(v4Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.4.0.schema.json");
+        assertThat(v4Body.path("data").path("specifiedConsignment").path("originCountry")
+            .path("regionOfOriginCode").asText()).isEqualTo("ES-12345");
+        assertThat(v4Body.path("data").path("specifiedConsignment"))
+            .isEqualTo(v3Body.path("data").path("specifiedConsignment"));
+
+        assertThat(v3Body.path("data").path("exchangedDocument").has("issuer")).isFalse();
+        assertThat(v4Body.path("data").path("exchangedDocument").has("issuer")).isFalse();
     }
 
     @Test
     void sqsToAsb_shouldCountForwardedMessages_whenValidEvent() {
-        // Given
-        double baseV1 = forwardedCount("0.1.0");
-        double baseV2 = forwardedCount("0.2.0");
-        double baseV3 = forwardedCount("0.3.0");
-        double baseV4 = forwardedCount("0.4.0");
+        Map<String, Double> baseCounts = new HashMap<>();
+        SCHEMA_STREAMS.forEach(stream ->
+            baseCounts.put(stream.schemaVersion(), forwardedCount(stream.schemaVersion())));
         String deduplicationId = UUID.randomUUID().toString();
         sendToSqs(notificationJsonWithoutEventId(), AGGREGATE_ID, deduplicationId);
 
-        // When / Then
         List<ServiceBusReceivedMessage> mine = new ArrayList<>();
         await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             collectMessagesFor(mine, deduplicationId);
-            assertThat(forwardedCount("0.1.0")).isEqualTo(baseV1 + 1);
-            assertThat(forwardedCount("0.2.0")).isEqualTo(baseV2 + 1);
-            assertThat(forwardedCount("0.3.0")).isEqualTo(baseV3 + 1);
-            assertThat(forwardedCount("0.4.0")).isEqualTo(baseV4 + 1);
-            assertThat(messageIds(mine))
-                .containsExactlyInAnyOrder(
-                    deduplicationId, deduplicationId + "-v2", deduplicationId + "-v3", deduplicationId + "-v4");
+            for (SchemaStream stream : SCHEMA_STREAMS) {
+                assertThat(forwardedCount(stream.schemaVersion()))
+                    .as("forwarded count for schema version %s", stream.schemaVersion())
+                    .isEqualTo(baseCounts.get(stream.schemaVersion()) + 1);
+            }
+            assertThat(messageIds(mine)).containsExactlyInAnyOrderElementsOf(expectedMessageIds(deduplicationId));
         });
     }
 
     @Test
-    void sqsToAsb_recordsTheListenerTime_fourServiceBusSends_theSqsPolls_andBothDependenciesAvailable() {
+    void sqsToAsb_recordsTheListenerTime_oneServiceBusSendPerSchemaVersion_theSqsPolls_andBothDependenciesAvailable() {
         long baseListenerCalls = listenerCallCount();
         long baseSends = durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE);
         long baseReceives = durationCount(meterRegistry, SQS_RECEIVE_MESSAGE);
@@ -276,7 +281,7 @@ class NotificationSqsListenerIT extends IntegrationBase {
             collectMessagesFor(mine, deduplicationId);
             assertThat(listenerCallCount()).isEqualTo(baseListenerCalls + 1);
             assertThat(durationCount(meterRegistry, SERVICE_BUS_SEND_MESSAGE))
-                .isEqualTo(baseSends + 4);
+                .isEqualTo(baseSends + SCHEMA_STREAMS.size());
             assertThat(durationCount(meterRegistry, SQS_RECEIVE_MESSAGE)).isGreaterThan(baseReceives);
             assertThat(availability(meterRegistry, Dependency.AZURE_SERVICE_BUS)).isEqualTo(1.0);
             assertThat(availability(meterRegistry, Dependency.SQS)).isEqualTo(1.0);
@@ -309,17 +314,13 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
-        // When / Then — the redelivered attempt forwards the message to ASB.
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isPresent();
-            // The ASB body is the re-serialised PimsEventV1.
             JsonNode pimsNode = new ObjectMapper().readTree(received.get().getBody().toString());
             assertThat(pimsNode.path("aggregateId").asText()).isEqualTo(AGGREGATE_ID);
         });
-        // It took more than one attempt — the transient failure was retried, not discarded on first failure.
         verify(senderClient, atLeast(2)).sendMessage(any(ServiceBusMessage.class));
-        // And the message is gone from the source queue: acked once the retry forwarded it successfully.
         await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
             assertThat(totalMessagesInQueue())
                 .as("after a successful retry the message must be removed from the source queue")
@@ -328,10 +329,8 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldDiscardMessage_whenBodyIsInvalidJson() {
-        // Given — invalid JSON that will fail objectMapper.readTree()
         sendToSqs("not valid json {{{", AGGREGATE_ID);
 
-        // When / Then — listener should discard (not retry) the poison message
         await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(15)).untilAsserted(() ->
             assertThat(totalMessagesInQueue())
                 .as("invalid JSON must be discarded, not left in the queue for retry")
@@ -340,7 +339,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
 
     @Test
     void sqsToAsb_shouldDiscardMessage_whenAsbFailureIsNonTransient() {
-        // Given — ASB rejects with a non-transient error (e.g. entity not found)
         AmqpException nonTransientCause = new AmqpException(false, AmqpErrorCondition.NOT_FOUND, "entity not found", null);
         ServiceBusException nonTransientEx = new ServiceBusException(nonTransientCause, ServiceBusErrorSource.SEND);
         doThrow(nonTransientEx).when(senderClient).sendMessage(any(ServiceBusMessage.class));
@@ -348,7 +346,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
         String eventBody = notificationJson(AGGREGATE_ID);
         sendToSqs(eventBody, AGGREGATE_ID);
 
-        // When / Then — listener must discard (not retry) after a non-transient ASB failure
         await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(15)).untilAsserted(() ->
             assertThat(totalMessagesInQueue())
                 .as("non-transient ASB failures must discard the message, not retry")
@@ -370,11 +367,9 @@ class NotificationSqsListenerIT extends IntegrationBase {
                 .as("after maxReceiveCount redelivery failures the message must be redriven to the DLQ")
                 .isEqualTo(1));
 
-        // The redriven message carries the original event body, not a mutated or empty payload.
         assertThat(receiveOneFromDlq())
             .as("the DLQ must hold the original event body")
             .contains(eventBody);
-        // ASB was genuinely attempted on each redelivery before exhaustion, not short-circuited.
         verify(senderClient, atLeast(MAX_RECEIVE_COUNT)).sendMessage(any(ServiceBusMessage.class));
     }
 
@@ -384,7 +379,6 @@ class NotificationSqsListenerIT extends IntegrationBase {
             + "\",\"eventType\":\"uk.gov.defra.trade.imports.animals.NotificationEdited\"}";
         sendToSqs(editedBody, AGGREGATE_ID);
 
-        // Allow time for the listener to consume the message, then assert nothing reached ASB
         await().during(Duration.ofSeconds(5)).atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             Optional<ServiceBusReceivedMessage> received = tryReceiveFromAsb();
             assertThat(received).isEmpty();

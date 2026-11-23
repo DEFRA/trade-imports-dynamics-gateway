@@ -2,6 +2,7 @@ package uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv4;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsSpecifiedConsignment;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PimsGbnAgData(

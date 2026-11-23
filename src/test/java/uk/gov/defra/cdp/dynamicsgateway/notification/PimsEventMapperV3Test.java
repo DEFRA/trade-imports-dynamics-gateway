@@ -76,7 +76,7 @@ class PimsEventMapperV3Test {
     }
 
     @Test
-    void map_shouldOmitIssuerAndStillSendDocumentTypeListUrl() {
+    void map_shouldSendNoIssuerAndTheDocumentTypeListUrl() {
         var pimsDoc = mapper.map(eventWithReferenceDocument()).data().exchangedDocument();
 
         assertThat(pimsDoc.identifier()).isEqualTo("id-1");
@@ -95,7 +95,6 @@ class PimsEventMapperV3Test {
 
     @Test
     void map_shouldMapFirstSignatoryAuthenticationClauses() {
-        // Given
         Clause attestation = new Clause("II.1", "The animals described above are healthy.",
             "https://refdata.tbc.defra.gov.uk/clause/II.1");
         Clause transport = new Clause("II.2", "Transport conditions were met.", null);
@@ -104,10 +103,8 @@ class PimsEventMapperV3Test {
             new Authentication(List.of(attestation, transport)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When
         var pimsAuth = mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication();
 
-        // Then
         assertThat(pimsAuth.includedClause()).hasSize(2);
         assertThat(pimsAuth.includedClause().getFirst().identifier()).isEqualTo("II.1");
         assertThat(pimsAuth.includedClause().getFirst().content())
@@ -120,19 +117,16 @@ class PimsEventMapperV3Test {
 
     @Test
     void map_shouldHandleNullFirstSignatoryAuthentication() {
-        // Given
         ExchangedDocument doc = new ExchangedDocument(
             "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication())
             .isNull();
     }
 
     @Test
     void map_shouldMapApplicableClassificationAsArray_notTakeFirst() {
-        // Given
         ApplicableClassification cn = new ApplicableClassification("CN", null,
             new CodedValue("0102", null, null), null);
         ApplicableClassification species = new ApplicableClassification("SPECIES_CLASS", null,
@@ -143,7 +137,6 @@ class PimsEventMapperV3Test {
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(ci));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsItem = mapper.map(event).data().specifiedConsignment()
             .includedConsignmentItem().getFirst().includedTradeLineItem().getFirst();
         assertThat(pimsItem.applicableClassification()).hasSize(2);

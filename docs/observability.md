@@ -29,7 +29,7 @@ Each call is also logged as one line with the nested ECS fields `event.category`
 | Metric | Type | Tags | What it records |
 |---|---|---|---|
 | `external.dependency.available` | gauge | `dependency` | 1 after the dependency's most recent call succeeded, 0 after it failed; not published until it has been called. The listener polls SQS every few seconds, so `sqs` is always current; `azure-service-bus` changes only when a send happens |
-| `notification.message` | counter | `outcome` (`forwarded`, `failed`), `schema.version` (`0.1.0`, `0.2.0`, `0.3.0`) | Each PIMS payload the listener maps and sends, per schema version. A failed 0.1.0 send fails the SQS message; a failed 0.2.0 or 0.3.0 send is logged and not retried |
+| `notification.message` | counter | `outcome` (`forwarded`, `failed`), `schema.version` (`0.1.0`, `0.2.0`, `0.3.0`, `0.4.0`) | Each PIMS payload the listener maps and sends, per schema version. A failed 0.1.0 send fails the SQS message; a failed 0.2.0, 0.3.0 or 0.4.0 send is logged and not retried |
 | `notification.error` | counter | `action` (`retry`, `discarded`) | Each SQS message the listener could not process: left for redelivery after a transient failure, or deleted after a permanent one |
 | `sqs.queue.depth` | gauge | `queue` (`notification`, `notification-dlq`) | `ApproximateNumberOfMessages` on the source queue and on its dead-letter queue, read from SQS each time the gauge is published |
 | `controller.<operation>.time`, `service.<operation>.time` | timer | `class`, `method`, `exception` | Each call to a `@Timed` endpoint or service method. The `sqs.queue.depth` gauge reads through the services, so each reading of it is a call too: `service.queueDepth.time` counts the `notification` gauge's reads as well as `GET /queue/notifications`, and `service.dlqDepth.time` counts the `notification-dlq` gauge's reads |
@@ -45,4 +45,4 @@ The counters are also readable per instance at `/metrics/<name>` as running tota
 
 `trace.id` comes from the `x-cdp-request-id` header, so it is on every line of a `POST /events` request. A notification that arrives over SQS carries no trace id: the backend publishes it from its outbox, outside any request. Follow it by its `aggregateId` instead. It is the SQS message group id, logged on the line the listener writes when it receives the message, sent as the Service Bus `sessionId` and logged as `sessionId` on every send line, and logged on the retry and discard lines.
 
-Each send's Service Bus `messageId` is the event id for 0.1.0, and the event id with `-v2` or `-v3` appended for 0.2.0 and 0.3.0. An event with no event id falls back to the SQS deduplication id, and then to a random UUID.
+Each send's Service Bus `messageId` is the event id for 0.1.0, and the event id with `-v2`, `-v3` or `-v4` appended for 0.2.0, 0.3.0 and 0.4.0. An event with no event id falls back to the SQS deduplication id, and then to a random UUID.

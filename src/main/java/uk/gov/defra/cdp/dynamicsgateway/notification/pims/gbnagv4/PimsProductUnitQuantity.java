@@ -1,9 +1,0 @@
-package uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv4;
-
-import com.fasterxml.jackson.annotation.JsonInclude;
-
-@JsonInclude(JsonInclude.Include.NON_NULL)
-public record PimsProductUnitQuantity(
-    Integer content,
-    String unitCode
-) {}

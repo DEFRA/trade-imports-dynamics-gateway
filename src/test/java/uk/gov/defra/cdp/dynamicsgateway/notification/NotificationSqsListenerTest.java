@@ -58,54 +58,7 @@ class NotificationSqsListenerTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        PimsEnvelopeMapper envelopeMapper = new PimsEnvelopeMapper();
-        PimsEventMapper pimsEventMapper = new PimsEventMapper(
-            new PimsGbnAgDataMapper(
-                new PimsConsignmentMapper(
-                    new PimsTransportMapper(),
-                    new PimsLineItemMapper()
-                )
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
-        PimsEventMapperV2 pimsEventMapperV2 = new PimsEventMapperV2(
-            new PimsGbnAgDataMapperV2(
-                new PimsConsignmentMapperV2(
-                    new PimsTransportMapperV2(commonMapper),
-                    new PimsLineItemMapperV2(commonMapper),
-                    commonMapper
-                ),
-                commonMapper
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV3 commonMapperV3 = new PimsCommonMapperV3();
-        PimsEventMapperV3 pimsEventMapperV3 = new PimsEventMapperV3(
-            new PimsGbnAgDataMapperV3(
-                new PimsConsignmentMapperV3(
-                    new PimsTransportMapperV3(commonMapperV3),
-                    new PimsLineItemMapperV3(commonMapperV3),
-                    commonMapperV3
-                ),
-                commonMapperV3
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV4 commonMapperV4 = new PimsCommonMapperV4();
-        PimsEventMapperV4 pimsEventMapperV4 = new PimsEventMapperV4(
-            new PimsGbnAgDataMapperV4(
-                new PimsConsignmentMapperV4(
-                    new PimsTransportMapperV4(commonMapperV4),
-                    new PimsLineItemMapperV4(commonMapperV4),
-                    commonMapperV4
-                ),
-                commonMapperV4
-            ),
-            envelopeMapper
-        );
-        pimsPayloadMapper = new PimsPayloadMapper(
-            objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3, pimsEventMapperV4);
+        pimsPayloadMapper = PimsPayloadMappers.real(objectMapper);
         listener = new NotificationSqsListener(queueMessageSender, objectMapper, pimsPayloadMapper,
             meterRegistry);
     }
@@ -143,8 +96,6 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldUseBodyEventIdAsAsbMessageId_whenPresent_evenIfDedupHeaderDiffers() {
-        // The SQS dedup header can legitimately differ from the body eventId on a DLQ replay — the ASB
-        // messageId must still track the body eventId so ASB-level dedup stays stable across the replay.
         listener.receive(ENVELOPED_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender).publish(pimsV1(ENVELOPED_BODY), AGGREGATE_ID, EVENT_ID);
@@ -190,7 +141,6 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldPublishReSerialisedPimsPayload_notRawBody() {
-        // The re-serialised PimsEventV1 is structurally different from the raw SQS body.
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
@@ -247,8 +197,6 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenBodyContainsUnknownField() {
-        // Simulates a new field added to the backend outbox not yet in OutboxEvent.
-        // PimsPayloadMapper raises SqsNonRetryableException; the listener propagates it unchanged.
         String bodyWithNewField =
             "{\"aggregateId\":\"" + AGGREGATE_ID
                 + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\""
@@ -267,13 +215,10 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowRetryable_andCountV1AsFailed_whenAsbFailsTransiently() {
-        // Given — v1 fails; v0.2.0 must never even be attempted for a v1 failure
         doThrow(new SqsRetryableException("ASB down",
             new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
-        // When / Then — no in-process retry: a single attempt, then the exception propagates so SQS
-        // redelivers the message (and, after maxReceiveCount, routes it to the DLQ).
         assertThatThrownBy(
             () -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsRetryableException.class);
@@ -292,12 +237,10 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldNotRetryAndThrowNonRetryable_whenAsbFailsPermanently() {
-        // Given — v1 fails; v0.2.0 must never even be attempted for a v1 failure
         doThrow(new SqsNonRetryableException("entity not found",
             new RuntimeException("Simulated permanent failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
-        // When / Then — non-retryable failures are not retried: single attempt then propagate to discard.
         assertThatThrownBy(
             () -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class);
@@ -335,8 +278,29 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldNotThrow_andStillForwardV1AndV3_whenV2PublishFails() {
-        // lenient(): the other publishes hit this mock with different arguments by design
+    void receive_shouldNotThrow_andCountV4AsFailed_whenV4MappingFails() {
+        PimsPayloadMapper failingV4Mapper = spy(pimsPayloadMapper);
+        doThrow(new IllegalStateException("Cannot map to PIMS v0.4.0"))
+            .when(failingV4Mapper).mapToV4(any());
+        NotificationSqsListener listenerWithFailingV4 =
+            new NotificationSqsListener(queueMessageSender, objectMapper, failingV4Mapper, meterRegistry);
+
+        assertThatCode(
+            () -> listenerWithFailingV4.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+            .doesNotThrowAnyException();
+
+        assertThat(failedCount("0.4.0")).isEqualTo(1.0);
+        assertThat(counterValue("forwarded", "0.4.0")).isEqualTo(0.0);
+        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
+        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
+        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        assertThat(failedCount("0.1.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
+        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
+    }
+
+    @Test
+    void receive_shouldForwardEveryOtherVersionAndCountOnlyV2Failed_whenV2PublishFails() {
         lenient().doThrow(new SqsNonRetryableException("v2 boom", new RuntimeException("simulated")))
             .when(queueMessageSender).publish(any(), eq(AGGREGATE_ID), eq(DEDUP_ID + "-v2"));
 
@@ -357,8 +321,7 @@ class NotificationSqsListenerTest {
     }
 
     @Test
-    void receive_shouldNotThrow_andStillForwardV1AndV2_whenV3PublishFails() {
-        // lenient(): the other publishes hit this mock with different arguments by design
+    void receive_shouldForwardEveryOtherVersionAndCountOnlyV3Failed_whenV3PublishFails() {
         lenient().doThrow(new SqsNonRetryableException("v3 boom", new RuntimeException("simulated")))
             .when(queueMessageSender).publish(any(), eq(AGGREGATE_ID), eq(DEDUP_ID + "-v3"));
 

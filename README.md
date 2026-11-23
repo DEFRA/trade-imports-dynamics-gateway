@@ -65,7 +65,7 @@ The primary production flow:
 SNS (FIFO) → SQS FIFO queue → NotificationSqsListener → QueueMessageSender → ASB session queue
 ```
 
-The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0, v0.2.0 and v0.3.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
+The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0, v0.2.0, v0.3.0 and v0.4.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
 
 [docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the two PIMS shapes, retries and DLQ browsing.
 
@@ -159,6 +159,8 @@ mvn verify
 ```
 
 Integration tests use [Testcontainers](https://testcontainers.com/) to spin up a real Azure Service Bus emulator (backed by SQL Server) and Floci (SQS) to verify end-to-end message delivery across both ingress paths. Docker must be running.
+
+Floci scopes SQS queues per region, so the integration tests' SQS client and the Floci container must sign for the same region as the application under test: `eu-west-2`, the application's default.
 
 ### Running
 
