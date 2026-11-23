@@ -1,0 +1,264 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: animals/e2e/visual/review.visual.spec.ts >> Review (visual regression) >> shows a ready draft from the first section to the Consignment addresses card and the Continue button at desktop width
+- Location: tests/animals/e2e/visual/review.visual.spec.ts:11:3
+
+# Error details
+
+```
+Error: expect(locator).toBeVisible() failed
+
+Locator: locator('.govuk-summary-card').filter({ has: getByRole('heading', { name: 'Consignment addresses', exact: true }) })
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" locator('.govuk-summary-card').filter({ has: getByRole('heading', { name: 'Consignment addresses', exact: true }) }) with timeout 5000ms
+  - waiting for locator('.govuk-summary-card').filter({ has: getByRole('heading', { name: 'Consignment addresses', exact: true }) })
+
+```
+
+```yaml
+- link "Skip to main content":
+  - /url: "#main-content"
+- banner:
+  - link "GOV.UK":
+    - /url: https://www.gov.uk/
+    - img "GOV.UK"
+  - region "Service information":
+    - link "Import notification service":
+      - /url: /live-animals
+    - navigation "Menu":
+      - list:
+        - listitem:
+          - link "Dashboard":
+            - /url: /live-animals
+            - strong: Dashboard
+        - listitem:
+          - link "Address book":
+            - /url: http://localhost:3002/address-book
+        - listitem:
+          - link "Manage account":
+            - /url: "#"
+        - listitem:
+          - link "Log out":
+            - /url: /auth/sign-out
+- paragraph:
+  - strong: Alpha
+  - text: This is a new service. Help us improve it and
+  - link "give your feedback by email":
+    - /url: mailto:APHAServiceDesk@apha.gov.uk
+  - text: .
+- paragraph:
+  - strong: "This page’s status: Detailing ."
+  - text: We’re keeping this page. We’re still working out the detail.
+- link "Back":
+  - /url: /live-animals/notifications/GBN-AG-26-7FQM79
+- main:
+  - strong: Draft
+  - text: GBN-AG-26-7FQM79
+  - heading "Review your notification" [level=1]
+  - heading "1. About the consignment" [level=2]
+  - heading "Where is this consignment coming from?" [level=3]
+  - heading "Import details" [level=4]
+  - link "Change import details (Import details)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/origin?from=notification-view
+  - term: Country of origin
+  - definition: France
+  - term: Region of origin code required
+  - definition: "No"
+  - term: Region of origin code
+  - definition: Not applicable
+  - term: Internal reference number
+  - definition: Not applicable
+  - heading "Main import reason" [level=3]
+  - heading "Reason for import" [level=4]
+  - link "Change reason for import (Reason for import)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/import-reason?from=notification-view
+  - term: Reason for import
+  - definition: Internal market
+  - term: Purpose in the market
+  - definition: Breeding
+  - separator
+  - heading "2. Description of the goods" [level=2]
+  - heading "Commodity details" [level=3]
+  - heading "0102 — Bos taurus" [level=4]
+  - list:
+    - listitem:
+      - link "Change commodity 1":
+        - /url: /live-animals/notifications/GBN-AG-26-7FQM79/consignment-details?from=notification-view
+  - term: Commodity code
+  - definition: "0102"
+  - term: Common name
+  - definition: Domestic Cattle
+  - term: Species
+  - definition: Bos taurus
+  - term: Number of animals
+  - definition: "1"
+  - term: Number of packages
+  - definition: Not applicable
+  - heading "Animal details" [level=5]
+  - table:
+    - rowgroup:
+      - row "Animal Ear tag":
+        - columnheader "Animal"
+        - columnheader "Ear tag"
+    - rowgroup:
+      - row "Animal 1 UK123456789012":
+        - cell "Animal 1"
+        - cell "UK123456789012"
+  - heading "Additional details" [level=3]
+  - heading "Additional animal details" [level=4]
+  - link "Change additional animal details (Additional animal details)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/additional-details?from=notification-view
+  - term: Certified for
+  - definition: Slaughter
+  - term: Includes unweaned animals
+  - definition: "No"
+  - separator
+  - heading "3. Transport and arrival" [level=2]
+  - heading "Arrival details" [level=3]
+  - heading "Arrival details" [level=4]
+  - link "Change arrival details (Arrival details)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/port-of-entry?from=notification-view
+  - term: Port of entry
+  - definition: Aberdeen Harbour - GB ABD
+  - term: Arrival date at port of entry
+  - definition: 1 November 2026
+  - term: Means of transport to the port of entry
+  - definition: Road
+  - term: Transport identification
+  - definition: FR-892-LK
+  - term: Transport document reference
+  - definition: CMR-2026-884721
+  - heading "Transit countries" [level=3]
+  - heading "Transit countries" [level=4]
+  - link "Change transit countries (Transit countries)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/transit-countries?from=notification-view
+  - term: Countries that the consignment will travel through
+  - definition: Not applicable
+  - heading "Transport details" [level=3]
+  - heading "Transport details" [level=4]
+  - link "Change transport details (Transport details)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/transporters?from=notification-view
+  - term: Name
+  - definition: García Livestock Transport SL
+  - term: Address
+  - definition: 43 East Hague Extension Delectus sitodio p. Laborum Odio tempor Quasoccaecat ut ear, 30055
+  - term: Country
+  - definition: Switzerland
+  - term: Approval number
+  - definition: ES-T2-45001294
+  - term: Type
+  - definition: Commercial
+  - separator
+  - heading "4. Documents" [level=2]
+  - heading "Upload documents" [level=3]
+  - heading "Uploaded documents" [level=4]
+  - list:
+    - listitem:
+      - link "Change uploaded documents":
+        - /url: /live-animals/notifications/GBN-AG-26-7FQM79/accompanying-documents?from=notification-view
+  - paragraph: You have not added any documents yet.
+  - separator
+  - heading "5. Consignment parties" [level=2]
+  - heading "Roles and addresses" [level=3]
+  - heading "Roles and addresses" [level=4]
+  - link "Change roles and addresses (Roles and addresses)":
+    - /url: /live-animals/notifications/GBN-AG-26-7FQM79/addresses?from=notification-view
+  - term: Place of origin
+  - definition:
+    - strong: Origin Farm
+    - text: 1 Farm Lane Ennis V95 X7P2 Ireland +44 1234 567890 contact@example.com
+  - definition:
+    - link "Edit details place of origin (Roles and addresses)":
+      - /url: /live-animals/notifications/GBN-AG-26-7FQM79/place-of-origin/edit?return=notification-view
+  - term: Consignor
+  - definition:
+    - strong: Astra Rosales
+    - text: 43 East Hague Extension Bern 30055 Switzerland +44 1234 567890 contact@example.com
+  - definition:
+    - link "Edit details consignor (Roles and addresses)":
+      - /url: /live-animals/notifications/GBN-AG-26-7FQM79/consignors/edit?return=notification-view
+  - term: Consignee
+  - definition:
+    - strong: British Livestock Ltd
+    - text: 10 Market Street Leeds LS1 6HB United Kingdom +44 1234 567890 contact@example.com
+  - definition:
+    - link "Edit details consignee (Roles and addresses)":
+      - /url: /live-animals/notifications/GBN-AG-26-7FQM79/consignees/edit?return=notification-view
+  - term: Importer
+  - definition:
+    - strong: Import Co UK
+    - text: 20 Trade Road London EC1A 1BB United Kingdom +44 1234 567890 contact@example.com
+  - definition:
+    - link "Edit details importer (Roles and addresses)":
+      - /url: /live-animals/notifications/GBN-AG-26-7FQM79/importers/edit?return=notification-view
+  - term: Place of destination
+  - definition:
+    - strong: Tech Imports Ltd
+    - text: 18 Dockside Road London E14 9GE United Kingdom +44 1234 567890 contact@example.com
+  - definition:
+    - link "Edit details place of destination (Roles and addresses)":
+      - /url: /live-animals/notifications/GBN-AG-26-7FQM79/destinations/edit?return=notification-view
+  - term: County parish holding (CPH) number
+  - definition: 12/345/6789
+  - button "Continue"
+- contentinfo:
+  - heading "Support links" [level=2]
+  - list:
+    - listitem:
+      - link "Privacy":
+        - /url: https://www.gov.uk/help/privacy-notice
+    - listitem:
+      - link "Cookies":
+        - /url: https://www.gov.uk/help/cookies
+    - listitem:
+      - link "Accessibility statement":
+        - /url: https://www.gov.uk/help/accessibility-statement
+  - text: All content is available under the
+  - link "Open Government Licence v3.0":
+    - /url: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+  - text: ", except where otherwise stated"
+  - link "© Crown copyright":
+    - /url: https://www.nationalarchives.gov.uk/information-management/re-using-public-sector-information/uk-government-licensing-framework/crown-copyright/
+```
+
+# Test source
+
+```ts
+  1  | import { test, expect, pinDateText, pinDraftViewHeader } from '@fixtures/visual';
+  2  | 
+  3  | test.use({ headless: true });
+  4  | 
+  5  | test.describe('Review (visual regression)', { tag: '@visual' }, () => {
+  6  |   test.beforeEach(async ({ animalsSeededJourney, animalsNotificationActions, journeyContext }) => {
+  7  |     await animalsSeededJourney.createDraftNotification();
+  8  |     await animalsNotificationActions.toNotificationView(journeyContext.referenceNumber);
+  9  |   });
+  10 | 
+  11 |   test('shows a ready draft from the first section to the Consignment addresses card and the Continue button at desktop width', async ({
+  12 |     page,
+  13 |     animalsPages,
+  14 |   }) => {
+  15 |     await pinDateText(
+  16 |       animalsPages.notificationView.summaryValue(animalsPages.notificationView.arrivalDetailsCard, 'Arrival date at port of entry'),
+  17 |     );
+> 18 |     await expect(animalsPages.notificationView.addressesCard).toBeVisible();
+     |                                                               ^ Error: expect(locator).toBeVisible() failed
+  19 |     await expect(animalsPages.notificationView.continueButton).toBeVisible();
+  20 |     const { viewHeader } = animalsPages.notificationView;
+  21 |     await pinDraftViewHeader(viewHeader);
+  22 | 
+  23 |     await expect(page).toHaveScreenshot('review-desktop.png', { fullPage: true });
+  24 |   });
+  25 | });
+  26 | 
+```
