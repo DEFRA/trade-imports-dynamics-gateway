@@ -21,18 +21,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
 
 class PimsEventMapperV2Test {
 
-    private final PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
-    private final PimsEventMapperV2 mapper = new PimsEventMapperV2(
-        new PimsGbnAgDataMapperV2(
-            new PimsConsignmentMapperV2(
-                new PimsTransportMapperV2(commonMapper),
-                new PimsLineItemMapperV2(commonMapper),
-                commonMapper
-            ),
-            commonMapper
-        ),
-        new PimsEnvelopeMapper()
-    );
+    private final PimsEventMapperV2 mapper = PimsPayloadMappers.eventMapperV2();
 
     private static final Instant NOW = Instant.parse("2026-09-18T10:00:00Z");
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";

@@ -67,7 +67,7 @@ SNS (FIFO) → SQS FIFO queue → NotificationSqsListener → QueueMessageSender
 
 The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0, v0.2.0, v0.3.0 and v0.4.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
 
-[docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the two PIMS shapes, retries and DLQ browsing.
+[docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the PIMS versions, retries and DLQ browsing.
 
 Error handling:
 

@@ -16,6 +16,18 @@ final class PimsPayloadMappers {
             eventMapperV4(envelopeMapper));
     }
 
+    static PimsEventMapper eventMapperV1() {
+        return eventMapperV1(new PimsEnvelopeMapper());
+    }
+
+    static PimsEventMapperV2 eventMapperV2() {
+        return eventMapperV2(new PimsEnvelopeMapper());
+    }
+
+    static PimsEventMapperV3 eventMapperV3() {
+        return eventMapperV3(new PimsEnvelopeMapper());
+    }
+
     static PimsEventMapperV4 eventMapperV4() {
         return eventMapperV4(new PimsEnvelopeMapper());
     }
