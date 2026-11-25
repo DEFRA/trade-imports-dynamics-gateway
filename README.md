@@ -17,9 +17,8 @@ Centralised gateway forwarding notification events to Azure Service Bus (ASB). E
 
 ### Local stack
 
-The local environment for the trade-imports-animals services is the workspace
-stack in
-[DEFRA/trade-imports-animals-workspace](https://github.com/DEFRA/trade-imports-animals-workspace):
+The local environment for the trade-imports services is the workspace stack in
+[DEFRA/trade-imports-workspace](https://github.com/DEFRA/trade-imports-workspace):
 
 ```bash
 # from the workspace root
@@ -67,7 +66,7 @@ SNS (FIFO) → SQS FIFO queue → NotificationSqsListener → QueueMessageSender
 
 The listener consumes messages from the SQS FIFO queue, validates the body is valid JSON, and forwards each external event to Azure Service Bus as PIMS v0.1.0, v0.2.0 and v0.3.0. The SQS `MessageGroupId` is used as the ASB `sessionId`. Each forwarded message's ASB `messageId` is the event's `eventId` and its `contentType` is `application/json`.
 
-[docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the two PIMS shapes, retries and DLQ browsing.
+[docs/notification-pipeline.md](docs/notification-pipeline.md) explains the message ids, the three PIMS versions, retries and DLQ browsing.
 
 Error handling:
 
