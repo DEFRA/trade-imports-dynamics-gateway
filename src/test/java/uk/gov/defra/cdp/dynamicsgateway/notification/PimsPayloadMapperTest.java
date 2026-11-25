@@ -26,6 +26,10 @@ class PimsPayloadMapperTest {
         mapper = PimsPayloadMappers.real(objectMapper);
     }
 
+    private List<Function<OutboxEvent, String>> everyVersion() {
+        return List.of(mapper::mapToV1, mapper::mapToV2, mapper::mapToV3, mapper::mapToV4);
+    }
+
     @Test
     void mapToV1_shouldRoundTripMinimalBody_toValidPimsPayload() throws Exception {
         String body = """
@@ -65,10 +69,8 @@ class PimsPayloadMapperTest {
         ObjectNode withoutOwnerNode = (ObjectNode) fixtureJson().deepCopy();
         withoutOwnerNode.remove("organisationId");
         OutboxEvent withoutOwner = mapper.parse(withoutOwnerNode);
-        List<Function<OutboxEvent, String>> everyVersion =
-            List.of(mapper::mapToV1, mapper::mapToV2, mapper::mapToV3, mapper::mapToV4);
 
-        for (Function<OutboxEvent, String> mapToVersion : everyVersion) {
+        for (Function<OutboxEvent, String> mapToVersion : everyVersion()) {
             assertThat(objectMapper.readTree(mapToVersion.apply(withOwner)))
                 .isEqualTo(objectMapper.readTree(mapToVersion.apply(withoutOwner)));
         }
@@ -191,10 +193,8 @@ class PimsPayloadMapperTest {
     void map_shouldAcceptAnEventStillCarryingIssuerAndSendItInNoVersion() throws Exception {
         OutboxEvent event = mapper.parse(
             jsonResource("/gbn-ag/notification-submitted-from-backend-with-issuer.json"));
-        List<Function<OutboxEvent, String>> everyVersion =
-            List.of(mapper::mapToV1, mapper::mapToV2, mapper::mapToV3, mapper::mapToV4);
 
-        for (Function<OutboxEvent, String> mapToVersion : everyVersion) {
+        for (Function<OutboxEvent, String> mapToVersion : everyVersion()) {
             JsonNode exchangedDocument =
                 objectMapper.readTree(mapToVersion.apply(event)).path("data").path("exchangedDocument");
             assertThat(exchangedDocument.path("identifier").asText()).isEqualTo("GBN-AG-26-7K8M2P");
