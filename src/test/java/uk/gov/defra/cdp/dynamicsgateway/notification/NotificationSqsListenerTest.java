@@ -257,46 +257,32 @@ class NotificationSqsListenerTest {
         assertThat(failedCount("0.4.0")).isEqualTo(0.0);
     }
 
-    @Test
-    void receive_shouldNotThrow_andCountV2AsFailed_whenV2MappingFails() {
-        PimsPayloadMapper failingV2Mapper = spy(pimsPayloadMapper);
-        doThrow(new IllegalStateException("Cannot map to PIMS v0.2.0"))
-            .when(failingV2Mapper).mapToV2(any());
-        NotificationSqsListener listenerWithFailingV2 =
-            new NotificationSqsListener(queueMessageSender, objectMapper, failingV2Mapper, meterRegistry);
+    @ParameterizedTest
+    @ValueSource(strings = {"0.2.0", "0.3.0", "0.4.0"})
+    void receive_shouldNotThrow_andCountOnlyThatVersionAsFailed_whenItsMappingFails(String failingVersion) {
+        NotificationSqsListener listenerWithFailingMapper = listenerWhoseMapperFailsFor(failingVersion);
 
         assertThatCode(
-            () -> listenerWithFailingV2.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+            () -> listenerWithFailingMapper.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .doesNotThrowAnyException();
 
-        assertThat(failedCount("0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.4.0")).isEqualTo(1.0);
-        assertThat(failedCount("0.4.0")).isEqualTo(0.0);
+        for (String version : List.of("0.1.0", "0.2.0", "0.3.0", "0.4.0")) {
+            boolean failed = version.equals(failingVersion);
+            assertThat(counterValue("forwarded", version)).isEqualTo(failed ? 0.0 : 1.0);
+            assertThat(failedCount(version)).isEqualTo(failed ? 1.0 : 0.0);
+        }
     }
 
-    @Test
-    void receive_shouldNotThrow_andCountV4AsFailed_whenV4MappingFails() {
-        PimsPayloadMapper failingV4Mapper = spy(pimsPayloadMapper);
-        doThrow(new IllegalStateException("Cannot map to PIMS v0.4.0"))
-            .when(failingV4Mapper).mapToV4(any());
-        NotificationSqsListener listenerWithFailingV4 =
-            new NotificationSqsListener(queueMessageSender, objectMapper, failingV4Mapper, meterRegistry);
-
-        assertThatCode(
-            () -> listenerWithFailingV4.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
-            .doesNotThrowAnyException();
-
-        assertThat(failedCount("0.4.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.4.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
-        assertThat(failedCount("0.1.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
+    private NotificationSqsListener listenerWhoseMapperFailsFor(String version) {
+        PimsPayloadMapper failingMapper = spy(pimsPayloadMapper);
+        IllegalStateException failure = new IllegalStateException("Cannot map to PIMS v" + version);
+        switch (version) {
+            case "0.2.0" -> doThrow(failure).when(failingMapper).mapToV2(any());
+            case "0.3.0" -> doThrow(failure).when(failingMapper).mapToV3(any());
+            case "0.4.0" -> doThrow(failure).when(failingMapper).mapToV4(any());
+            default -> throw new IllegalArgumentException("No mapper for version " + version);
+        }
+        return new NotificationSqsListener(queueMessageSender, objectMapper, failingMapper, meterRegistry);
     }
 
     @Test
