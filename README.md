@@ -17,9 +17,8 @@ Centralised gateway forwarding notification events to Azure Service Bus (ASB). E
 
 ### Local stack
 
-The local environment for the trade-imports-animals services is the workspace
-stack in
-[DEFRA/trade-imports-animals-workspace](https://github.com/DEFRA/trade-imports-animals-workspace):
+The local environment for the trade-imports services is the workspace stack in
+[DEFRA/trade-imports-workspace](https://github.com/DEFRA/trade-imports-workspace):
 
 ```bash
 # from the workspace root
