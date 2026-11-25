@@ -190,7 +190,7 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void map_shouldAcceptAnEventStillCarryingIssuerAndSendItInNoVersion() throws Exception {
+    void map_shouldAcceptAnEventWithIssuerAndSendItInNoVersion() throws Exception {
         OutboxEvent event = mapper.parse(
             jsonResource("/gbn-ag/notification-submitted-from-backend-with-issuer.json"));
 
