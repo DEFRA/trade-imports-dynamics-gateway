@@ -38,15 +38,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV1;
 
 class PimsEventMapperTest {
 
-    private final PimsEventMapper mapper = new PimsEventMapper(
-        new PimsGbnAgDataMapper(
-            new PimsConsignmentMapper(
-                new PimsTransportMapper(),
-                new PimsLineItemMapper()
-            )
-        ),
-        new PimsEnvelopeMapper()
-    );
+    private final PimsEventMapper mapper = PimsPayloadMappers.eventMapperV1();
 
     private static final Instant NOW = Instant.parse("2026-08-12T10:00:00Z");
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
@@ -55,15 +47,12 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldPassThroughEnvelopeIdentityFields() {
-        // Given
         OutboxEvent event = OutboxEventFixtures.builder()
             .timestamp(NOW)
             .build();
 
-        // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then
         assertThat(result.eventId()).isEqualTo(EVENT_ID);
         assertThat(result.aggregateType()).isEqualTo("Notification");
         assertThat(result.subType()).isEqualTo("GBN-AG");
@@ -79,14 +68,11 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapActorFields() {
-        // Given
         OutboxActor actor = new OutboxActor("u1", "defra-id", "INTERNAL", "Test User", "org-1", null);
         OutboxEvent event = eventWithActor(actor);
 
-        // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then
         assertThat(result.actor().id()).isEqualTo("u1");
         assertThat(result.actor().source()).isEqualTo("defra-id");
         assertThat(result.actor().userType()).isEqualTo("INTERNAL");
@@ -102,14 +88,11 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldStampV1SchemaVersionAndUriAndKeepTheIncomingCorrelationId() {
-        // Given
         OutboxEventMetadata metadata = new OutboxEventMetadata("corr-1", "1.0", "https://schema.url");
         OutboxEvent event = eventWithMetadata(metadata);
 
-        // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then
         assertThat(result.metadata().correlationId()).isEqualTo("corr-1");
         assertThat(result.metadata().schemaVersion()).isEqualTo("0.1.0");
         assertThat(result.metadata().schemaUri()).isEqualTo(
@@ -123,15 +106,12 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapStatusChanges() {
-        // Given
         OutboxActor actor = new OutboxActor("u1", "defra-id", "INTERNAL", "Test User", "org-1", null);
         OutboxStatusChange change = new OutboxStatusChange("SUBMITTED", NOW, actor);
         OutboxEvent event = eventWithStatusChanges(List.of(change));
 
-        // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then
         assertThat(result.statusChanges()).hasSize(1);
         assertThat(result.statusChanges().getFirst().status()).isEqualTo("SUBMITTED");
         assertThat(result.statusChanges().getFirst().dateChanged()).isEqualTo(NOW);
@@ -145,23 +125,18 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldHandleEmptyStatusChanges() {
-        // Given
         OutboxEvent event = eventWithStatusChanges(List.of());
 
-        // When / Then
         assertThat(mapper.map(event).statusChanges()).isEmpty();
     }
 
     @Test
     void map_shouldMapGbnAgData() {
-        // Given
         GbnAgData data = new GbnAgData("gbn-ag-model", "gbn-ag-type", null, null);
         OutboxEvent event = eventWithData(data);
 
-        // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then
         assertThat(result.data().model()).isEqualTo("gbn-ag-model");
         assertThat(result.data().type()).isEqualTo("gbn-ag-type");
         assertThat(result.data().exchangedDocument()).isNull();
@@ -175,16 +150,13 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapExchangedDocumentIdentityAndAuthentication() {
-        // Given
         Authentication auth = new Authentication(List.of(new Clause("c1", "content", "url")));
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-08-12", null, auth, null);
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-08-12", auth, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When
         PimsEventV1 result = mapper.map(event);
 
-        // Then
         var pimsDoc = result.data().exchangedDocument();
         assertThat(pimsDoc.identifier()).isEqualTo("id-1");
         assertThat(pimsDoc.traderAssignedId()).isEqualTo("trader-id");
@@ -197,7 +169,6 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapTradeParty() {
-        // Given
         CodedValue roleCode = new CodedValue("IMPORTER", "url", "name");
         CodedValue typeCode = new CodedValue("TC", "tcUrl", "tcName");
         TradeAddress addr = new TradeAddress("Line 1", null, "London", "SW1A 1AA", "GB", "United Kingdom", null);
@@ -205,10 +176,8 @@ class PimsEventMapperTest {
         SpecifiedConsignment sc = emptyConsignment().withConsignorParty(party).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When
         var pimsParty = mapper.map(event).data().specifiedConsignment().consignorParty();
 
-        // Then
         assertThat(pimsParty.identifier()).isEqualTo("p-1");
         assertThat(pimsParty.name()).isEqualTo("Party Name");
         assertThat(pimsParty.partyTypeCode()).hasSize(1);
@@ -221,7 +190,6 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapApplicableClassification_takingFirstFromList() {
-        // Given
         CodedValue classCode = new CodedValue("0102", "url", "Bovine");
         ApplicableClassification ac = new ApplicableClassification("HS", "Harmonised System", classCode, List.of("Cattle"));
         TradeLineItem item = new TradeLineItem(List.of(ac), null, null, null, null, null, null, null, null);
@@ -229,7 +197,6 @@ class PimsEventMapperTest {
         SpecifiedConsignment sc = emptyConsignment().withIncludedConsignmentItem(List.of(ci)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsItem = mapper.map(event).data().specifiedConsignment().includedConsignmentItem().getFirst()
             .includedTradeLineItem().getFirst();
         assertThat(pimsItem.applicableClassification().systemId()).isEqualTo("HS");
@@ -238,13 +205,11 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldReturnNullClassification_whenApplicableClassificationListIsEmpty() {
-        // Given
         TradeLineItem item = new TradeLineItem(List.of(), null, null, null, null, null, null, null, null);
         ConsignmentItem ci = new ConsignmentItem(List.of(item));
         SpecifiedConsignment sc = emptyConsignment().withIncludedConsignmentItem(List.of(ci)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsItem = mapper.map(event).data().specifiedConsignment().includedConsignmentItem().getFirst()
             .includedTradeLineItem().getFirst();
         assertThat(pimsItem.applicableClassification()).isNull();
@@ -252,18 +217,15 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapTransportMovement() {
-        // Given
         LogisticsTransportMeans means = new LogisticsTransportMeans("vessel");
         TransportEvent te = new TransportEvent(NOW, null, null);
         LogisticsTransportMovement tm = new LogisticsTransportMovement("id", "url", 1, means, null, List.of(te));
         SpecifiedConsignment sc = emptyConsignment().withMainCarriageTransport(List.of(tm)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When
         var pimsTm = mapper.map(event).data().specifiedConsignment()
             .mainCarriageLogisticsTransportMovement().getFirst();
 
-        // Then
         assertThat(pimsTm.modeCode()).isEqualTo(1);
         assertThat(pimsTm.usedLogisticsTransportMeans().name()).isEqualTo("vessel");
         assertThat(pimsTm.arrivalEvent()).hasSize(1);
@@ -272,7 +234,6 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapProductUnitQuantity() {
-        // Given
         ProductUnitQuantity qty = new ProductUnitQuantity(5, "HEAD");
         LineTradeDelivery delivery = new LineTradeDelivery(qty);
         TradeLineItem item = new TradeLineItem(null, null, null, null, null, null, List.of(delivery), null, null);
@@ -280,7 +241,6 @@ class PimsEventMapperTest {
         SpecifiedConsignment sc = emptyConsignment().withIncludedConsignmentItem(List.of(ci)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsDelivery = mapper.map(event).data().specifiedConsignment().includedConsignmentItem().getFirst()
             .includedTradeLineItem().getFirst().specifiedLineTradeDelivery().getFirst();
         assertThat(pimsDelivery.productUnitQuantity().content()).isEqualTo(5);
@@ -288,14 +248,12 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapLogisticsPackage() {
-        // Given
         LogisticsPackage pkg = new LogisticsPackage(1, "BOX", 10);
         TradeLineItem item = new TradeLineItem(null, null, null, null, null, null, null, List.of(pkg), null);
         ConsignmentItem ci = new ConsignmentItem(List.of(item));
         SpecifiedConsignment sc = emptyConsignment().withIncludedConsignmentItem(List.of(ci)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsPkg = mapper.map(event).data().specifiedConsignment().includedConsignmentItem().getFirst()
             .includedTradeLineItem().getFirst().physicalReferencedLogisticsPackage().getFirst();
         assertThat(pimsPkg.itemQuantity()).isEqualTo(10);
@@ -303,7 +261,6 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapAnimalIdentifier() {
-        // Given
         AnimalIdentifier id = new AnimalIdentifier("EAR_TAG", "UK123456", "urlId");
         TradeProductInstance instance = new TradeProductInstance(null, List.of(id), null);
         TradeLineItem item = new TradeLineItem(null, null, null, null, null, null, null, null, List.of(instance));
@@ -311,7 +268,6 @@ class PimsEventMapperTest {
         SpecifiedConsignment sc = emptyConsignment().withIncludedConsignmentItem(List.of(ci)).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsId = mapper.map(event).data().specifiedConsignment().includedConsignmentItem().getFirst()
             .includedTradeLineItem().getFirst().individualTradeProductInstance().getFirst()
             .identifier().getFirst();
@@ -321,7 +277,6 @@ class PimsEventMapperTest {
 
     @Test
     void map_shouldMapOriginCountryAndUnloadingBaseportLocation() {
-        // Given
         TradeCountry origin = new TradeCountry(
             new CodedValue("GB", "url", null),
             List.of(new TradeCountrySubDivision("GB-ENG", null, null, null,
@@ -332,66 +287,54 @@ class PimsEventMapperTest {
             null, null, null, null, null, null, origin, port, null, null, null, null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When
         var pimsConsignment = mapper.map(event).data().specifiedConsignment();
 
-        // Then
         assertThat(pimsConsignment.originCountry().code().value()).isEqualTo("GB");
         assertThat(pimsConsignment.unloadingBaseportLocation().identifier()).isEqualTo("PORT-1");
     }
 
     @Test
     void map_shouldHandleNullCodeInTradeCountry() {
-        // Given
         TradeCountry origin = new TradeCountry(null, null, null);
         SpecifiedConsignment sc = new SpecifiedConsignment(
             null, null, null, null, null, null, origin, null, null, null, null, null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         assertThat(mapper.map(event).data().specifiedConsignment().originCountry().code()).isNull();
     }
 
     @Test
     void map_shouldHandleNullPostalAddressOnTradeParty() {
-        // Given
         TradeParty party = new TradeParty("p-1", null, "Name", null, null, null, null);
         SpecifiedConsignment sc = emptyConsignment().withConsignorParty(party).build();
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         assertThat(mapper.map(event).data().specifiedConsignment().consignorParty().postalAddress()).isNull();
     }
 
     @Test
     void map_shouldHandleNullAuthenticationInExchangedDocument() {
-        // Given
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null, null, null);
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication()).isNull();
     }
 
     @Test
     void map_shouldHandleNullIncludedClauseList() {
-        // Given
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null,
             new Authentication(null), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause()).isEmpty();
     }
 
     @Test
     void map_shouldHandleNullClauseElementInAuthentication() {
-        // Given
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null,
             new Authentication(Collections.singletonList(null)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause()).hasSize(1);
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication().includedClause().getFirst()).isNull();
     }
@@ -401,12 +344,11 @@ class PimsEventMapperTest {
         DefinedContact contact = new DefinedContact("Person", "+44123", "email@test.com");
         ReferencedDocument refDoc = new ReferencedDocument("T", null, "R", "ref-1", "2026-08-13");
         TradeParty party = new TradeParty("p-1", null, null, null, null, null, List.of(contact));
-        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null, null,
+        ExchangedDocument doc = new ExchangedDocument("id", null, null, null, null,
             new Authentication(List.of(new Clause("c1", "text", null))), List.of(refDoc));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc,
             emptyConsignment().withConsignorParty(party).build()));
 
-        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().identifier()).isEqualTo("id");
         assertThat(mapper.map(event).data().specifiedConsignment().consignorParty().identifier()).isEqualTo("p-1");
     }

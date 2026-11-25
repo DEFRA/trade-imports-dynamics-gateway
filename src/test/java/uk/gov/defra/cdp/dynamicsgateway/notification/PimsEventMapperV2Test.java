@@ -21,18 +21,7 @@ import uk.gov.defra.cdp.dynamicsgateway.notification.pims.PimsEventV2;
 
 class PimsEventMapperV2Test {
 
-    private final PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
-    private final PimsEventMapperV2 mapper = new PimsEventMapperV2(
-        new PimsGbnAgDataMapperV2(
-            new PimsConsignmentMapperV2(
-                new PimsTransportMapperV2(commonMapper),
-                new PimsLineItemMapperV2(commonMapper),
-                commonMapper
-            ),
-            commonMapper
-        ),
-        new PimsEnvelopeMapper()
-    );
+    private final PimsEventMapperV2 mapper = PimsPayloadMappers.eventMapperV2();
 
     private static final Instant NOW = Instant.parse("2026-09-18T10:00:00Z");
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
@@ -75,18 +64,15 @@ class PimsEventMapperV2Test {
     }
 
     @Test
-    void map_shouldMapExchangedDocument_droppingOnlyIssuer_andMappingReferenceDocument() {
-        // Given
+    void map_shouldMapExchangedDocumentIdentifierAndReferenceDocument() {
         ReferencedDocument refDoc = new ReferencedDocument(
             "GBN1", "https://refdata.tbc.defra.gov.uk/gbn-ag-document-types", "ZZZ", "GBHC1234567890", "2026-09-10");
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, List.of(refDoc));
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, List.of(refDoc));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When
         var pimsDoc = mapper.map(event).data().exchangedDocument();
 
-        // Then
         assertThat(pimsDoc.identifier()).isEqualTo("id-1");
         assertThat(pimsDoc.referenceDocument()).hasSize(1);
         assertThat(pimsDoc.referenceDocument().getFirst().identifier()).isEqualTo("GBHC1234567890");
@@ -95,19 +81,16 @@ class PimsEventMapperV2Test {
 
     @Test
     void map_shouldMapFirstSignatoryAuthenticationClauses() {
-        // Given
         Clause attestation = new Clause("II.1", "The animals described above are healthy.",
             "https://refdata.tbc.defra.gov.uk/clause/II.1");
         Clause transport = new Clause("II.2", "Transport conditions were met.", null);
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null,
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10",
             new Authentication(List.of(attestation, transport)), null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When
         var pimsAuth = mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication();
 
-        // Then
         assertThat(pimsAuth.includedClause()).hasSize(2);
         assertThat(pimsAuth.includedClause().getFirst().identifier()).isEqualTo("II.1");
         assertThat(pimsAuth.includedClause().getFirst().content())
@@ -120,19 +103,16 @@ class PimsEventMapperV2Test {
 
     @Test
     void map_shouldHandleNullFirstSignatoryAuthentication() {
-        // Given
         ExchangedDocument doc = new ExchangedDocument(
-            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null, null);
+            "id-1", "trader-id", "SUBMITTED", 2, "2026-09-10", null, null);
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", doc, null));
 
-        // When / Then
         assertThat(mapper.map(event).data().exchangedDocument().firstSignatoryAuthentication())
             .isNull();
     }
 
     @Test
     void map_shouldMapApplicableClassificationAsArray_notTakeFirst() {
-        // Given
         ApplicableClassification cn = new ApplicableClassification("CN", null,
             new CodedValue("0102", null, null), null);
         ApplicableClassification species = new ApplicableClassification("SPECIES_CLASS", null,
@@ -143,7 +123,6 @@ class PimsEventMapperV2Test {
             null, null, null, null, null, null, null, null, null, null, null, null, List.of(ci));
         OutboxEvent event = eventWithData(new GbnAgData("m", "t", null, sc));
 
-        // When / Then
         var pimsItem = mapper.map(event).data().specifiedConsignment()
             .includedConsignmentItem().getFirst().includedTradeLineItem().getFirst();
         assertThat(pimsItem.applicableClassification()).hasSize(2);

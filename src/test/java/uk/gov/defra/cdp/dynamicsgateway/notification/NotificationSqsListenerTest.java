@@ -43,6 +43,7 @@ class NotificationSqsListenerTest {
     private ObjectMapper objectMapper;
     private PimsPayloadMapper pimsPayloadMapper;
 
+    private static final List<String> SCHEMA_VERSIONS = List.of("0.1.0", "0.2.0", "0.3.0", "0.4.0");
     private static final String AGGREGATE_ID = "Imports.Notification.GBN-AG.GBN-AG-26-001";
     private static final String DEDUP_ID = "11111111-2222-3333-4444-555555555555";
     private static final String EVENT_ID = "evt-99999999-8888-7777-6666-555555555555";
@@ -58,41 +59,7 @@ class NotificationSqsListenerTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        PimsEnvelopeMapper envelopeMapper = new PimsEnvelopeMapper();
-        PimsEventMapper pimsEventMapper = new PimsEventMapper(
-            new PimsGbnAgDataMapper(
-                new PimsConsignmentMapper(
-                    new PimsTransportMapper(),
-                    new PimsLineItemMapper()
-                )
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
-        PimsEventMapperV2 pimsEventMapperV2 = new PimsEventMapperV2(
-            new PimsGbnAgDataMapperV2(
-                new PimsConsignmentMapperV2(
-                    new PimsTransportMapperV2(commonMapper),
-                    new PimsLineItemMapperV2(commonMapper),
-                    commonMapper
-                ),
-                commonMapper
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV3 commonMapperV3 = new PimsCommonMapperV3();
-        PimsEventMapperV3 pimsEventMapperV3 = new PimsEventMapperV3(
-            new PimsGbnAgDataMapperV3(
-                new PimsConsignmentMapperV3(
-                    new PimsTransportMapperV3(commonMapperV3),
-                    new PimsLineItemMapperV3(commonMapperV3),
-                    commonMapperV3
-                ),
-                commonMapperV3
-            ),
-            envelopeMapper
-        );
-        pimsPayloadMapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3);
+        pimsPayloadMapper = PimsPayloadMappers.real(objectMapper);
         listener = new NotificationSqsListener(queueMessageSender, objectMapper, pimsPayloadMapper,
             meterRegistry);
     }
@@ -101,12 +68,8 @@ class NotificationSqsListenerTest {
     void receive_shouldForwardToAsb_whenValid() {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
-        verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
-        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        verifyEveryVersionPublished(VALID_BODY, DEDUP_ID);
+        assertForwardedAndFailed(SCHEMA_VERSIONS, List.of());
     }
 
     @Test
@@ -114,28 +77,19 @@ class NotificationSqsListenerTest {
         listener.receive(VALID_BODY, AGGREGATE_ID, null, RECEIVE_COUNT);
 
         ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
-        verify(queueMessageSender, times(3)).publish(any(), eq(AGGREGATE_ID), messageIdCaptor.capture());
+        verify(queueMessageSender, times(4)).publish(any(), eq(AGGREGATE_ID), messageIdCaptor.capture());
         List<String> messageIds = messageIdCaptor.getAllValues();
         assertThatCode(() -> UUID.fromString(messageIds.get(0))).doesNotThrowAnyException();
-        assertThat(messageIds.get(1)).isEqualTo(messageIds.get(0) + "-v2");
-        assertThat(messageIds.get(2)).isEqualTo(messageIds.get(0) + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        assertThat(messageIds).isEqualTo(messageIdsFor(messageIds.get(0)));
+        assertForwardedAndFailed(SCHEMA_VERSIONS, List.of());
     }
 
     @Test
     void receive_shouldUseBodyEventIdAsAsbMessageId_whenPresent_evenIfDedupHeaderDiffers() {
-        // The SQS dedup header can legitimately differ from the body eventId on a DLQ replay — the ASB
-        // messageId must still track the body eventId so ASB-level dedup stays stable across the replay.
         listener.receive(ENVELOPED_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
-        verify(queueMessageSender).publish(pimsV1(ENVELOPED_BODY), AGGREGATE_ID, EVENT_ID);
-        verify(queueMessageSender).publish(pims(ENVELOPED_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, EVENT_ID + "-v2");
-        verify(queueMessageSender).publish(pims(ENVELOPED_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, EVENT_ID + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        verifyEveryVersionPublished(ENVELOPED_BODY, EVENT_ID);
+        assertForwardedAndFailed(SCHEMA_VERSIONS, List.of());
     }
 
     @Test
@@ -143,31 +97,23 @@ class NotificationSqsListenerTest {
         listener.receive(VALID_BODY, AGGREGATE_ID, "   ", RECEIVE_COUNT);
 
         ArgumentCaptor<String> messageIdCaptor = ArgumentCaptor.forClass(String.class);
-        verify(queueMessageSender, times(3)).publish(any(), eq(AGGREGATE_ID), messageIdCaptor.capture());
+        verify(queueMessageSender, times(4)).publish(any(), eq(AGGREGATE_ID), messageIdCaptor.capture());
         List<String> messageIds = messageIdCaptor.getAllValues();
         assertThatCode(() -> UUID.fromString(messageIds.get(0))).doesNotThrowAnyException();
-        assertThat(messageIds.get(1)).isEqualTo(messageIds.get(0) + "-v2");
-        assertThat(messageIds.get(2)).isEqualTo(messageIds.get(0) + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        assertThat(messageIds).isEqualTo(messageIdsFor(messageIds.get(0)));
+        assertForwardedAndFailed(SCHEMA_VERSIONS, List.of());
     }
 
     @Test
     void receive_shouldForward_whenReceiveCountHeaderAbsent() {
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, null);
 
-        verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
-        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        verifyEveryVersionPublished(VALID_BODY, DEDUP_ID);
+        assertForwardedAndFailed(SCHEMA_VERSIONS, List.of());
     }
 
     @Test
     void receive_shouldPublishReSerialisedPimsPayload_notRawBody() {
-        // The re-serialised PimsEventV1 is structurally different from the raw SQS body.
         listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
@@ -224,8 +170,6 @@ class NotificationSqsListenerTest {
 
     @Test
     void receive_shouldThrowNonRetryable_whenBodyContainsUnknownField() {
-        // Simulates a new field added to the backend outbox not yet in OutboxEvent.
-        // PimsPayloadMapper raises SqsNonRetryableException; the listener propagates it unchanged.
         String bodyWithNewField =
             "{\"aggregateId\":\"" + AGGREGATE_ID
                 + "\",\"eventType\":\"uk.gov.defra.imports.notification.NotificationSubmitted\""
@@ -236,110 +180,81 @@ class NotificationSqsListenerTest {
             .isInstanceOf(SqsNonRetryableException.class);
 
         verify(queueMessageSender, never()).publish(any(), any(), any());
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
+        assertForwardedAndFailed(List.of(), List.of());
     }
 
     @Test
     void receive_shouldThrowRetryable_andCountV1AsFailed_whenAsbFailsTransiently() {
-        // Given — v1 fails; v0.2.0 must never even be attempted for a v1 failure
         doThrow(new SqsRetryableException("ASB down",
             new RuntimeException("Simulated transient failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
-        // When / Then — no in-process retry: a single attempt, then the exception propagates so SQS
-        // redelivers the message (and, after maxReceiveCount, routes it to the DLQ).
         assertThatThrownBy(
             () -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsRetryableException.class);
         verify(queueMessageSender, times(1)).publish(any(), any(), any());
         verify(queueMessageSender, times(1))
             .publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.1.0")).isEqualTo(1.0);
-        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
+        assertForwardedAndFailed(List.of(), List.of("0.1.0"));
     }
 
     @Test
     void receive_shouldNotRetryAndThrowNonRetryable_whenAsbFailsPermanently() {
-        // Given — v1 fails; v0.2.0 must never even be attempted for a v1 failure
         doThrow(new SqsNonRetryableException("entity not found",
             new RuntimeException("Simulated permanent failure")))
             .when(queueMessageSender).publish(any(), any(), any());
 
-        // When / Then — non-retryable failures are not retried: single attempt then propagate to discard.
         assertThatThrownBy(
             () -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .isInstanceOf(SqsNonRetryableException.class);
         verify(queueMessageSender, times(1)).publish(any(), any(), any());
         verify(queueMessageSender, times(1))
             .publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.1.0")).isEqualTo(1.0);
-        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
+        assertForwardedAndFailed(List.of(), List.of("0.1.0"));
     }
 
-    @Test
-    void receive_shouldNotThrow_andCountV2AsFailed_whenV2MappingFails() {
-        PimsPayloadMapper failingV2Mapper = spy(pimsPayloadMapper);
-        doThrow(new IllegalStateException("Cannot map to PIMS v0.2.0"))
-            .when(failingV2Mapper).mapToV2(any());
-        NotificationSqsListener listenerWithFailingV2 =
-            new NotificationSqsListener(queueMessageSender, objectMapper, failingV2Mapper, meterRegistry);
+    @ParameterizedTest
+    @ValueSource(strings = {"0.2.0", "0.3.0", "0.4.0"})
+    void receive_shouldNotThrow_andCountOnlyThatVersionAsFailed_whenItsMappingFails(String failingVersion) {
+        NotificationSqsListener listenerWithFailingMapper = listenerWhoseMapperFailsFor(failingVersion);
 
         assertThatCode(
-            () -> listenerWithFailingV2.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
+            () -> listenerWithFailingMapper.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .doesNotThrowAnyException();
 
-        assertThat(failedCount("0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        assertOnlyFailed(failingVersion);
     }
 
-    @Test
-    void receive_shouldNotThrow_andStillForwardV1AndV3_whenV2PublishFails() {
-        // lenient(): the other publishes hit this mock with different arguments by design
-        lenient().doThrow(new SqsNonRetryableException("v2 boom", new RuntimeException("simulated")))
-            .when(queueMessageSender).publish(any(), eq(AGGREGATE_ID), eq(DEDUP_ID + "-v2"));
+    private NotificationSqsListener listenerWhoseMapperFailsFor(String version) {
+        PimsPayloadMapper failingMapper = spy(pimsPayloadMapper);
+        IllegalStateException failure = new IllegalStateException("Cannot map to PIMS v" + version);
+        switch (version) {
+            case "0.2.0" -> doThrow(failure).when(failingMapper).mapToV2(any());
+            case "0.3.0" -> doThrow(failure).when(failingMapper).mapToV3(any());
+            case "0.4.0" -> doThrow(failure).when(failingMapper).mapToV4(any());
+            default -> throw new IllegalArgumentException("No mapper for version " + version);
+        }
+        return new NotificationSqsListener(queueMessageSender, objectMapper, failingMapper, meterRegistry);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.2.0", "0.3.0", "0.4.0"})
+    void receive_shouldForwardEveryOtherVersionAndCountOnlyThatVersionAsFailed_whenItsPublishFails(
+        String failingVersion) {
+        lenient().doThrow(new SqsNonRetryableException("boom", new RuntimeException("simulated")))
+            .when(queueMessageSender)
+            .publish(any(), eq(AGGREGATE_ID), eq(messageIdFor(DEDUP_ID, failingVersion)));
 
         assertThatCode(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
             .doesNotThrowAnyException();
 
-        verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
-        assertThat(failedCount("0.1.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.2.0")).isEqualTo(1.0);
-        assertThat(failedCount("0.3.0")).isEqualTo(0.0);
-    }
-
-    @Test
-    void receive_shouldNotThrow_andStillForwardV1AndV2_whenV3PublishFails() {
-        // lenient(): the other publishes hit this mock with different arguments by design
-        lenient().doThrow(new SqsNonRetryableException("v3 boom", new RuntimeException("simulated")))
-            .when(queueMessageSender).publish(any(), eq(AGGREGATE_ID), eq(DEDUP_ID + "-v3"));
-
-        assertThatCode(() -> listener.receive(VALID_BODY, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT))
-            .doesNotThrowAnyException();
-
-        verify(queueMessageSender).publish(pimsV1(VALID_BODY), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(VALID_BODY, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.1.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.2.0")).isEqualTo(0.0);
-        assertThat(failedCount("0.3.0")).isEqualTo(1.0);
+        for (String version : SCHEMA_VERSIONS) {
+            if (!version.equals(failingVersion)) {
+                verify(queueMessageSender).publish(payloadFor(VALID_BODY, version), AGGREGATE_ID,
+                    messageIdFor(DEDUP_ID, version));
+            }
+        }
+        assertOnlyFailed(failingVersion);
     }
 
     @Test
@@ -349,12 +264,8 @@ class NotificationSqsListenerTest {
 
         listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
-        verify(queueMessageSender).publish(pimsV1(body), AGGREGATE_ID, DEDUP_ID);
-        verify(queueMessageSender).publish(pims(body, pimsPayloadMapper::mapToV2), AGGREGATE_ID, DEDUP_ID + "-v2");
-        verify(queueMessageSender).publish(pims(body, pimsPayloadMapper::mapToV3), AGGREGATE_ID, DEDUP_ID + "-v3");
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(1.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(1.0);
+        verifyEveryVersionPublished(body, DEDUP_ID);
+        assertForwardedAndFailed(SCHEMA_VERSIONS, List.of());
     }
 
     @ParameterizedTest
@@ -370,9 +281,50 @@ class NotificationSqsListenerTest {
         listener.receive(body, AGGREGATE_ID, DEDUP_ID, RECEIVE_COUNT);
 
         verify(queueMessageSender, never()).publish(any(), any(), any());
-        assertThat(counterValue("forwarded", "0.1.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.2.0")).isEqualTo(0.0);
-        assertThat(counterValue("forwarded", "0.3.0")).isEqualTo(0.0);
+        assertForwardedAndFailed(List.of(), List.of());
+    }
+
+    private void verifyEveryVersionPublished(String body, String baseMessageId) {
+        for (String version : SCHEMA_VERSIONS) {
+            verify(queueMessageSender).publish(payloadFor(body, version), AGGREGATE_ID,
+                messageIdFor(baseMessageId, version));
+        }
+    }
+
+    private String payloadFor(String body, String version) {
+        return switch (version) {
+            case "0.1.0" -> pimsV1(body);
+            case "0.2.0" -> pims(body, pimsPayloadMapper::mapToV2);
+            case "0.3.0" -> pims(body, pimsPayloadMapper::mapToV3);
+            case "0.4.0" -> pims(body, pimsPayloadMapper::mapToV4);
+            default -> throw new IllegalArgumentException("No payload for version " + version);
+        };
+    }
+
+    private static String messageIdFor(String baseMessageId, String version) {
+        int index = SCHEMA_VERSIONS.indexOf(version);
+        return index == 0 ? baseMessageId : baseMessageId + "-v" + (index + 1);
+    }
+
+    private static List<String> messageIdsFor(String baseMessageId) {
+        return SCHEMA_VERSIONS.stream().map(version -> messageIdFor(baseMessageId, version)).toList();
+    }
+
+    private void assertOnlyFailed(String failingVersion) {
+        assertForwardedAndFailed(
+            SCHEMA_VERSIONS.stream().filter(version -> !version.equals(failingVersion)).toList(),
+            List.of(failingVersion));
+    }
+
+    private void assertForwardedAndFailed(List<String> forwardedVersions, List<String> failedVersions) {
+        for (String version : SCHEMA_VERSIONS) {
+            assertThat(counterValue("forwarded", version))
+                .as("forwarded " + version)
+                .isEqualTo(forwardedVersions.contains(version) ? 1.0 : 0.0);
+            assertThat(failedCount(version))
+                .as("failed " + version)
+                .isEqualTo(failedVersions.contains(version) ? 1.0 : 0.0);
+        }
     }
 
     private String pimsV1(String rawBody) {

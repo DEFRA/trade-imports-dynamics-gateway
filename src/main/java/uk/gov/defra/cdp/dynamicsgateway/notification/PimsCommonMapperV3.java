@@ -3,12 +3,16 @@ package uk.gov.defra.cdp.dynamicsgateway.notification;
 import static uk.gov.defra.cdp.dynamicsgateway.notification.PimsMapperSupport.mapList;
 
 import org.springframework.stereotype.Component;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Authentication;
+import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.Clause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.CodedValue;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.DefinedContact;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.LogisticsLocation;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.ReferencedDocument;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeAddress;
 import uk.gov.defra.cdp.dynamicsgateway.notification.outbox.gbnag.TradeParty;
+import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsAuthentication;
+import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsClause;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsCodedValue;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsDefinedContact;
 import uk.gov.defra.cdp.dynamicsgateway.notification.pims.gbnagv3.PimsLogisticsLocation;
@@ -51,6 +55,16 @@ class PimsCommonMapperV3 {
     PimsReferencedDocument mapReferencedDocument(ReferencedDocument doc) {
         if (doc == null) return null;
         return new PimsReferencedDocument(doc.typeCode(), doc.urlId(), doc.identifier(), doc.issueDateTime());
+    }
+
+    PimsAuthentication mapAuthentication(Authentication auth) {
+        if (auth == null) return null;
+        return new PimsAuthentication(mapList(auth.includedClause(), this::mapClause));
+    }
+
+    private PimsClause mapClause(Clause clause) {
+        if (clause == null) return null;
+        return new PimsClause(clause.identifier(), clause.content(), clause.urlId());
     }
 
     private PimsTradeAddress mapTradeAddress(TradeAddress addr) {

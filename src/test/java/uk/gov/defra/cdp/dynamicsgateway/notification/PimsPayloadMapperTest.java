@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.InputStream;
+import java.util.List;
+import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import uk.gov.defra.cdp.dynamicsgateway.exceptions.SqsNonRetryableException;
@@ -21,46 +23,15 @@ class PimsPayloadMapperTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        PimsEnvelopeMapper envelopeMapper = new PimsEnvelopeMapper();
-        PimsEventMapper pimsEventMapper = new PimsEventMapper(
-            new PimsGbnAgDataMapper(
-                new PimsConsignmentMapper(
-                    new PimsTransportMapper(),
-                    new PimsLineItemMapper()
-                )
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV2 commonMapper = new PimsCommonMapperV2();
-        PimsEventMapperV2 pimsEventMapperV2 = new PimsEventMapperV2(
-            new PimsGbnAgDataMapperV2(
-                new PimsConsignmentMapperV2(
-                    new PimsTransportMapperV2(commonMapper),
-                    new PimsLineItemMapperV2(commonMapper),
-                    commonMapper
-                ),
-                commonMapper
-            ),
-            envelopeMapper
-        );
-        PimsCommonMapperV3 commonMapperV3 = new PimsCommonMapperV3();
-        PimsEventMapperV3 pimsEventMapperV3 = new PimsEventMapperV3(
-            new PimsGbnAgDataMapperV3(
-                new PimsConsignmentMapperV3(
-                    new PimsTransportMapperV3(commonMapperV3),
-                    new PimsLineItemMapperV3(commonMapperV3),
-                    commonMapperV3
-                ),
-                commonMapperV3
-            ),
-            envelopeMapper
-        );
-        mapper = new PimsPayloadMapper(objectMapper, pimsEventMapper, pimsEventMapperV2, pimsEventMapperV3);
+        mapper = PimsPayloadMappers.real(objectMapper);
+    }
+
+    private List<Function<OutboxEvent, String>> everyVersion() {
+        return List.of(mapper::mapToV1, mapper::mapToV2, mapper::mapToV3, mapper::mapToV4);
     }
 
     @Test
     void mapToV1_shouldRoundTripMinimalBody_toValidPimsPayload() throws Exception {
-        // Given — minimal body with just the envelope fields (data/actor/metadata all null)
         String body = """
             {
               "eventId": "evt-1",
@@ -74,10 +45,8 @@ class PimsPayloadMapperTest {
             """;
         OutboxEvent event = mapper.parse(objectMapper.readTree(body));
 
-        // When
         String result = mapper.mapToV1(event);
 
-        // Then — re-serialised PimsEventV1 contains the envelope fields; nulls omitted by @JsonInclude
         JsonNode pimsNode = objectMapper.readTree(result);
         assertThat(pimsNode.path("eventId").asText()).isEqualTo("evt-1");
         assertThat(pimsNode.path("aggregateId").asText()).isEqualTo("Imports.Notification.GBN-AG.GBN-AG-26-001");
@@ -101,21 +70,14 @@ class PimsPayloadMapperTest {
         withoutOwnerNode.remove("organisationId");
         OutboxEvent withoutOwner = mapper.parse(withoutOwnerNode);
 
-        JsonNode v1WithOwner = objectMapper.readTree(mapper.mapToV1(withOwner));
-        JsonNode v1WithoutOwner = objectMapper.readTree(mapper.mapToV1(withoutOwner));
-        JsonNode v2WithOwner = objectMapper.readTree(mapper.mapToV2(withOwner));
-        JsonNode v2WithoutOwner = objectMapper.readTree(mapper.mapToV2(withoutOwner));
-        JsonNode v3WithOwner = objectMapper.readTree(mapper.mapToV3(withOwner));
-        JsonNode v3WithoutOwner = objectMapper.readTree(mapper.mapToV3(withoutOwner));
-
-        assertThat(v1WithOwner).isEqualTo(v1WithoutOwner);
-        assertThat(v2WithOwner).isEqualTo(v2WithoutOwner);
-        assertThat(v3WithOwner).isEqualTo(v3WithoutOwner);
+        for (Function<OutboxEvent, String> mapToVersion : everyVersion()) {
+            assertThat(objectMapper.readTree(mapToVersion.apply(withOwner)))
+                .isEqualTo(objectMapper.readTree(mapToVersion.apply(withoutOwner)));
+        }
     }
 
     @Test
     void parse_shouldThrowNonRetryable_whenBodyHasUnknownField() throws Exception {
-        // Simulates a new field added to the backend's outbox event not yet in OutboxEvent
         String body = """
             {
               "eventId": "x",
@@ -126,7 +88,6 @@ class PimsPayloadMapperTest {
             """;
         JsonNode node = objectMapper.readTree(body);
 
-        // When / Then — @JsonIgnoreProperties(ignoreUnknown = false) causes a non-retryable failure
         assertThatThrownBy(() -> mapper.parse(node))
             .isInstanceOf(SqsNonRetryableException.class)
             .hasMessageContaining("Failed to map body to OutboxEvent");
@@ -134,9 +95,6 @@ class PimsPayloadMapperTest {
 
     @Test
     void parse_shouldAcceptEverySubDivisionPropertyTheGenericSchemaAllows() throws Exception {
-        // The backend sends identifier, urlId and functionTypeCode only, but the generic schema
-        // also allows name, hierarchicalLevelCode and functionTypeCode.name (trade-imports-schemas#64),
-        // and ignoreUnknown = false would reject any the inbound record did not model.
         String body = """
             {
               "eventId": "evt-sub",
@@ -177,16 +135,10 @@ class PimsPayloadMapperTest {
 
     @Test
     void mapToV1_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
-        // Given — captured from the backend's GbnAgEventDataMapper for a submitted cow, dog and horse
-        // notification, serialised the way its outbox does (nulls included). It carries the region
-        // sub-division, CPH location, transit countries, transport document and per-animal
-        // records, which must deserialise here even though v0.1.0 does not receive them.
         OutboxEvent event = fixtureEvent();
 
-        // When
         String result = mapper.mapToV1(event);
 
-        // Then — v0.1.0 output still drops exactly what it always has
         assertThat(objectMapper.readTree(result).path("data").path("exchangedDocument").has("referenceDocument"))
             .isFalse();
         JsonNode consignment = objectMapper.readTree(result).path("data").path("specifiedConsignment");
@@ -198,11 +150,11 @@ class PimsPayloadMapperTest {
         assertThat(consignment.has("transitTradeCountry")).isFalse();
 
         JsonNode lines = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
-        assertThat(lines).hasSize(3); // cow, dog, horse
+        assertThat(lines).hasSize(3);
         assertThat(lines.get(0).has("description")).isFalse();
         assertThat(lines.get(0).has("scientificName")).isFalse();
         assertThat(lines.get(0).has("commonName")).isFalse();
-        assertThat(lines.get(0).path("applicableClassification").isObject()).isTrue(); // still singular, not an array
+        assertThat(lines.get(0).path("applicableClassification").isObject()).isTrue();
         JsonNode cows = lines.get(0).path("individualTradeProductInstance");
         assertThat(cows).hasSize(2);
         assertThat(cows.get(0).path("identifier").get(0).path("content").asText()).isEqualTo("UK01234567890");
@@ -223,16 +175,11 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV3_shouldAddIssuerDocumentTypeListUrlAndRegionOfOriginCodeToTheBackendFixture() throws Exception {
+    void mapToV3_shouldSendNoIssuerAndSendDocumentTypeListUrlAndRegionOfOriginCode() throws Exception {
         JsonNode result = objectMapper.readTree(mapper.mapToV3(fixtureEvent()));
 
         JsonNode exchangedDocument = result.path("data").path("exchangedDocument");
-        assertThat(exchangedDocument.path("issuer").path("name").asText()).isEqualTo("Animal and Plant Health Agency");
-        assertThat(exchangedDocument.path("issuer").path("postalAddress").path("postcodeCode").asText())
-            .isEqualTo("KT15 3NB");
-        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0)
-            .path("emailURIUniversalCommunication").asText()).isEqualTo("imports@apha.example.gov.uk");
-        assertThat(exchangedDocument.path("issuer").path("definedContact").get(0).has("personName")).isFalse();
+        assertThat(exchangedDocument.has("issuer")).isFalse();
         assertThat(exchangedDocument.path("referenceDocument").findValuesAsText("urlId"))
             .containsOnly("https://refdata.tbc.defra.gov.uk/gbn-ag-document-types")
             .hasSize(2);
@@ -243,14 +190,46 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV2_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
-        // Given
+    void map_shouldAcceptAnEventWithIssuerAndSendItInNoVersion() throws Exception {
+        OutboxEvent event = mapper.parse(
+            jsonResource("/gbn-ag/notification-submitted-from-backend-with-issuer.json"));
+
+        for (Function<OutboxEvent, String> mapToVersion : everyVersion()) {
+            JsonNode exchangedDocument =
+                objectMapper.readTree(mapToVersion.apply(event)).path("data").path("exchangedDocument");
+            assertThat(exchangedDocument.path("identifier").asText()).isEqualTo("GBN-AG-26-7K8M2P");
+            assertThat(exchangedDocument.has("issuer")).isFalse();
+        }
+    }
+
+    @Test
+    void mapToV4_shouldProduceTheCommittedV040PayloadForTheBackendFixture() throws Exception {
+        String result = mapper.mapToV4(fixtureEvent());
+
+        try (InputStream in = getClass().getResourceAsStream("/gbn-ag/pims-v0.4.0-from-backend.json")) {
+            assertThat(objectMapper.readTree(result)).isEqualTo(objectMapper.readTree(in));
+        }
+    }
+
+    @Test
+    void mapToV4_shouldSendNoIssuerAndTheSameConsignmentAsV3() throws Exception {
         OutboxEvent event = fixtureEvent();
 
-        // When
+        JsonNode v4 = objectMapper.readTree(mapper.mapToV4(event));
+        JsonNode v3 = objectMapper.readTree(mapper.mapToV3(event));
+
+        assertThat(v4.path("data").path("exchangedDocument").has("issuer")).isFalse();
+        assertThat(v4.path("data").path("exchangedDocument")).isEqualTo(v3.path("data").path("exchangedDocument"));
+        assertThat(v4.path("data").path("specifiedConsignment"))
+            .isEqualTo(v3.path("data").path("specifiedConsignment"));
+    }
+
+    @Test
+    void mapToV2_shouldAcceptASubmittedEventAsTheBackendSendsIt() throws Exception {
+        OutboxEvent event = fixtureEvent();
+
         String result = mapper.mapToV2(event);
 
-        // Then
         JsonNode referenceDocuments = objectMapper.readTree(result).path("data").path("exchangedDocument")
             .path("referenceDocument");
         assertThat(referenceDocuments).hasSize(2);
@@ -272,7 +251,7 @@ class PimsPayloadMapperTest {
             .isEqualTo("CMR-2026-884721");
 
         JsonNode lines = consignment.path("includedConsignmentItem").get(0).path("includedTradeLineItem");
-        assertThat(lines.get(0).path("applicableClassification").isArray()).isTrue(); // array, not singular
+        assertThat(lines.get(0).path("applicableClassification").isArray()).isTrue();
         assertThat(lines.get(0).path("description").get(0).asText()).isEqualTo("Cow");
         assertThat(lines.get(0).path("scientificName").asText()).isEqualTo("Bos taurus");
         assertThat(lines.get(0).path("commonName").asText()).isEqualTo("Cow");
@@ -285,7 +264,6 @@ class PimsPayloadMapperTest {
 
     @Test
     void parse_shouldThrowNonRetryable_whenAggregateVersionIsWrongType() throws Exception {
-        // aggregateVersion is a long — a string value fails Jackson deserialisation
         String body = """
             {
               "eventId": "x",
@@ -301,17 +279,14 @@ class PimsPayloadMapperTest {
 
     @Test
     void mapToV1_shouldOmitNullFields_inOutputJson() throws Exception {
-        // Given — only mandatory envelope fields present; all nullable fields absent in output
         String body = """
             {"eventId":"e1","aggregateVersion":0,"eventType":"uk.gov.defra.imports.notification.NotificationSubmitted"}
             """;
         OutboxEvent event = mapper.parse(objectMapper.readTree(body));
 
-        // When
         String result = mapper.mapToV1(event);
         JsonNode pimsNode = objectMapper.readTree(result);
 
-        // Then — null scalar fields omitted (NON_NULL); null list fields serialise as []
         assertThat(pimsNode.has("actor")).isFalse();
         assertThat(pimsNode.has("data")).isFalse();
         assertThat(pimsNode.path("statusChanges").isArray()).isTrue();
@@ -319,9 +294,7 @@ class PimsPayloadMapperTest {
     }
 
     @Test
-    void mapToV1AndV2_shouldEmitMetadataSchemaUri_notSchemaUrl() throws Exception {
-        // Given — an event carrying metadata, so PimsEventMetadata is serialised at all.
-        // PimsEventMetadata is shared by both streams, so the wire name must be checked on both.
+    void mapToEveryVersion_shouldEmitMetadataSchemaUri_notSchemaUrl() throws Exception {
         String body = """
             {
               "eventId": "evt-meta",
@@ -336,25 +309,27 @@ class PimsPayloadMapperTest {
             """;
         OutboxEvent event = mapper.parse(objectMapper.readTree(body));
 
-        // When
         JsonNode v1Metadata = objectMapper.readTree(mapper.mapToV1(event)).path("metadata");
         JsonNode v2Metadata = objectMapper.readTree(mapper.mapToV2(event)).path("metadata");
+        JsonNode v3Metadata = objectMapper.readTree(mapper.mapToV3(event)).path("metadata");
+        JsonNode v4Metadata = objectMapper.readTree(mapper.mapToV4(event)).path("metadata");
 
-        // Then — event-envelope-v1.schema.json requires ["schemaVersion","schemaUri"] under
-        // additionalProperties:false, so "schemaUrl" must not appear on either stream
-        assertThat(v1Metadata.has("schemaUrl")).isFalse();
-        assertThat(v2Metadata.has("schemaUrl")).isFalse();
+        for (JsonNode metadata : List.of(v1Metadata, v2Metadata, v3Metadata, v4Metadata)) {
+            assertThat(metadata.has("schemaUrl")).isFalse();
+            assertThat(metadata.path("correlationId").asText()).isEqualTo("cid-1");
+        }
         assertThat(v1Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.1.0.schema.json");
         assertThat(v2Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.2.0.schema.json");
+        assertThat(v3Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.3.0.schema.json");
+        assertThat(v4Metadata.path("schemaUri").asText()).endsWith("gbn-ag-pims-v0.4.0.schema.json");
         assertThat(v1Metadata.path("schemaVersion").asText()).isEqualTo("0.1.0");
         assertThat(v2Metadata.path("schemaVersion").asText()).isEqualTo("0.2.0");
-        assertThat(v1Metadata.path("correlationId").asText()).isEqualTo("cid-1");
+        assertThat(v3Metadata.path("schemaVersion").asText()).isEqualTo("0.3.0");
+        assertThat(v4Metadata.path("schemaVersion").asText()).isEqualTo("0.4.0");
     }
 
     @Test
     void mapToV2_shouldOmitApplicableClassification_whenUpstreamListIsAbsent() throws Exception {
-        // Given — a line item with no classification upstream. mapList yields an empty list
-        // (never null), so NON_NULL alone would leave "[]" on the wire.
         String body = """
             {
               "eventId": "evt-class",
@@ -371,11 +346,8 @@ class PimsPayloadMapperTest {
             """;
         OutboxEvent event = mapper.parse(objectMapper.readTree(body));
 
-        // When
         String result = mapper.mapToV2(event);
 
-        // Then — the schema sets minItems:1 and tradeLineItem has no required list, so the
-        // field must be absent rather than an empty array
         JsonNode line = objectMapper.readTree(result).path("data").path("specifiedConsignment")
             .path("includedConsignmentItem").get(0).path("includedTradeLineItem").get(0);
         assertThat(line.path("commonName").asText()).isEqualTo("Cow");
@@ -387,7 +359,11 @@ class PimsPayloadMapperTest {
     }
 
     private JsonNode fixtureJson() throws Exception {
-        try (InputStream in = getClass().getResourceAsStream("/gbn-ag/notification-submitted-from-backend.json")) {
+        return jsonResource("/gbn-ag/notification-submitted-from-backend.json");
+    }
+
+    private JsonNode jsonResource(String path) throws Exception {
+        try (InputStream in = getClass().getResourceAsStream(path)) {
             return objectMapper.readTree(in);
         }
     }

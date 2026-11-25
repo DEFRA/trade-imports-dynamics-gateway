@@ -39,10 +39,6 @@ class PimsConsignmentMapperV3 {
         );
     }
 
-    // UNCL3227 location function 106 (the code list calls it "Region of origin"): here, the country
-    // subdivision the goods came from. Not the region of origin code, which is a disease zone.
-    private static final String SUBDIVISION_OF_ORIGIN = "106";
-
     private PimsTradeCountry mapTradeCountry(TradeCountry tc) {
         if (tc == null) return null;
         return new PimsTradeCountry(
@@ -54,9 +50,10 @@ class PimsConsignmentMapperV3 {
 
     private static TradeCountrySubDivision subdivisionOfOrigin(List<TradeCountrySubDivision> subDivisions) {
         if (subDivisions == null) return null;
+        String subdivisionOfOriginFunctionCode = "106";
         return subDivisions.stream()
             .filter(sub -> sub.functionTypeCode() != null
-                && SUBDIVISION_OF_ORIGIN.equals(sub.functionTypeCode().content()))
+                && subdivisionOfOriginFunctionCode.equals(sub.functionTypeCode().content()))
             .findFirst()
             .orElse(null);
     }
