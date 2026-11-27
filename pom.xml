@@ -25,18 +25,18 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <sonar.organization>defra</sonar.organization>
     <sonar.cpd.exclusions>**/notification/pims/gbnag*/**,**/notification/pims/PimsEventV*.java,**/notification/Pims*MapperV*.java</sonar.cpd.exclusions>
-    <aws-sdk.version>2.46.11</aws-sdk.version>
-    <azure-sdk-bom.version>1.2.35</azure-sdk-bom.version>
-    <azure-core-amqp.version>2.11.4</azure-core-amqp.version>
-    <azure-messaging-servicebus.version>7.17.18</azure-messaging-servicebus.version>
+    <aws-sdk.version>2.59.8</aws-sdk.version>
+    <azure-sdk-bom.version>1.3.10</azure-sdk-bom.version>
+    <azure-core-amqp.version>2.13.0</azure-core-amqp.version>
+    <azure-messaging-servicebus.version>7.19.1</azure-messaging-servicebus.version>
     <spring-cloud-aws.version>3.4.2</spring-cloud-aws.version>
-    <lombok.version>1.18.42</lombok.version>
-    <logback-ecs-encoder.version>1.6.0</logback-ecs-encoder.version>
+    <lombok.version>1.18.48</lombok.version>
+    <logback-ecs-encoder.version>1.8.0</logback-ecs-encoder.version>
     <aws-embedded-metrics.version>4.2.0</aws-embedded-metrics.version>
     <testcontainers.version>1.21.4</testcontainers.version>
-    <jacoco.version>0.8.14</jacoco.version>
-    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
-    <sonar-maven-plugin.version>5.1.0.4751</sonar-maven-plugin.version>
+    <jacoco.version>0.8.16</jacoco.version>
+    <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+    <sonar-maven-plugin.version>5.9.0.7382</sonar-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -99,7 +99,7 @@
     <dependency>
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-      <version>2.6.0</version>
+      <version>2.10.1</version>
     </dependency>
 
     <dependency>
@@ -161,7 +161,7 @@
     <dependency>
       <groupId>io.floci</groupId>
       <artifactId>testcontainers-floci</artifactId>
-      <version>2.9.0</version>
+      <version>2.17.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
