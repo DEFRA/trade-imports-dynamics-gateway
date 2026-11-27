@@ -29,7 +29,7 @@
     <azure-sdk-bom.version>1.2.35</azure-sdk-bom.version>
     <azure-core-amqp.version>2.11.4</azure-core-amqp.version>
     <azure-messaging-servicebus.version>7.17.18</azure-messaging-servicebus.version>
-    <spring-cloud-aws.version>3.4.2</spring-cloud-aws.version>
+    <spring-cloud-aws.version>4.2.2</spring-cloud-aws.version>
     <lombok.version>1.18.42</lombok.version>
     <logback-ecs-encoder.version>1.6.0</logback-ecs-encoder.version>
     <aws-embedded-metrics.version>4.2.0</aws-embedded-metrics.version>
